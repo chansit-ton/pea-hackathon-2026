@@ -11,13 +11,14 @@ import {
   XCircle,
 } from "lucide-react";
 import type { ApprovalTimelineItem, RequestStatus, StockStatus, Supplier } from "../types";
+import { formatCurrency, formatNumber as formatThaiNumber } from "../utils/formatters";
 
 export function formatTHB(value: number) {
-  return `${new Intl.NumberFormat("th-TH", { maximumFractionDigits: 0 }).format(value)} THB`;
+  return formatCurrency(value);
 }
 
 export function formatNumber(value: number) {
-  return new Intl.NumberFormat("th-TH", { maximumFractionDigits: 2 }).format(value);
+  return formatThaiNumber(value);
 }
 
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
@@ -34,12 +35,12 @@ export function SectionHeader({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-4">
-      <div>
+    <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+      <div className="min-w-0">
         <h2 className="text-base font-semibold text-slate-950">{title}</h2>
         {subtitle ? <p className="mt-1 text-sm text-slate-500">{subtitle}</p> : null}
       </div>
-      {action}
+      {action ? <div className="w-full shrink-0 sm:w-auto">{action}</div> : null}
     </div>
   );
 }

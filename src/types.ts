@@ -1,5 +1,7 @@
 export type Region = "North" | "Northeast" | "East" | "South" | "National";
 
+export type Unit = "????" | "???" | "???" | "pcs" | "m";
+
 export type Warehouse = {
   id: string;
   name: string;
@@ -40,6 +42,7 @@ export type SupplierOffer = {
   leadTimeDays: number;
   moq: number;
   unit: string;
+  reliabilityScore?: number;
 };
 
 export type StockStatus = "Normal" | "Near Reorder Point" | "Critical";
@@ -48,30 +51,48 @@ export type InventoryRecord = {
   skuId: string;
   warehouseId: string;
   currentStock: number;
+  historicalUsage: HistoricalUsagePeriod[];
+  forecastDemandForPlanningPeriod: number;
+  planningPeriodDays: number;
+  serviceLevel: number;
+  zScore: number;
+  seasonalFactor: number;
+  budgetFactor: number;
+  targetStockLevelOverride?: number;
   averageDailyDemand?: number;
   safetyStock?: number;
-  reorderPoint: number;
+  reorderPoint?: number;
   forecastDemand?: number;
-  aiSuggestedQuantity: number;
+  aiSuggestedQuantity?: number;
   status: StockStatus;
 };
 
-export type CalculationSnapshot = {
-  formulaVersion: string;
-  historicalUsage: string;
-  averageDailyDemand: string;
-  supplierLeadTime: string;
-  seasonalFactor: string;
-  budgetFactor: string;
-  adjustedLeadTime: string;
-  zScore: string;
-  demandVariability: string;
-  safetyStock: string;
-  demandDuringLeadTime: string;
-  reorderPoint: string;
-  targetStockLevel: string;
-  currentStock: string;
-  suggestedQuantity: string;
+export type HistoricalUsagePeriod = {
+  periodLabel: string;
+  days: number;
+  quantity: number;
+};
+
+export type SupplierSkuRecord = {
+  supplierId: string;
+  supplierName: string;
+  sku: string;
+  unitPrice: number;
+  currency: "THB";
+  unit: Unit | string;
+  leadTimeDays: number;
+  moq: number;
+  reliabilityScore: number;
+  contactPerson: string;
+  phone: string;
+  email: string;
+  lineId?: string;
+};
+
+export type BudgetContext = {
+  localBudgetRemaining: number;
+  regionalBudgetRemaining: number;
+  centralBudgetRemaining: number;
 };
 
 export type ContactChannel = "Phone" | "Email" | "Line" | "Meeting" | "Other";
@@ -89,6 +110,75 @@ export type SupplierContactLog = {
 };
 
 export type ApprovalLayer = "Local" | "Regional" | "Central";
+
+export type ApprovalRoutingResult = {
+  layer: ApprovalLayer;
+  localEnough: boolean;
+  regionalEnough: boolean;
+  centralEnough: boolean;
+  reason: string;
+};
+
+export type QuantityVarianceResult = {
+  variance: number;
+  variancePercent: number;
+  isOverride: boolean;
+  isOverRequest: boolean;
+  isUnderRequest: boolean;
+};
+
+export type TargetStockLevelSource = "PolicyOverride" | "ForecastPlusSafetyStock";
+
+export type InventoryCalculationResult = {
+  formulaVersion: string;
+  historicalUsageTotal: number;
+  historicalUsageDays: number;
+  averageDailyDemand: number;
+  demandVariabilityPerPeriod: number;
+  demandVariabilityPerDay: number;
+  supplierLeadTimeDays: number;
+  seasonalFactor: number;
+  budgetFactor: number;
+  adjustedLeadTimeDays: number;
+  serviceLevel: number;
+  zScore: number;
+  safetyStock: number;
+  demandDuringLeadTime: number;
+  reorderPoint: number;
+  forecastDemandForPlanningPeriod: number;
+  planningPeriodDays: number;
+  targetStockLevel: number;
+  targetStockLevelSource: TargetStockLevelSource;
+  moq: number;
+  suggestedQuantity: number;
+  unitPrice: number;
+  estimatedCostForSuggestedQuantity: number;
+};
+
+export type PurchaseRequestCalculationSnapshot = InventoryCalculationResult & {
+  requestId: string;
+  createdAt: string;
+  requestedQuantity: number;
+  approvedQuantity?: number;
+  quantityVariance: number;
+  quantityVariancePercent: number;
+  estimatedCostForRequestedQuantity: number;
+  selectedSupplierId: string;
+  selectedSupplierName: string;
+  supplierLeadTimeDaysAtRequestDate: number;
+  unitPriceAtRequestDate: number;
+  budgetContextAtRequestDate: BudgetContext;
+  approvalRoutingAtRequestDate: ApprovalRoutingResult;
+  overrideReasonCategory?: string;
+  overrideReasonDetail?: string;
+};
+
+export type PurchaseRequestPreview = {
+  variance: QuantityVarianceResult;
+  estimatedCostForRequestedQuantity: number;
+  approvalRouting: ApprovalRoutingResult;
+  requiresOverrideReason: boolean;
+};
 
 export type RequestStatus =
   | "Draft"
@@ -130,7 +220,7 @@ export type PurchaseRequest = {
   overrideReasonCategory?: string;
   overrideReasonText?: string;
   formulaVersion: string;
-  calculationSnapshot: CalculationSnapshot;
+  calculationSnapshot: PurchaseRequestCalculationSnapshot;
   supplierContactLogSummary: string;
   localReason?: string;
   regionalEscalationReason?: string;
