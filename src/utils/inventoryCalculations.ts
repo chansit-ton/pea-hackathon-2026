@@ -460,13 +460,13 @@ export function calculatePurchaseRequestPreview(params: {
 }
 
 /**
- * สร้างข้อความเตือนเมื่อ Requested Quantity ต่างจาก AI Suggested Quantity
+ * สร้างข้อความเตือนเมื่อจำนวนที่ผู้ใช้ขอต่างจากจำนวนที่ระบบแนะนำ
  *
  * กรณีขอมากกว่า:
- * เตือนเรื่องงบประมาณ พื้นที่จัดเก็บ และ Overstock
+ * เตือนเรื่องงบประมาณ พื้นที่จัดเก็บ และความเสี่ยงสต็อกเกิน
  *
  * กรณีขอน้อยกว่า:
- * เตือนเรื่องต่ำกว่า Safety Stock หรือ Understock
+ * เตือนเรื่องต่ำกว่าสต็อกสำรองหรือความเสี่ยงสต็อกไม่พอ
  */
 export function getOverrideWarningMessage(params: {
   suggestedQuantity: number;
@@ -477,12 +477,12 @@ export function getOverrideWarningMessage(params: {
 
   if (requestedQuantity > suggestedQuantity) {
     const diff = requestedQuantity - suggestedQuantity;
-    return `จำนวนที่ขอมากกว่าค่าที่ระบบแนะนำ ${diff} ${unit} อาจส่งผลต่องบประมาณ พื้นที่จัดเก็บ และความเสี่ยง Overstock`;
+    return `จำนวนที่ขอมากกว่าค่าที่ระบบแนะนำ ${diff} ${unit} อาจส่งผลต่องบประมาณ พื้นที่จัดเก็บ และความเสี่ยงสต็อกเกิน`;
   }
 
   if (requestedQuantity < suggestedQuantity) {
     const diff = suggestedQuantity - requestedQuantity;
-    return `จำนวนที่ขอน้อยกว่าค่าที่ระบบแนะนำ ${diff} ${unit} อาจเสี่ยงต่อการต่ำกว่า Safety Stock หรือเกิด Understock`;
+    return `จำนวนที่ขอน้อยกว่าค่าที่ระบบแนะนำ ${diff} ${unit} อาจเสี่ยงต่อการต่ำกว่าสต็อกสำรองหรือเกิดสต็อกไม่พอ`;
   }
 
   return null;

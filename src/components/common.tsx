@@ -122,9 +122,24 @@ export function StatusBadge({
     "Budget OK": "bg-emerald-50 text-emerald-700 ring-emerald-200",
     "Budget Gap": "bg-red-50 text-red-700 ring-red-200",
   };
+  const labels: Record<string, string> = {
+    Normal: "ปกติ",
+    "Near Reorder Point": "ใกล้จุดสั่งซื้อ",
+    Critical: "วิกฤต",
+    "Pending Local": "รออนุมัติคลัง",
+    "Pending Regional": "รออนุมัติเขต",
+    "Pending Central": "รออนุมัติส่วนกลาง",
+    "More Info": "ขอข้อมูลเพิ่ม",
+    Approved: "อนุมัติแล้ว",
+    Rejected: "ไม่อนุมัติ",
+    Draft: "แบบร่าง",
+    "VMI Candidate": "เหมาะกับ VMI",
+    "Budget OK": "งบเพียงพอ",
+    "Budget Gap": "งบไม่พอ",
+  };
   return (
     <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${styles[status]}`}>
-      {status}
+      {labels[status] ?? status}
     </span>
   );
 }
@@ -200,20 +215,20 @@ export function BudgetCheckCard({
   required: number;
 }) {
   const ok = required <= remaining;
-  const percent = Math.min((required / remaining) * 100, 100);
+  const percent = remaining > 0 ? Math.min((required / remaining) * 100, 100) : 100;
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-slate-800">{label}</p>
-          <p className="mt-1 text-xs text-slate-500">Remaining {formatTHB(remaining)}</p>
+          <p className="mt-1 text-xs text-slate-500">งบคงเหลือ {formatTHB(remaining)}</p>
         </div>
         <StatusBadge status={ok ? "Budget OK" : "Budget Gap"} />
       </div>
       <div className="mt-3 h-2 rounded-full bg-slate-200">
         <div className={`h-2 rounded-full ${ok ? "bg-emerald-500" : "bg-red-500"}`} style={{ width: `${percent}%` }} />
       </div>
-      <p className="mt-2 text-xs text-slate-500">Required {formatTHB(required)}</p>
+      <p className="mt-2 text-xs text-slate-500">มูลค่าที่ต้องใช้ {formatTHB(required)}</p>
     </div>
   );
 }
@@ -225,12 +240,20 @@ export function SupplierContactCard({
   supplier: Supplier;
   onCopy?: (value: string) => void;
 }) {
+  const regionLabels: Record<string, string> = {
+    North: "ภาคเหนือ",
+    Northeast: "ภาคตะวันออกเฉียงเหนือ",
+    East: "ภาคตะวันออก",
+    South: "ภาคใต้",
+    National: "ทั่วประเทศ",
+  };
+
   return (
     <Card className="p-4">
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="font-semibold text-slate-950">{supplier.name}</p>
-          <p className="mt-1 text-sm text-slate-500">{supplier.contactPerson} · {supplier.coverage}</p>
+          <p className="mt-1 text-sm text-slate-500">{supplier.contactPerson} · {regionLabels[supplier.coverage] ?? supplier.coverage}</p>
         </div>
         <StatusBadge status="Normal" />
       </div>
@@ -238,24 +261,44 @@ export function SupplierContactCard({
         <div className="flex items-center gap-2">
           <Phone className="h-4 w-4 text-slate-400" />
           <span>{supplier.phone}</span>
-          <button className="ml-auto text-slate-400 hover:text-slate-700" title="Copy Phone" onClick={() => onCopy?.(supplier.phone)}>
+          <button className="ml-auto text-slate-400 hover:text-slate-700" title="คัดลอกเบอร์โทร" onClick={() => onCopy?.(supplier.phone)}>
             <Copy className="h-4 w-4" />
           </button>
         </div>
         <div className="flex items-center gap-2">
           <Mail className="h-4 w-4 text-slate-400" />
           <span>{supplier.email}</span>
-          <button className="ml-auto text-slate-400 hover:text-slate-700" title="Copy Email" onClick={() => onCopy?.(supplier.email)}>
+          <button className="ml-auto text-slate-400 hover:text-slate-700" title="คัดลอกอีเมล" onClick={() => onCopy?.(supplier.email)}>
             <Copy className="h-4 w-4" />
           </button>
         </div>
       </div>
-      <p className="mt-3 text-sm text-slate-500">Line ID: {supplier.lineId}</p>
+      <p className="mt-3 text-sm text-slate-500">รหัส Line: {supplier.lineId}</p>
     </Card>
   );
 }
 
 export function ApprovalTimeline({ items }: { items: ApprovalTimelineItem[] }) {
+  const roleLabels: Record<string, string> = {
+    "Local Warehouse": "คลังพื้นที่",
+    Regional: "ระดับเขต",
+    "Regional Review": "ผู้ตรวจระดับเขต",
+    Central: "ส่วนกลาง",
+    "Central Procurement": "จัดซื้อส่วนกลาง",
+  };
+  const actionLabels: Record<string, string> = {
+    Submitted: "ส่งคำขอ",
+    "Draft Created": "สร้างแบบร่าง",
+    "Waiting Review": "รอตรวจสอบ",
+    Approved: "อนุมัติ",
+    Approve: "อนุมัติ",
+    Rejected: "ไม่อนุมัติ",
+    "Request More Info": "ขอข้อมูลเพิ่มเติม",
+    "Approve & Pass to Central": "อนุมัติส่งต่อส่วนกลาง",
+    "Central Approve": "ส่วนกลางอนุมัติ",
+    "Central Reject": "ส่วนกลางไม่อนุมัติ",
+  };
+
   return (
     <div className="space-y-3">
       {items.map((item, index) => (
@@ -272,7 +315,7 @@ export function ApprovalTimeline({ items }: { items: ApprovalTimelineItem[] }) {
             )}
           </div>
           <div className="min-w-0 border-b border-slate-100 pb-3">
-            <p className="text-sm font-semibold text-slate-900">{item.role} · {item.action}</p>
+            <p className="text-sm font-semibold text-slate-900">{roleLabels[item.role] ?? item.role} · {actionLabels[item.action] ?? item.action}</p>
             <p className="mt-1 text-xs text-slate-500">{item.actor} · {item.date}</p>
             {item.note ? <p className="mt-1 text-sm text-slate-600">{item.note}</p> : null}
           </div>

@@ -212,14 +212,14 @@ export const inventoryRecords: InventoryRecord[] = [
 ];
 
 export const formulaList = [
-  "Average Daily Demand = Historical Usage / Number of Days",
-  "Adjusted Lead Time = Supplier Lead Time × Seasonal Factor × Budget Factor",
-  "Safety Stock = Z-score × Demand Variability × √Adjusted Lead Time",
-  "Demand During Lead Time = Average Daily Demand × Adjusted Lead Time",
-  "Reorder Point = Demand During Lead Time + Safety Stock",
-  "Target Stock Level = Forecast Demand During Planning Period + Safety Stock หรือ Policy Override",
-  "Suggested Quantity = Target Stock Level - Current Stock แล้วปัดขึ้นตาม MOQ",
-  "Estimated Cost = Requested Quantity × Supplier Unit Price",
+  "ค่าเฉลี่ยการใช้ต่อวัน = การใช้ย้อนหลังรวม / จำนวนวันย้อนหลัง",
+  "ระยะเวลาส่งมอบที่ปรับแล้ว = ระยะเวลาส่งมอบของซัพพลายเออร์ × ตัวคูณฤดูกาล × ตัวคูณงบประมาณ",
+  "สต็อกสำรอง = Z-score × ความผันผวนของการใช้ × √ระยะเวลาส่งมอบที่ปรับแล้ว",
+  "ความต้องการระหว่างรอของ = ค่าเฉลี่ยการใช้ต่อวัน × ระยะเวลาส่งมอบที่ปรับแล้ว",
+  "จุดสั่งซื้อ = ความต้องการระหว่างรอของ + สต็อกสำรอง",
+  "ระดับสต็อกเป้าหมาย = ความต้องการคาดการณ์ในรอบแผน + สต็อกสำรอง หรือค่าเป้าหมายจากนโยบาย",
+  "จำนวนที่ระบบแนะนำ = ระดับสต็อกเป้าหมาย - สต็อกปัจจุบัน แล้วปัดขึ้นตามปริมาณสั่งขั้นต่ำ",
+  "มูลค่าประมาณการ = จำนวนที่ผู้ใช้ขอ × ราคาต่อหน่วยของซัพพลายเออร์",
 ];
 
 export const initialContactLogs: SupplierContactLog[] = [
@@ -229,8 +229,8 @@ export const initialContactLogs: SupplierContactLog[] = [
     skuId: "C01",
     requestId: "REQ-001",
     channel: "Phone",
-    purpose: "ยืนยันราคาและ Lead Time",
-    note: "Supplier ยืนยันราคา 2,000 THB/เมตร และจัดส่งได้ 25 วัน",
+    purpose: "ยืนยันราคาและระยะเวลาส่งมอบ",
+    note: "ซัพพลายเออร์ยืนยันราคา 2,000 บาท/เมตร และจัดส่งได้ 25 วัน",
     followUpDate: "2026-05-08",
     createdAt: "2026-05-05 09:15",
   },
@@ -241,7 +241,7 @@ export const initialContactLogs: SupplierContactLog[] = [
     requestId: "REQ-002",
     channel: "Email",
     purpose: "ขอใบเสนอราคา",
-    note: "ได้รับ quote หม้อแปลง 100 kVA จำนวน 3 ลูก ราคาเดิม Lead Time 60 วัน",
+    note: "ได้รับใบเสนอราคาหม้อแปลง 100 kVA จำนวน 3 ลูก ราคาเดิม ระยะเวลาส่งมอบ 60 วัน",
     followUpDate: "2026-05-10",
     createdAt: "2026-05-05 10:30",
   },
@@ -422,13 +422,13 @@ export const initialRequests: PurchaseRequest[] = [
     overrideReasonText: t01CalculationSnapshot.overrideReasonDetail,
     formulaVersion,
     calculationSnapshot: t01CalculationSnapshot,
-    supplierContactLogSummary: "Email ขอใบเสนอราคาแล้ว Supplier ยืนยันราคาและ Lead Time",
-    localReason: "คลังขอนแก่นมี stock ต่ำกว่า safety stock และความเสี่ยง outage สูง",
+    supplierContactLogSummary: "อีเมลขอใบเสนอราคาแล้ว ซัพพลายเออร์ยืนยันราคาและระยะเวลาส่งมอบ",
+    localReason: "คลังขอนแก่นมีสต็อกต่ำกว่าสต็อกสำรอง และมีความเสี่ยงงานบริการหยุดชะงักสูง",
     regionalEscalationReason: "วงเงินเกินงบเขต ต้องขออนุมัติส่วนกลาง",
     createdAt: "2026-05-05 10:42",
     timeline: [
-      { role: "Local Warehouse", action: "Submitted", actor: "คลังขอนแก่น", date: "2026-05-05 10:42", note: "Local budget ไม่เพียงพอ" },
-      { role: "Regional", action: "Waiting Review", actor: "Regional Northeast", date: "2026-05-05 10:45" },
+      { role: "Local Warehouse", action: "Submitted", actor: "คลังขอนแก่น", date: "2026-05-05 10:42", note: "งบคลังพื้นที่ไม่เพียงพอ" },
+      { role: "Regional", action: "Waiting Review", actor: "เขตภาคตะวันออกเฉียงเหนือ", date: "2026-05-05 10:45" },
     ],
   },
   {
@@ -451,22 +451,22 @@ export const initialRequests: PurchaseRequest[] = [
     status: "Pending Central",
     variancePercent: t01CalculationSnapshot.quantityVariancePercent,
     overrideReasonCategory: "มีเหตุฉุกเฉินในพื้นที่",
-    overrideReasonText: "ใช้เป็นตัวอย่างคิว Central ที่ถูก Escalate แล้ว",
+    overrideReasonText: "ใช้เป็นตัวอย่างคิวส่วนกลางที่ถูกส่งต่อแล้ว",
     formulaVersion,
     calculationSnapshot: {
       ...t01CalculationSnapshot,
       requestId: "REQ-003",
       createdAt: "2026-05-04 15:20",
-      overrideReasonDetail: "ใช้เป็นตัวอย่างคิว Central ที่ถูก Escalate แล้ว",
+      overrideReasonDetail: "ใช้เป็นตัวอย่างคิวส่วนกลางที่ถูกส่งต่อแล้ว",
     },
-    supplierContactLogSummary: "Email ขอใบเสนอราคาแล้ว Supplier ยืนยันราคาและ Lead Time",
-    localReason: "คลังขอนแก่นมี stock ต่ำกว่า safety stock",
-    regionalEscalationReason: "Regional budget gap 3,150,000 THB จึงส่งต่อ Central",
+    supplierContactLogSummary: "อีเมลขอใบเสนอราคาแล้ว ซัพพลายเออร์ยืนยันราคาและระยะเวลาส่งมอบ",
+    localReason: "คลังขอนแก่นมีสต็อกต่ำกว่าสต็อกสำรอง",
+    regionalEscalationReason: "งบระดับเขตขาด 3,150,000 บาท จึงส่งต่อส่วนกลาง",
     createdAt: "2026-05-04 15:20",
     timeline: [
       { role: "Local Warehouse", action: "Submitted", actor: "คลังขอนแก่น", date: "2026-05-04 15:20" },
-      { role: "Regional", action: "Approve & Pass to Central", actor: "Regional Northeast", date: "2026-05-04 16:05", note: "งบเขตไม่เพียงพอ" },
-      { role: "Central", action: "Waiting Review", actor: "Central Procurement", date: "2026-05-04 16:10" },
+      { role: "Regional", action: "Approve & Pass to Central", actor: "เขตภาคตะวันออกเฉียงเหนือ", date: "2026-05-04 16:05", note: "งบเขตไม่เพียงพอ" },
+      { role: "Central", action: "Waiting Review", actor: "จัดซื้อส่วนกลาง", date: "2026-05-04 16:10" },
     ],
   },
   {
@@ -495,7 +495,7 @@ export const initialRequests: PurchaseRequest[] = [
     createdAt: "2026-04-28 13:10",
     timeline: [
       { role: "Local Warehouse", action: "Submitted", actor: "คลังสุราษฎร์", date: "2026-04-28 13:10" },
-      { role: "Regional", action: "Approved", actor: "Regional South", date: "2026-04-28 16:45" },
+      { role: "Regional", action: "Approved", actor: "เขตภาคใต้", date: "2026-04-28 16:45" },
     ],
   },
 ];
@@ -543,9 +543,9 @@ export const vmiCandidates: VmiCandidate[] = [
 ];
 
 export const vmiComparison: VmiComparisonMetric[] = [
-  { metric: "Safety Stock", current: "30 m", vmi: "20 m", impact: "-10 m / -33%" },
-  { metric: "Reorder Point", current: "100 m", vmi: "75 m", impact: "-25 m / -25%" },
-  { metric: "Lead Time", current: "30 days", vmi: "14 days", impact: "-16 days / -53%" },
-  { metric: "Inventory Value", current: "240,000 THB", vmi: "180,000 THB", impact: "-60,000 THB / -25%" },
-  { metric: "Manual Orders/Month", current: "4", vmi: "1", impact: "-3 / -75%" },
+  { metric: "สต็อกสำรอง", current: "30 m", vmi: "20 m", impact: "-10 m / -33%" },
+  { metric: "จุดสั่งซื้อ", current: "100 m", vmi: "75 m", impact: "-25 m / -25%" },
+  { metric: "ระยะเวลาส่งมอบ", current: "30 วัน", vmi: "14 วัน", impact: "-16 วัน / -53%" },
+  { metric: "มูลค่าสินค้าคงคลัง", current: "240,000 บาท", vmi: "180,000 บาท", impact: "-60,000 บาท / -25%" },
+  { metric: "คำสั่งซื้อที่ทำด้วยมือต่อเดือน", current: "4", vmi: "1", impact: "-3 / -75%" },
 ];

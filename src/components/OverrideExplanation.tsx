@@ -18,7 +18,7 @@ export function OverrideExplanation({
     return (
       <Card className="p-4">
         <h3 className="font-semibold text-slate-950">เหตุผลที่ต้องกรอกเมื่อขอต่างจากระบบ</h3>
-        <p className="mt-2 text-sm text-slate-600">Requested Quantity ตรงกับ AI Suggested Quantity จึงไม่ต้องกรอก Override Reason</p>
+        <p className="mt-2 text-sm text-slate-600">จำนวนที่ขอตรงกับจำนวนที่ระบบแนะนำ จึงไม่ต้องกรอกเหตุผลการขอต่างจากระบบ</p>
       </Card>
     );
   }
@@ -32,17 +32,17 @@ export function OverrideExplanation({
         <div>
           <h3 className="font-semibold text-slate-950">เหตุผลที่ต้องกรอกเมื่อขอต่างจากระบบ</h3>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            AI Suggested Quantity = {formatNumber(suggestedQuantity)} {unit}, Requested Quantity = {formatNumber(requestedQuantity)} {unit}
+            จำนวนที่ระบบแนะนำ = {formatNumber(suggestedQuantity)} {unit}, จำนวนที่ผู้ใช้ขอ = {formatNumber(requestedQuantity)} {unit}
           </p>
           <p className="text-sm leading-6 text-slate-600">
-            Variance = {formatNumber(requestedQuantity)} - {formatNumber(suggestedQuantity)} ={" "}
+            ส่วนต่าง = {formatNumber(requestedQuantity)} - {formatNumber(suggestedQuantity)} ={" "}
             {variance.variance > 0 ? "+" : ""}
             {formatNumber(variance.variance)} {unit} ({formatPercent(variance.variancePercent)})
           </p>
           <p className="mt-3 text-sm leading-6 text-slate-600">
             {variance.isOverRequest
-              ? "คุณกำลังขอจำนวนมากกว่าค่าที่ระบบแนะนำ ระบบจึงต้องการเหตุผลประกอบ เพื่อให้ผู้อนุมัติพิจารณาผลกระทบด้านงบประมาณ พื้นที่จัดเก็บ และความเสี่ยง Overstock"
-              : "คุณกำลังขอจำนวนน้อยกว่าค่าที่ระบบแนะนำ ซึ่งอาจทำให้ stock ต่ำกว่า Safety Stock หรือเกิดความเสี่ยงขาดแคลนในรอบถัดไป กรุณาระบุเหตุผลประกอบ"}
+              ? "คุณกำลังขอจำนวนมากกว่าค่าที่ระบบแนะนำ ระบบจึงต้องการเหตุผลประกอบ เพื่อให้ผู้อนุมัติพิจารณาผลกระทบด้านงบประมาณ พื้นที่จัดเก็บ และความเสี่ยงสต็อกเกิน"
+              : "คุณกำลังขอจำนวนน้อยกว่าค่าที่ระบบแนะนำ ซึ่งอาจทำให้สต็อกต่ำกว่าสต็อกสำรอง หรือเกิดความเสี่ยงขาดแคลนในรอบถัดไป จึงต้องระบุเหตุผลประกอบ"}
           </p>
         </div>
       </div>
