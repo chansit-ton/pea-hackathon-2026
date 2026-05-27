@@ -1,24 +1,27 @@
 # PEA Inventory Planning Database Setup
 
-เอกสารนี้ใช้เป็นแนวทางตั้งฐานข้อมูลจริงต่อจาก prototype โดยอ้างอิงไฟล์ `PEA Data Summary.xlsx` เป็น data mart ตั้งต้น และเพิ่ม mock supplier แยกเองเพราะไฟล์ Excel ยังไม่มีข้อมูลผู้ขายจริง
+เอกสารนี้ใช้เป็นแนวทางตั้งฐานข้อมูลจริงต่อจาก prototype โดยอ้างอิงไฟล์ `PEA Data Summary.xlsx` เป็น data mart ตั้งต้น
+ไฟล์ล่าสุดมี `Supplier Id` ในชีต `Supplier Factory` สำหรับผูกกับ Factory / Plant แล้ว แต่ข้อมูลผู้ขายจริงระดับ contact, price, MOQ และ quotation ยังใช้ mock supplier แยกต่างหาก
 
 ## หลักการตั้งชื่อ
 
 - `WH Id` = Warehouse / คลัง / พื้นที่ที่เกิด demand และประวัติการเบิกจ่าย
 - `Factory Id` = Factory / Plant / รหัสคลังหลักหรือโรงงานใน SAP ที่ผูก stock, batch, movement และ lead time
-- `Supplier Id` = Vendor / ผู้ขายจริง ใช้กับ contact, price, MOQ และ supplier lead time
+- `Region` ในชีต `WH` = `เขต` ของคลังพื้นที่
+- `Supplier Id` ในชีต `Supplier Factory` = source supplier id ที่ผูกกับ Factory / Plant เช่น `I010 → I`
+- `Supplier Id` ใน `supplier_master` = Vendor / ผู้ขายจริง ใช้กับ contact, price, MOQ และ supplier lead time
 - ห้ามใช้ `Factory Id` เป็น `Supplier Id`
-- ชีต `Supplier Factory` ใน Excel ต้องนำเข้าเป็น `factory_master`
+- ชีต `Supplier Factory` ใน Excel ต้องนำเข้าเป็น `factory_master` พร้อม `supplier_id` จาก source sheet
 
 ## Source Sheets
 
 | Excel sheet | ใช้เป็นข้อมูล |
 | --- | --- |
 | `SKU Data` | SKU master, stock total, avg usage เดิม |
-| `WH` | Warehouse master |
+| `WH` | Warehouse master และเขตจาก column `Region (เขต)` |
 | `WH Season Data Item` | Monthly usage by WH + SKU ต้องแปลง wide เป็น long |
 | `Item Season Data` | SKU-level monthly usage summary |
-| `Supplier Factory` | Factory / Plant master ไม่ใช่ supplier |
+| `Supplier Factory` | Factory / Plant master พร้อม `Supplier Id` ที่สอดคล้องกับ Factory |
 | `BATCH` | Stock by Factory + SKU + Batch |
 | `LT Data` | Lead time transaction |
 | `LT Analyst` | Aggregated lead time by Factory + SKU |
@@ -62,6 +65,7 @@ CREATE TABLE warehouse_master (
 CREATE TABLE factory_master (
   factory_id VARCHAR(50) PRIMARY KEY,
   factory_name TEXT,
+  supplier_id VARCHAR(50),
   region_code VARCHAR(10),
   factory_type VARCHAR(50),
   status VARCHAR(20) DEFAULT 'active',
@@ -244,6 +248,72 @@ CREATE TABLE supplier_contact_log (
 );
 ```
 
+### Policy, Import, Data Quality, Unit Conversion
+
+ตารางกลุ่มนี้ใช้รองรับการทำ backend จริงในระยะถัดไป เพื่อให้รู้ว่า request แต่ละรายการใช้สูตรเวอร์ชันใด ข้อมูลนำเข้ามาจากไฟล์รอบไหน และมีปัญหาคุณภาพข้อมูลใดที่ต้องแสดงเป็น data coverage warning
+
+```sql
+CREATE TABLE formula_policy (
+  policy_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  policy_name TEXT,
+  formula_version VARCHAR(20),
+  service_level NUMERIC(10, 4),
+  z_score NUMERIC(10, 4),
+  seasonal_factor NUMERIC(10, 4),
+  budget_factor NUMERIC(10, 4),
+  target_stock_method VARCHAR(50),
+  lead_time_method VARCHAR(50),
+  high_variance_threshold_percent NUMERIC(10, 2),
+  is_active BOOLEAN DEFAULT TRUE,
+  created_by TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE data_import_batch (
+  import_batch_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  source_file_name TEXT,
+  source_sheet_name TEXT,
+  import_type VARCHAR(50),
+  imported_by TEXT,
+  imported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  row_count INT,
+  success_count INT,
+  error_count INT,
+  status VARCHAR(50),
+  remark TEXT
+);
+
+CREATE TABLE data_quality_issue (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  entity_type VARCHAR(50),
+  entity_id VARCHAR(100),
+  issue_type VARCHAR(100),
+  severity VARCHAR(20),
+  description TEXT,
+  detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  resolved_at TIMESTAMP,
+  status VARCHAR(20) DEFAULT 'open'
+);
+
+CREATE TABLE unit_conversion (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  from_unit VARCHAR(20),
+  to_unit VARCHAR(20),
+  conversion_factor NUMERIC(18, 6),
+  sku_id VARCHAR(50) REFERENCES sku_master(sku_id),
+  remark TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+หมายเหตุการใช้งาน:
+
+- `formula_policy` ควรถูกอ้างอิงใน `calculation_snapshot` ผ่าน `formula_version` หรือ `policy_id` เพื่อให้ audit ย้อนหลังรู้ว่าใช้เกณฑ์ใด
+- `data_import_batch` ควรเชื่อมกับ `monthly_usage`, `stock_batch`, `lead_time_transaction`, `sku_movement` และ `document_transaction_summary` เมื่อทำ ETL จริง
+- `data_quality_issue` ใช้เก็บปัญหา เช่น `missing_warehouse_factory_mapping`, `missing_lead_time`, `missing_supplier_price`, `missing_stock_data`, `invalid_unit`, `grand_total_row_removed`
+- `unit_conversion` ยังไม่จำเป็นใน PoC แต่ควรเตรียมไว้หากข้อมูลจริงมีหน่วยไม่ตรงกันระหว่าง stock, usage และ supplier quotation
+
 ### Budget, Request, Approval, Snapshot
 
 ```sql
@@ -307,6 +377,7 @@ CREATE TABLE calculation_snapshot (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   request_id UUID REFERENCES purchase_request(request_id),
   formula_version VARCHAR(20),
+  policy_id UUID REFERENCES formula_policy(policy_id),
   historical_usage_total NUMERIC(18, 3),
   historical_usage_days INT,
   average_daily_demand NUMERIC(18, 6),
@@ -401,12 +472,14 @@ WH Id | SKU Id | Jan | Feb | ... | Dec
 warehouse_id | sku_id | usage_year | usage_month | usage_qty
 ```
 
-3. สร้าง `region_code` จากตัวอักษรแรกของ `warehouse_id` หรือ `factory_id`
-4. สร้าง mapping แบบ `exact_code_match` เมื่อ `WH Id = Factory Id`
-5. หากไม่มี mapping ให้บันทึก `mapping_type = unknown` และห้ามคำนวณเหมือนข้อมูลครบ
-6. สร้าง `stock_summary` จาก `SUM(stock_qty) GROUP BY factory_id, sku_id`
-7. สร้าง `lead_time_summary` จาก `LT Data` โดยเก็บ average, median, p90, p95
-8. Supplier, price, MOQ, contact และ supplier standard lead time ให้ seed จาก mock supplier หรือ vendor master ในอนาคต
+3. สำหรับ `warehouse_master.region_code` ให้ใช้ column `Region (เขต)` จากชีต `WH` เป็นหลัก และใช้ตัวอักษรแรกของ `warehouse_id` เป็น fallback เฉพาะกรณีที่ column ว่าง
+4. สำหรับ `factory_master.supplier_id` ให้ใช้ column `Supplier Id` จากชีต `Supplier Factory` เช่น `I010 → I`, `K010 → K`
+5. สำหรับ `factory_master.region_code` ให้ derive จากตัวอักษรแรกของ `factory_id` จนกว่าจะมี source master ที่ระบุเขตของ Factory / Plant โดยตรง
+6. สร้าง mapping แบบ `exact_code_match` เมื่อ `WH Id = Factory Id`
+7. หากไม่มี mapping ให้บันทึก `mapping_type = unknown` และห้ามคำนวณเหมือนข้อมูลครบ
+8. สร้าง `stock_summary` จาก `SUM(stock_qty) GROUP BY factory_id, sku_id`
+9. สร้าง `lead_time_summary` จาก `LT Data` โดยเก็บ average, median, p90, p95
+10. Supplier price, MOQ, contact และ supplier standard lead time ให้ seed จาก mock supplier หรือ vendor master ในอนาคต
 
 ## Calculation Data Flow
 

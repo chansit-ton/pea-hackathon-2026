@@ -17,8 +17,8 @@ export function formatTHB(value: number) {
   return formatCurrency(value);
 }
 
-export function formatNumber(value: number) {
-  return formatThaiNumber(value);
+export function formatNumber(value: number, decimals = 2) {
+  return formatThaiNumber(value, decimals);
 }
 
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
@@ -82,7 +82,7 @@ export function MetricCard({
   label: string;
   value: string;
   helper: string;
-  tone?: "slate" | "red" | "blue" | "purple" | "green";
+  tone?: "slate" | "red" | "blue" | "purple" | "green" | "yellow";
 }) {
   const tones = {
     slate: "border-slate-200 bg-white text-slate-950",
@@ -90,6 +90,7 @@ export function MetricCard({
     blue: "border-blue-200 bg-blue-50 text-blue-800",
     purple: "border-violet-200 bg-violet-50 text-violet-800",
     green: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    yellow: "border-amber-200 bg-amber-50 text-amber-800",
   };
   return (
     <div className={`rounded-lg border p-4 shadow-sm ${tones[tone]}`}>
@@ -158,8 +159,8 @@ export function DataTable({
       <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
         <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
           <tr>
-            {columns.map((column) => (
-              <th key={column} className="whitespace-nowrap px-4 py-3 font-semibold">
+            {columns.map((column, index) => (
+              <th key={`${column}-${index}`} className="whitespace-nowrap px-4 py-3 font-semibold">
                 {column}
               </th>
             ))}

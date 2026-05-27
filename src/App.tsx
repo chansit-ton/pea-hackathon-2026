@@ -1,6 +1,8 @@
 ﻿import { useState, type ReactNode } from "react";
 import {
   ArrowLeft,
+  ArrowDown,
+  ArrowUp,
   BarChart3,
   Boxes,
   Calculator,
@@ -10,6 +12,7 @@ import {
   History,
   Mail,
   Menu,
+  Minus,
   PanelLeftClose,
   PanelLeftOpen,
   Phone,
@@ -37,8 +40,18 @@ import {
   vmiCandidates,
   warehouses,
 } from "./data/mockData";
-import { getPeaDataCoverage, getPeaDataCoverageWarnings } from "./data/peaDataModel";
-import type { PeaDataCoverage } from "./data/peaDataModel";
+import {
+  getPeaDataCoverage,
+  getPeaDataCoverageWarnings,
+  getPeaLeadTimeSkuSummary,
+  getPeaRiskCoverageRecord,
+  peaMonthlyUsage,
+  peaRelationshipSummary,
+  peaRiskCoverageRecords,
+  peaSkuMaster,
+  peaWarehouseMaster,
+} from "./data/peaDataModel";
+import type { PeaDataCoverage, PeaLeadTimeSkuSummary, PeaRiskCoverageRecord } from "./data/peaDataModel";
 import { CalculationExplanationPanel } from "./components/CalculationExplanationPanel";
 import { CalculationSnapshotView } from "./components/CalculationSnapshotView";
 import {
@@ -88,6 +101,7 @@ import type {
 type View =
   | "dashboard"
   | "inventory"
+  | "usage"
   | "sku-detail"
   | "calculation"
   | "supplier"
@@ -168,6 +182,14 @@ const lessReasons = [
   "อื่น ๆ",
 ];
 
+const usageMonthLabels = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+const usageMonthTrendColumns = usageMonthLabels.flatMap((label, index) => (index === 0 ? [label] : [label, "% เพิ่ม/ลด"]));
+const usageSeasons = [
+  { id: "cool", label: "ฤดูหนาว", helper: "พ.ย.-ก.พ.", months: [11, 12, 1, 2] },
+  { id: "summer", label: "ฤดูร้อน", helper: "มี.ค.-พ.ค.", months: [3, 4, 5] },
+  { id: "rainy", label: "ฤดูฝน", helper: "มิ.ย.-ต.ค.", months: [6, 7, 8, 9, 10] },
+];
+
 function App() {
   const [view, setView] = useState<View>("dashboard");
   const [selectedSkuId, setSelectedSkuId] = useState("C01");
@@ -202,6 +224,7 @@ function App() {
   // ไปยังระบบ SAP/procurement/budget โดยยังคง snapshot ของคำขอให้แก้ย้อนหลังไม่ได้
   const [requests, setRequests] = useState<PurchaseRequest[]>(initialRequests);
   const [contactLogs, setContactLogs] = useState<SupplierContactLog[]>(initialContactLogs);
+  const [submittedConfirmation, setSubmittedConfirmation] = useState<PurchaseRequest | null>(null);
 
   const notify = (message: string) => {
     setToast(message);
@@ -392,8 +415,8 @@ function App() {
       target: `${catalog.supplier.id}-${catalog.sku.id}`,
       field: "ข้อมูลตั้งต้นการคำนวณ",
       oldValue: "-",
-      newValue: `สต็อก ${catalog.inventory.currentStock}, คาดการณ์ ${catalog.inventory.forecastDemandForPlanningPeriod}, ระยะเวลาส่งมอบ ${catalog.offer.leadTimeDays} วัน, ปริมาณสั่งขั้นต่ำ ${catalog.offer.moq}`,
-      note: "เพิ่มข้อมูลที่จำเป็นสำหรับสต็อกสำรอง จุดสั่งซื้อ จำนวนที่ระบบแนะนำ และมูลค่าประมาณการ",
+      newValue: `Stock ${catalog.inventory.currentStock}, คาดการณ์ ${catalog.inventory.forecastDemandForPlanningPeriod}, ระยะเวลารอพัสดุ ${catalog.offer.leadTimeDays} วัน, จำนวนสั่งซื้อขั้นต่ำ ${catalog.offer.moq}`,
+      note: "เพิ่มข้อมูลที่จำเป็นสำหรับระดับพัสดุสำรองปลอดภัย จุดสั่งซื้อใหม่ จำนวนที่ระบบแนะนำ และมูลค่าประมาณการ",
     });
 
     setSelectedSupplierId(catalog.supplier.id);
@@ -430,6 +453,10 @@ function App() {
     setSelectedRequestId(request.id);
     setApprovalTab(request.status === "Pending Central" ? "central" : "regional");
     setView(request.status === "Draft" ? "history" : "approval");
+    // แสดงสรุปหลัง submit เพื่อย้ำว่า request, route และ Calculation Snapshot ถูกบันทึกแล้ว
+    if (request.status !== "Draft") {
+      setSubmittedConfirmation(request);
+    }
     notify(request.status === "Draft" ? `${request.id} ถูกบันทึกเป็น Draft แล้ว` : `${request.id} ถูกส่งเข้าคิวอนุมัติแล้ว`);
   };
 
@@ -479,6 +506,8 @@ function App() {
         return <DashboardPage openSku={openSku} requests={requests} supplierOfferData={editableSupplierOffers} formulaPolicy={formulaPolicy} />;
       case "inventory":
         return <InventoryPage openSku={openSku} supplierOfferData={editableSupplierOffers} formulaPolicy={formulaPolicy} />;
+      case "usage":
+        return <WarehouseSkuUsagePage />;
       case "sku-detail":
         return (
           <SkuDetailPage
@@ -609,7 +638,80 @@ function App() {
         </div>
       ) : null}
       {page}
+      {submittedConfirmation ? (
+        <SubmitConfirmationModal
+          request={submittedConfirmation}
+          onClose={() => setSubmittedConfirmation(null)}
+          onViewHistory={() => {
+            setSelectedRequestId(submittedConfirmation.id);
+            setView("history");
+            setSubmittedConfirmation(null);
+          }}
+        />
+      ) : null}
     </AppLayout>
+  );
+}
+
+function SubmitConfirmationModal({
+  request,
+  onClose,
+  onViewHistory,
+}: {
+  request: PurchaseRequest;
+  onClose: () => void;
+  onViewHistory: () => void;
+}) {
+  const sku = getSku(request.skuId);
+  const supplier = getSupplier(request.supplierId);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+      <Card className="w-full max-w-2xl overflow-hidden">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+              <CheckCircle2 className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">ส่งคำขอสำเร็จ</p>
+              <h3 className="mt-1 text-lg font-semibold text-slate-950">บันทึกคำขอและบันทึกค่าคำนวณแล้ว</h3>
+              <p className="mt-1 text-sm text-slate-500">
+                คำขอถูกส่งเข้าสู่คิวอนุมัติ พร้อมเก็บค่าคำนวณ ณ วันที่ขอไว้สำหรับตรวจสอบย้อนหลัง
+              </p>
+            </div>
+          </div>
+          <Button variant="ghost" onClick={onClose} title="ปิด">
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <div className="space-y-4 p-5">
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+            <span className="font-semibold">บันทึกค่าคำนวณ:</span> บันทึกค่าคำนวณ ณ วันที่ขอแล้ว จะไม่คำนวณย้อนหลังจากราคา ระยะเวลารอพัสดุ หรือนโยบายสูตรที่เปลี่ยนในอนาคต
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <ReviewMetric label="Request No" value={request.id} />
+            <ReviewMetric label="รายการพัสดุ" value={`${sku.id} · ${sku.name}`} />
+            <ReviewMetric label="ซัพพลายเออร์" value={supplier.name} />
+            <ReviewMetric label="จำนวนที่ระบบแนะนำ" value={`${formatNumber(request.aiSuggestedQuantity)} ${request.unit}`} />
+            <ReviewMetric label="จำนวนที่ขอจริง" value={`${formatNumber(request.requestedQuantity)} ${request.unit}`} />
+            <ReviewMetric label="ส่วนต่างจากค่าที่ระบบแนะนำ" value={formatPercent(request.variancePercent)} />
+            <ReviewMetric label="มูลค่าประมาณการ" value={formatTHB(request.estimatedCost)} />
+            <ReviewMetric label="เส้นทางการอนุมัติ" value={getApprovalLayerLabel(request.recommendedLayer)} />
+          </div>
+
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button variant="secondary" onClick={onClose}>ปิด</Button>
+            <Button onClick={onViewHistory}>
+              <History className="h-4 w-4" />
+              ดูประวัติคำขอ
+            </Button>
+          </div>
+        </div>
+      </Card>
+    </div>
   );
 }
 
@@ -629,6 +731,7 @@ function AppLayout({
   const nav = [
     { id: "dashboard", label: "แดชบอร์ด", icon: BarChart3 },
     { id: "inventory", label: "คลังพัสดุ", icon: Boxes },
+    { id: "usage", label: "การใช้ SKU", icon: BarChart3 },
     { id: "supplier", label: "ซัพพลายเออร์", icon: Truck },
     { id: "request", label: "คำขอซื้อ", icon: FileText },
     { id: "approval", label: "อนุมัติ", icon: ClipboardCheck },
@@ -798,6 +901,12 @@ function DashboardPage({
 }) {
   const pendingCount = requests.filter((request) => request.status.startsWith("Pending")).length;
   const riskCount = inventoryRecords.filter((record) => record.status !== "Normal").length;
+  const relationshipCoveragePercent =
+    peaRelationshipSummary.mergedSkuPlantKeys > 0
+      ? (peaRelationshipSummary.stockUsageIntersectionKeys / peaRelationshipSummary.mergedSkuPlantKeys) * 100
+      : 0;
+  const criticalRelationshipCount = peaRiskCoverageRecords.filter((record) => record.riskStatus.startsWith("Critical")).length;
+  const topRelationshipRisk = [...peaRiskCoverageRecords].sort((a, b) => a.stockCoverPeriods - b.stockCoverPeriods)[0];
 
   return (
     <>
@@ -808,7 +917,7 @@ function DashboardPage({
       />
       <Card className="mb-5 p-4">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
-          {["ปีงบประมาณ 2026", "ภูมิภาค: ภาคเหนือ", "คลัง: WH-001", "หมวดหมู่: ทั้งหมด"].map((value) => (
+          {["ปีงบประมาณ 2026", "ภูมิภาค: ภาคเหนือ", "คลัง: I010", "หมวดหมู่: ทั้งหมด"].map((value) => (
             <select key={value} className={inputClass} defaultValue={value}>
               <option>{value}</option>
             </select>
@@ -816,6 +925,28 @@ function DashboardPage({
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" />
             <input className={`${inputClass} pl-9`} placeholder="ค้นหา SKU / คลัง" />
+          </div>
+        </div>
+      </Card>
+
+      <Card className="mb-5 overflow-hidden border-blue-200">
+        <div className="grid grid-cols-1 gap-4 p-5 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-center">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 ring-1 ring-blue-200">Demo Scenario</span>
+              <span className="text-sm font-medium text-slate-500">AI-assisted decision support</span>
+            </div>
+            <h3 className="mt-3 text-lg font-semibold text-slate-950">เริ่ม Demo Flow: สายไฟแรงต่ำ C01</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              ระบบแนะนำให้เติม 10 เมตร แต่ผู้ใช้ลองขอ 20 เมตร ระบบจะบังคับกรอกเหตุผล ตรวจงบ 3 ชั้น ส่งอนุมัติระดับเขต และเก็บบันทึกค่าคำนวณสำหรับตรวจสอบย้อนหลัง
+            </p>
+          </div>
+          <div className="grid gap-2">
+            <Button onClick={() => openSku("C01")}>
+              <Sparkles className="h-4 w-4" />
+              เริ่ม Demo Flow
+            </Button>
+            <p className="text-xs leading-5 text-slate-500">Dashboard → SKU Detail → Request → Approval → History → VMI</p>
           </div>
         </div>
       </Card>
@@ -831,7 +962,7 @@ function DashboardPage({
         <Card className="p-5">
           <p className="text-sm font-semibold text-slate-600">งบคลังพื้นที่</p>
           <p className="mt-2 text-2xl font-semibold text-slate-950">{formatTHB(25_000)}</p>
-          <p className="mt-2 text-sm text-slate-500">WH-001 คลังเชียงใหม่ 1</p>
+          <p className="mt-2 text-sm text-slate-500">I010 คลัง I010</p>
         </Card>
         <Card className="p-5">
           <p className="text-sm font-semibold text-slate-600">งบระดับเขต</p>
@@ -845,10 +976,34 @@ function DashboardPage({
         </Card>
       </div>
 
+      <Card className="mt-5">
+        <SectionHeader
+          title="ภาพรวมความสัมพันธ์ข้อมูลจาก Excel"
+          subtitle="สรุปจากไฟล์ inventory_relationship_analysis.xlsx เพื่อบอกว่า stock, usage และ lead time เชื่อมกันได้มากน้อยแค่ไหน"
+        />
+        <div className="grid grid-cols-1 gap-3 p-5 sm:grid-cols-2 xl:grid-cols-5">
+          <MetricCard label="Stock SKU/Plant" value={formatNumber(peaRelationshipSummary.stockSkuPlantKeys, 0)} helper={`${formatNumber(peaRelationshipSummary.stockRows, 0)} rows`} tone="slate" />
+          <MetricCard label="Usage SKU/คลัง" value={formatNumber(peaRelationshipSummary.movingSkuPlantKeys, 0)} helper={`${formatNumber(peaRelationshipSummary.movingRows, 0)} rows`} tone="blue" />
+          <MetricCard label="เชื่อม Stock+Usage ได้" value={`${formatNumber(relationshipCoveragePercent, 1)}%`} helper={`${formatNumber(peaRelationshipSummary.stockUsageIntersectionKeys, 0)} keys จาก ${formatNumber(peaRelationshipSummary.mergedSkuPlantKeys, 0)}`} tone="green" />
+          <MetricCard label="Lead Time SKU" value={formatNumber(peaRelationshipSummary.leadTimeSkuKeys, 0)} helper={`${formatNumber(peaRelationshipSummary.leadTimeRows, 0)} rows`} tone="purple" />
+          <MetricCard label="Critical coverage" value={String(criticalRelationshipCount)} helper="stock cover < 1 รอบ" tone="red" />
+        </div>
+        <div className="border-t border-slate-200 px-5 py-4 text-sm leading-6 text-slate-600">
+          {topRelationshipRisk ? (
+            <p>
+              ตัวอย่างความเสี่ยงสูงจากไฟล์ relationship: {topRelationshipRisk.skuId} ที่ {topRelationshipRisk.plantId} มี stock cover เพียง {formatNumber(topRelationshipRisk.stockCoverPeriods, 2)} รอบ
+              และใช้เฉลี่ย {formatNumber(topRelationshipRisk.avgPeriodUsage, 0)} {topRelationshipRisk.usageUnit}/เดือน
+            </p>
+          ) : (
+            <p>ยังไม่มี relationship risk record สำหรับแสดงผล</p>
+          )}
+        </div>
+      </Card>
+
       <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card>
-          <SectionHeader title="แจ้งเตือนสต็อกวิกฤต" subtitle="รายการที่สต็อกต่ำกว่าจุดสั่งซื้อหรือสต็อกสำรอง" />
-          <DataTable columns={["SKU", "รายการ", "คลัง", "สต็อก", "จุดสั่งซื้อ", "สถานะ", "ดำเนินการ"]}>
+          <SectionHeader title="แจ้งเตือนสต็อกวิกฤต" subtitle="รายการที่สต็อกต่ำกว่าจุดสั่งซื้อใหม่ (Reorder Point) หรือระดับพัสดุสำรองปลอดภัย (Safety Stock)" />
+          <DataTable columns={["SKU", "รายการ", "คลัง", "Stock", "จุดสั่งซื้อใหม่", "สถานะ", "ดำเนินการ"]}>
             {inventoryRecords.map((record) => {
               const sku = getSku(record.skuId);
               const warehouse = getWarehouse(record.warehouseId);
@@ -876,7 +1031,8 @@ function DashboardPage({
             <h3 className="font-semibold text-slate-950">สรุปจากระบบ AI</h3>
           </div>
           <div className="mt-4 space-y-3 text-sm leading-6 text-slate-600">
-            <p>C01 ที่ WH-001 อยู่ต่ำกว่าจุดสั่งซื้อ 122 เมตร และมีงบคลังพื้นที่เพียง 25,000 บาท</p>
+            <p>C01 ที่คลัง I010 อยู่ต่ำกว่าจุดสั่งซื้อใหม่ (Reorder Point) 122 เมตร และมีงบคลังพื้นที่เพียง 25,000 บาท</p>
+            <p>จาก relationship analysis พบว่า C01 ที่ I010 มี stock cover ประมาณ 0.09 รอบ และยังไม่พบ Lead Time เฉพาะ Factory/SKU จึงควรใช้ Lead Time จากซัพพลายเออร์เป็นค่าตั้งต้นใน PoC</p>
             <p>หากขอซื้อ 20 เมตรจาก S001 จะใช้เงิน 40,000 บาท จึงต้องส่งอนุมัติระดับเขต</p>
             <p>C01 มีความต้องการค่อนข้างสม่ำเสมอและซัพพลายเออร์มีความน่าเชื่อถือ 96% เหมาะสำหรับทดลอง VMI ระดับเขต</p>
           </div>
@@ -904,11 +1060,11 @@ function InventoryPage({
       <PageTitle
         eyebrow="คลังพัสดุ"
         title="รายการสต็อกตามคลัง"
-        subtitle="ตรวจสอบสต็อกปัจจุบัน สต็อกสำรอง จุดสั่งซื้อ และจำนวนที่ระบบแนะนำ"
+        subtitle="ตรวจสอบ Stock ปัจจุบัน ระดับพัสดุสำรองปลอดภัย จุดสั่งซื้อใหม่ และจำนวนที่ระบบแนะนำ"
       />
       <Card>
         <SectionHeader title="รายการความเสี่ยงในคลัง" subtitle="คลิกเปิดรายละเอียด SKU เพื่อดูตัวเลือกซัพพลายเออร์และวิธีคำนวณ" />
-        <DataTable columns={["SKU", "รายการ", "คลัง", "สต็อกปัจจุบัน", "สต็อกสำรอง", "จุดสั่งซื้อ", "จำนวนที่แนะนำ", "สถานะ", "ดำเนินการ"]}>
+        <DataTable columns={["SKU", "รายการ", "คลัง", "สต็อกปัจจุบัน", "พัสดุสำรองปลอดภัย", "จุดสั่งซื้อใหม่", "จำนวนที่แนะนำ", "สถานะ", "ดำเนินการ"]}>
           {inventoryRecords.map((record) => {
             const sku = getSku(record.skuId);
             const warehouse = getWarehouse(record.warehouseId);
@@ -930,6 +1086,372 @@ function InventoryPage({
         </DataTable>
       </Card>
     </>
+  );
+}
+
+function WarehouseSkuUsagePage() {
+  const usageWarehouseOptions = peaWarehouseMaster.filter((warehouse) =>
+    peaMonthlyUsage.some((usage) => usage.warehouseId === warehouse.warehouseId),
+  );
+  const regionOptions = Array.from(new Set(peaWarehouseMaster.map((warehouse) => warehouse.regionCode))).sort();
+  const skuOptions = peaSkuMaster.filter((sku) => peaMonthlyUsage.some((usage) => usage.skuId === sku.skuId));
+  const [selectedRegionCode, setSelectedRegionCode] = useState("all");
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState("all");
+  const [selectedSkuId, setSelectedSkuId] = useState("all");
+  const [search, setSearch] = useState("");
+  const warehouseOptions = usageWarehouseOptions.filter((warehouse) => selectedRegionCode === "all" || warehouse.regionCode === selectedRegionCode);
+  const selectedWarehouseIds = selectedWarehouseId === "all" ? warehouseOptions.map((warehouse) => warehouse.warehouseId) : [selectedWarehouseId];
+
+  const rows = buildWarehouseUsageRows(selectedWarehouseIds)
+    .filter((row) => selectedSkuId === "all" || row.skuId === selectedSkuId)
+    .filter((row) => {
+      const keyword = search.trim().toLowerCase();
+      if (!keyword) return true;
+      return `${row.skuId} ${row.skuName} ${row.category}`.toLowerCase().includes(keyword);
+    });
+
+  const selectedWarehouse = peaWarehouseMaster.find((warehouse) => warehouse.warehouseId === selectedWarehouseId);
+  const monthlyTotals = usageMonthLabels.map((_, index) => rows.reduce((sum, row) => sum + row.monthly[index], 0));
+  const seasonTotals = buildSeasonAverages(monthlyTotals);
+  const annualTotal = rows.reduce((sum, row) => sum + row.total, 0);
+  const activeSkuCount = rows.length;
+  const activeWarehouseCount = selectedWarehouseId === "all" ? selectedWarehouseIds.length : 1;
+  const peakMonthIndex = monthlyTotals.reduce((bestIndex, value, index) => (value > monthlyTotals[bestIndex] ? index : bestIndex), 0);
+  const peakSeason = usageSeasons.reduce((best, season) => (seasonTotals[season.id] > seasonTotals[best.id] ? season : best), usageSeasons[0]);
+  const topSku = rows.reduce<WarehouseUsageRow | undefined>((best, row) => (!best || row.total > best.total ? row : best), undefined);
+  const warehouseScopeLabel = selectedWarehouseId === "all" ? "ทุกคลัง" : selectedWarehouseId;
+  const warehouseScopeHelper = selectedWarehouseId === "all" ? `${selectedWarehouseIds.length} คลังที่มีข้อมูล usage` : selectedWarehouse?.warehouseName ?? "Warehouse";
+  const regionScopeLabel = selectedRegionCode === "all" ? "ทุกเขต" : formatPeaRegionCode(selectedRegionCode);
+
+  return (
+    <>
+      <PageTitle
+        eyebrow="ข้อมูลการใช้จาก Excel"
+        title="ปริมาณการใช้ SKU รายคลัง"
+        subtitle="ดูประวัติการใช้รายเดือนจากชีต WH Season Data Item โดยแปลงข้อมูล Jan-Dec เป็น long format สำหรับคำนวณ demand"
+      />
+
+      <Card className="mb-5 p-4">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <Field label="เขตจากชีต WH">
+            <select
+              className={inputClass}
+              value={selectedRegionCode}
+              onChange={(event) => {
+                setSelectedRegionCode(event.target.value);
+                setSelectedWarehouseId("all");
+              }}
+            >
+              <option value="all">ทุกเขต</option>
+              {regionOptions.map((regionCode) => (
+                <option key={regionCode} value={regionCode}>
+                  {formatPeaRegionCode(regionCode)}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="รหัสคลังพื้นที่ (WH Id)">
+            <select className={inputClass} value={selectedWarehouseId} onChange={(event) => setSelectedWarehouseId(event.target.value)}>
+              <option value="all">{selectedRegionCode === "all" ? "ทุกคลังที่มีข้อมูล usage" : `ทุกคลังใน ${formatPeaRegionCode(selectedRegionCode)}`}</option>
+              {warehouseOptions.map((warehouse) => (
+                <option key={warehouse.warehouseId} value={warehouse.warehouseId}>
+                  {warehouse.warehouseId} · {warehouse.warehouseName} · {formatPeaRegionCode(warehouse.regionCode)}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="SKU">
+            <select className={inputClass} value={selectedSkuId} onChange={(event) => setSelectedSkuId(event.target.value)}>
+              <option value="all">{selectedWarehouseId === "all" ? "ทุก SKU ในทุกคลัง" : "ทุก SKU ในคลังนี้"}</option>
+              {skuOptions.map((sku) => (
+                <option key={sku.skuId} value={sku.skuId}>
+                  {sku.skuId} · {sku.skuName}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="ปีข้อมูล">
+            <input className={inputClass} value="2026" readOnly />
+          </Field>
+          <Field label="ค้นหา">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" />
+              <input className={`${inputClass} pl-9`} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="ค้นหา SKU / รายการ / หมวดหมู่" />
+            </div>
+          </Field>
+        </div>
+      </Card>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <MetricCard label="เขต" value={regionScopeLabel} helper="จากชีต WH" tone="slate" />
+        <MetricCard label="ขอบเขตคลัง" value={warehouseScopeLabel} helper={warehouseScopeHelper} tone="slate" />
+        <MetricCard label="Usage รวมทั้งปี" value={formatNumber(annualTotal)} helper="หน่วยตาม SKU" tone="blue" />
+        <MetricCard label="SKU ที่มีการใช้" value={String(activeSkuCount)} helper={`${activeWarehouseCount} คลัง`} tone="green" />
+        <MetricCard label="Season ที่ใช้สูงสุด" value={peakSeason.label} helper={`${peakSeason.helper} · เฉลี่ย ${formatNumber(seasonTotals[peakSeason.id])}`} tone="purple" />
+      </div>
+
+      <Card className="mt-5">
+        <SectionHeader
+          title="ค่าเฉลี่ยการใช้ตาม Season"
+          subtitle="ค่าเฉลี่ยต่อเดือนของช่วงฤดูกาล ใช้ช่วยดู seasonal demand ก่อนนำไปตั้ง Seasonal Factor หรือวิเคราะห์ VMI"
+        />
+        <div className="grid grid-cols-1 gap-3 p-5 md:grid-cols-3">
+          {usageSeasons.map((season) => (
+            <div key={season.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm font-semibold text-slate-950">{season.label}</p>
+              <p className="mt-1 text-xs text-slate-500">{season.helper}</p>
+              <p className="mt-3 text-2xl font-semibold text-blue-700">{formatNumber(seasonTotals[season.id])}</p>
+              <p className="mt-1 text-xs text-slate-500">ค่าเฉลี่ยต่อเดือนใน season นี้</p>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <Card>
+          <SectionHeader
+            title="แนวโน้มการใช้รายเดือน"
+            subtitle={selectedSkuId === "all" ? "รวมทุก SKU ที่ผ่านตัวกรองในคลังนี้" : "แสดงเฉพาะ SKU ที่เลือก"}
+          />
+          <div className="p-5">
+            <MonthlyUsageBars monthlyTotals={monthlyTotals} />
+          </div>
+        </Card>
+
+        <Card className="p-5">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-blue-700" />
+            <h3 className="font-semibold text-slate-950">สรุปการใช้งาน</h3>
+          </div>
+          <div className="mt-4 space-y-3 text-sm leading-6 text-slate-600">
+            <p>ข้อมูลหน้านี้มาจาก mock data ที่จำลองจากชีต WH Season Data Item และใช้เขตจากชีต WH เวอร์ชันใหม่</p>
+            <p>ระบบใช้ข้อมูลนี้เป็นประวัติความต้องการใช้ เพื่อคำนวณค่าเฉลี่ยการใช้ ความผันผวนของการใช้ ระดับพัสดุสำรองปลอดภัย และความเหมาะสมสำหรับ VMI</p>
+            <p>หากเลือก “ทุกคลัง” ระบบจะรวม usage ของ SKU เดียวกันทุก WH แล้วคำนวณค่าเฉลี่ย season จากยอดรวมรายเดือน</p>
+            {topSku ? (
+              <p>
+                SKU ที่ใช้สูงสุดในตัวกรองนี้คือ {topSku.skuId} · {topSku.skuName} รวม {formatNumber(topSku.total)} {topSku.unit}
+              </p>
+            ) : (
+              <p>ไม่พบข้อมูล usage ตามตัวกรองปัจจุบัน</p>
+            )}
+          </div>
+        </Card>
+      </div>
+
+      <Card className="mt-5">
+        <SectionHeader
+          title="ตารางปริมาณการใช้ SKU รายเดือน"
+          subtitle="แสดงยอดรายเดือนพร้อม % เพิ่ม/ลดจากเดือนก่อน คล้ายมุมมอง Excel wide view"
+        />
+        <DataTable columns={["เขต", "ขอบเขตคลัง", "SKU", "รายการ", "หมวดหมู่", "หน่วย", ...usageMonthTrendColumns, "รวม", "เฉลี่ย/เดือน", "เดือนสูงสุด"]} empty={rows.length === 0}>
+          {rows.map((row) => (
+            <tr key={`${row.warehouseId}-${row.skuId}`} className="hover:bg-slate-50">
+              <td className="px-4 py-3 font-semibold text-slate-900">{row.regionLabel}</td>
+              <td className="px-4 py-3 font-semibold text-slate-900">{row.warehouseLabel}</td>
+              <td className="px-4 py-3 font-semibold text-blue-700">{row.skuId}</td>
+              <td className="min-w-52 px-4 py-3 text-slate-700">{row.skuName}</td>
+              <td className="px-4 py-3 text-slate-600">{row.category}</td>
+              <td className="px-4 py-3 text-slate-600">{row.unit}</td>
+              {row.monthly.flatMap((value, index) => {
+                const cells = [
+                  <td key={`${row.skuId}-${index}-value`} className="px-4 py-3 text-right tabular-nums text-slate-700">
+                    {formatNumber(value, 0)}
+                  </td>,
+                ];
+
+                if (index > 0) {
+                  cells.push(
+                    <td key={`${row.skuId}-${index}-change`} className="px-4 py-3 text-right">
+                      <UsageChangeBadge change={row.monthlyChanges[index]} />
+                    </td>,
+                  );
+                }
+
+                return cells;
+              })}
+              <td className="px-4 py-3 text-right font-semibold tabular-nums text-slate-950">{formatNumber(row.total)}</td>
+              <td className="px-4 py-3 text-right tabular-nums text-slate-700">{formatNumber(row.averageMonthly)}</td>
+              <td className="px-4 py-3 text-slate-700">{row.peakMonth}</td>
+            </tr>
+          ))}
+        </DataTable>
+      </Card>
+
+      <Card className="mt-5">
+        <SectionHeader
+          title="ค่าเฉลี่ยตาม Season ราย SKU"
+          subtitle="เปรียบเทียบค่าเฉลี่ยต่อเดือนของแต่ละ SKU ระหว่างฤดูหนาว ฤดูร้อน และฤดูฝน"
+        />
+        <DataTable columns={["เขต", "ขอบเขตคลัง", "SKU", "รายการ", "หน่วย", ...usageSeasons.map((season) => `${season.label} (${season.helper})`), "Season สูงสุด"]} empty={rows.length === 0}>
+          {rows.map((row) => (
+            <tr key={`${row.warehouseId}-${row.skuId}-season`} className="hover:bg-slate-50">
+              <td className="px-4 py-3 font-semibold text-slate-900">{row.regionLabel}</td>
+              <td className="px-4 py-3 font-semibold text-slate-900">{row.warehouseLabel}</td>
+              <td className="px-4 py-3 font-semibold text-blue-700">{row.skuId}</td>
+              <td className="min-w-52 px-4 py-3 text-slate-700">{row.skuName}</td>
+              <td className="px-4 py-3 text-slate-600">{row.unit}</td>
+              {usageSeasons.map((season) => (
+                <td key={`${row.skuId}-${season.id}`} className="px-4 py-3 text-right tabular-nums text-slate-700">
+                  {formatNumber(row.seasonAverages[season.id])}
+                </td>
+              ))}
+              <td className="px-4 py-3 font-semibold text-slate-900">{row.peakSeason}</td>
+            </tr>
+          ))}
+        </DataTable>
+      </Card>
+    </>
+  );
+}
+
+type WarehouseUsageRow = {
+  warehouseId: string;
+  warehouseLabel: string;
+  warehouseCount: number;
+  regionLabel: string;
+  skuId: string;
+  skuName: string;
+  category: string;
+  unit: string;
+  monthly: number[];
+  monthlyChanges: UsageMonthlyChange[];
+  total: number;
+  averageMonthly: number;
+  peakMonth: string;
+  seasonAverages: Record<string, number>;
+  peakSeason: string;
+};
+
+type UsageMonthlyChange = {
+  previousValue: number;
+  currentValue: number;
+  difference: number;
+  percent: number;
+  trend: "up" | "down" | "flat";
+};
+
+function buildWarehouseUsageRows(warehouseIds: string[]): WarehouseUsageRow[] {
+  const usageForWarehouse = peaMonthlyUsage.filter((usage) => warehouseIds.includes(usage.warehouseId));
+  const skuIds = Array.from(new Set(usageForWarehouse.map((usage) => usage.skuId)));
+  const warehouseLabel = warehouseIds.length === 1 ? warehouseIds[0] : `ทุกคลัง (${warehouseIds.length})`;
+
+  // แปลงข้อมูล usage long format กลับเป็นมุมมองรายเดือน Jan-Dec เพื่อให้ผู้ใช้เทียบกับ Excel เดิมได้ง่าย
+  return skuIds
+    .map((skuId) => {
+      const sku = peaSkuMaster.find((item) => item.skuId === skuId);
+      const monthly = Array.from({ length: 12 }, (_, index) =>
+        usageForWarehouse
+          .filter((usage) => usage.skuId === skuId && usage.usageMonth === index + 1)
+          .reduce((sum, usage) => sum + usage.usageQty, 0),
+      );
+      const total = monthly.reduce((sum, value) => sum + value, 0);
+      const monthlyChanges = buildMonthlyChanges(monthly);
+      const peakMonthIndex = monthly.reduce((bestIndex, value, index) => (value > monthly[bestIndex] ? index : bestIndex), 0);
+      const seasonAverages = buildSeasonAverages(monthly);
+      const peakSeason = usageSeasons.reduce((best, season) => (seasonAverages[season.id] > seasonAverages[best.id] ? season : best), usageSeasons[0]);
+      const rowWarehouseIds = Array.from(new Set(usageForWarehouse.filter((usage) => usage.skuId === skuId).map((usage) => usage.warehouseId)));
+      const warehouseCount = rowWarehouseIds.length;
+      const rowRegionCodes = Array.from(
+        new Set(
+          rowWarehouseIds
+            .map((warehouseId) => peaWarehouseMaster.find((warehouse) => warehouse.warehouseId === warehouseId)?.regionCode)
+            .filter(Boolean),
+        ),
+      ) as string[];
+
+      return {
+        warehouseId: warehouseIds.length === 1 ? warehouseIds[0] : "all",
+        warehouseLabel: warehouseIds.length === 1 ? warehouseLabel : `ทุกคลัง (${warehouseCount})`,
+        warehouseCount,
+        regionLabel: rowRegionCodes.length === 1 ? formatPeaRegionCode(rowRegionCodes[0]) : `หลายเขต (${rowRegionCodes.length})`,
+        skuId,
+        skuName: sku?.skuName ?? "ไม่พบชื่อ SKU",
+        category: sku?.category ?? "-",
+        unit: sku?.unit ?? "-",
+        monthly,
+        monthlyChanges,
+        total,
+        averageMonthly: total / 12,
+        peakMonth: `${usageMonthLabels[peakMonthIndex]} (${formatNumber(monthly[peakMonthIndex])})`,
+        seasonAverages,
+        peakSeason: `${peakSeason.label} (${formatNumber(seasonAverages[peakSeason.id])})`,
+      };
+    })
+    .sort((a, b) => b.total - a.total);
+}
+
+function buildMonthlyChanges(monthly: number[]): UsageMonthlyChange[] {
+  // % เพิ่ม/ลด = (เดือนปัจจุบัน - เดือนก่อนหน้า) / เดือนก่อนหน้า × 100
+  // ถ้าเดือนก่อนหน้าเป็น 0 และเดือนปัจจุบันมากกว่า 0 ให้แสดง +100% เพื่อสื่อว่าเริ่มมีการใช้
+  return monthly.map((currentValue, index) => {
+    const previousValue = index === 0 ? currentValue : monthly[index - 1] ?? 0;
+    const difference = index === 0 ? 0 : currentValue - previousValue;
+    const percent = index === 0 ? 0 : previousValue === 0 ? (currentValue > 0 ? 100 : 0) : (difference / previousValue) * 100;
+    const trend = difference > 0 ? "up" : difference < 0 ? "down" : "flat";
+
+    return {
+      previousValue,
+      currentValue,
+      difference,
+      percent,
+      trend,
+    };
+  });
+}
+
+function UsageChangeBadge({ change }: { change: UsageMonthlyChange }) {
+  const isUp = change.trend === "up";
+  const isDown = change.trend === "down";
+  const className = isUp
+    ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+    : isDown
+      ? "bg-rose-50 text-rose-700 ring-rose-200"
+      : "bg-slate-50 text-slate-500 ring-slate-200";
+  const Icon = isUp ? ArrowUp : isDown ? ArrowDown : Minus;
+
+  return (
+    <span className={`inline-flex items-center justify-end gap-1 rounded-full px-2 py-1 text-xs font-semibold tabular-nums ring-1 ${className}`}>
+      <Icon className="h-3.5 w-3.5" />
+      {change.percent > 0 ? "+" : ""}
+      {formatNumber(change.percent, 0)}%
+    </span>
+  );
+}
+
+function buildSeasonAverages(monthly: number[]): Record<string, number> {
+  // ค่าเฉลี่ย season = ผลรวม usage ของเดือนใน season / จำนวนเดือนใน season
+  // สำหรับ "ทุกคลัง" monthly จะเป็นยอดรวมข้าม WH ก่อน แล้วค่อยเฉลี่ยตาม season
+  return usageSeasons.reduce<Record<string, number>>((result, season) => {
+    const total = season.months.reduce((sum, monthNumber) => sum + (monthly[monthNumber - 1] ?? 0), 0);
+    result[season.id] = total / season.months.length;
+    return result;
+  }, {});
+}
+
+function MonthlyUsageBars({ monthlyTotals }: { monthlyTotals: number[] }) {
+  const maxValue = Math.max(...monthlyTotals, 1);
+
+  return (
+    <div className="grid grid-cols-12 items-end gap-2 overflow-x-auto pb-2">
+      {monthlyTotals.map((value, index) => {
+        const height = Math.max((value / maxValue) * 180, value > 0 ? 18 : 4);
+        return (
+          <div key={usageMonthLabels[index]} className="flex min-w-14 flex-col items-center gap-2">
+            <div className="flex h-48 w-full items-end rounded-md bg-slate-100 px-1">
+              <div
+                className="w-full rounded-t-md bg-blue-600 transition-all"
+                style={{ height }}
+                title={`${usageMonthLabels[index]}: ${formatNumber(value)}`}
+              />
+            </div>
+            <div className="text-center">
+              <p className="text-xs font-semibold text-slate-700">{usageMonthLabels[index]}</p>
+              <p className="mt-1 text-[11px] text-slate-500">{formatNumber(value)}</p>
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -963,6 +1485,8 @@ function SkuDetailPage({
   const budget = getBudgetContextForInventory(record);
   const dataCoverage = getPeaDataCoverage({ warehouseId: record.warehouseId, skuId: sku.id, supplierId: primarySupplier.id });
   const coverageWarnings = getPeaDataCoverageWarnings(dataCoverage);
+  const relationshipRecord = getPeaRiskCoverageRecord(record.warehouseId, sku.id);
+  const skuLeadTimeSummary = getPeaLeadTimeSkuSummary(sku.id);
   const [showExplanation, setShowExplanation] = useState(false);
 
   return (
@@ -977,8 +1501,8 @@ function SkuDetailPage({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
         <MetricCard label="สต็อกปัจจุบัน" value={`${formatNumber(record.currentStock)} ${sku.unit}`} helper="คงเหลือ" />
         <MetricCard label="ค่าเฉลี่ยการใช้ต่อวัน" value={`${formatNumber(recommendation.averageDailyDemand)} ${sku.unit}`} helper="ต่อวัน" />
-        <MetricCard label="สต็อกสำรอง" value={`${formatNumber(recommendation.safetyStock)} ${sku.unit}`} helper="กันขาด" tone="green" />
-        <MetricCard label="จุดสั่งซื้อ" value={`${formatNumber(recommendation.reorderPoint)} ${sku.unit}`} helper="ROP" tone="red" />
+        <MetricCard label="ระดับพัสดุสำรองปลอดภัย" value={`${formatNumber(recommendation.safetyStock)} ${sku.unit}`} helper="กันความเสี่ยงขาดสต็อก" tone="green" />
+        <MetricCard label="จุดสั่งซื้อใหม่" value={`${formatNumber(recommendation.reorderPoint)} ${sku.unit}`} helper="จุดเริ่มจัดซื้อ" tone="red" />
         <MetricCard label="ความต้องการคาดการณ์" value={`${formatNumber(recommendation.forecastDemandForPlanningPeriod)} ${sku.unit}`} helper="รอบแผน" />
         <MetricCard label="จำนวนที่ระบบแนะนำ" value={`${formatNumber(recommendation.suggestedQuantity)} ${sku.unit}`} helper="AI" tone="blue" />
       </div>
@@ -1002,14 +1526,22 @@ function SkuDetailPage({
       <div className="mt-4">
         <DataCoverageCard coverage={dataCoverage} warnings={coverageWarnings} />
       </div>
+      <div className="mt-4">
+        <PeaRelationshipInsightCard
+          coverage={dataCoverage}
+          relationshipRecord={relationshipRecord}
+          skuLeadTimeSummary={skuLeadTimeSummary}
+          supplierLeadTimeDays={primarySupplierRecord.leadTimeDays}
+        />
+      </div>
       <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card>
           <SectionHeader
-            title="เปรียบเทียบราคาและระยะเวลาส่งมอบของซัพพลายเออร์"
-            subtitle="เปรียบเทียบราคาต่อหน่วย ระยะเวลาส่งมอบ และปริมาณสั่งขั้นต่ำ"
+            title="เปรียบเทียบราคาและระยะเวลารอพัสดุของซัพพลายเออร์"
+            subtitle="เปรียบเทียบราคาต่อหน่วย ระยะเวลารอพัสดุ (Lead Time) และจำนวนสั่งซื้อขั้นต่ำ (MOQ)"
             action={<StatusBadge status={record.status} />}
           />
-          <DataTable columns={["ซัพพลายเออร์", "ผู้ติดต่อ", "ราคาต่อหน่วย", "ระยะเวลาส่งมอบ", "ปริมาณสั่งขั้นต่ำ", "พื้นที่ให้บริการ", "ดำเนินการ"]} empty={offers.length === 0}>
+          <DataTable columns={["ซัพพลายเออร์", "ผู้ติดต่อ", "ราคาต่อหน่วย", "ระยะเวลารอพัสดุ", "จำนวนสั่งซื้อขั้นต่ำ", "พื้นที่ให้บริการ", "ดำเนินการ"]} empty={offers.length === 0}>
             {offers.map((offer) => {
               const supplier = getSupplier(offer.supplierId);
               return (
@@ -1082,7 +1614,7 @@ function CalculationDetailPage({
       <PageTitle
         eyebrow="รายละเอียดการคำนวณ"
         title={`${sku.id} ${sku.name} · เวอร์ชันสูตร ${recommendation.formulaVersion}`}
-        subtitle="คำอธิบายวิธีคำนวณสต็อกสำรอง จุดสั่งซื้อ จำนวนที่แนะนำ และเส้นทางอนุมัติ"
+        subtitle="คำอธิบายวิธีคำนวณระดับพัสดุสำรองปลอดภัย จุดสั่งซื้อใหม่ จำนวนที่แนะนำ และเส้นทางอนุมัติ"
         action={<Button variant="secondary" onClick={onBack}><ArrowLeft className="h-4 w-4" /> กลับไปหน้ารายละเอียด SKU</Button>}
       />
       <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -1107,21 +1639,38 @@ function CalculationDetailPage({
 }
 
 function DataCoverageCard({ coverage, warnings }: { coverage: PeaDataCoverage; warnings: string[] }) {
+  const allComplete = Object.values(coverage.flags).every(Boolean);
+  const mappingTypeLabels: Record<string, string> = {
+    exact_code_match: "รหัสตรงกัน",
+    manual_mapping: "จับคู่ด้วยผู้ใช้",
+    inferred_region: "อนุมานจากเขต",
+    unknown: "ยังไม่ทราบ",
+  };
+  const confidenceLabels: Record<string, string> = {
+    high: "ความมั่นใจสูง",
+    medium: "ความมั่นใจปานกลาง",
+    low: "ความมั่นใจต่ำ",
+  };
   const coverageItems = [
-    { label: "ข้อมูลการใช้", available: coverage.flags.hasUsageData, source: "ข้อมูลการใช้รายเดือนของคลัง" },
-    { label: "ข้อมูลสต็อก", available: coverage.flags.hasStockData, source: "ข้อมูล batch และสรุปสต็อก" },
-    { label: "ข้อมูลระยะเวลาส่งมอบ", available: coverage.flags.hasLeadTimeData, source: "ข้อมูลระยะเวลากระบวนการและจัดซื้อ" },
-    { label: "ข้อมูลซัพพลายเออร์", available: coverage.flags.hasSupplierData, source: "ราคาจำลองของซัพพลายเออร์" },
-    { label: "การเชื่อมคลังกับโรงงาน", available: coverage.flags.hasWarehouseFactoryMapping, source: "ตารางจับคู่คลังกับโรงงาน" },
+    { label: "ข้อมูลการใช้ย้อนหลัง", available: coverage.flags.hasUsageData, source: "Monthly Usage ของรหัสคลังพื้นที่ (WH Id)" },
+    { label: "ข้อมูล Stock ปัจจุบัน", available: coverage.flags.hasStockData, source: "Batch / Stock Summary ของ Factory/Plant" },
+    { label: "ข้อมูลระยะเวลารอพัสดุ (Lead Time)", available: coverage.flags.hasLeadTimeData, source: "Lead Time Summary ของ Factory/Plant" },
+    { label: "ข้อมูลราคา Supplier", available: coverage.flags.hasSupplierData, source: "Supplier mock price, MOQ และ Lead Time" },
+    { label: "WH-Factory Mapping", available: coverage.flags.hasWarehouseFactoryMapping, source: "ตารางจับคู่ WH Id กับ Factory/Plant" },
   ];
 
   return (
     <Card>
       <SectionHeader
-        title="ตรวจความครบถ้วนของข้อมูล"
-        subtitle="ตรวจความพร้อมของข้อมูลก่อนคำนวณจากรหัสคลัง รหัสโรงงาน/Plant และซัพพลายเออร์"
+        title="ความครบถ้วนของข้อมูลสำหรับการคำนวณ"
+        subtitle="แยกให้ชัดว่า WH Id คือพื้นที่เกิด demand, Factory/Plant คือจุดที่ผูก stock และ lead time, Supplier คือผู้ขายจริง"
       />
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="px-5 pt-4">
+        <InlineAlert tone={allComplete ? "success" : "warning"}>
+          {allComplete ? "ข้อมูลครบสำหรับการคำนวณเต็มรูปแบบ" : "ข้อมูลยังไม่ครบสำหรับการคำนวณเต็มรูปแบบ โปรดตรวจรายการที่ขาดก่อนใช้ผลลัพธ์ตัดสินใจจริง"}
+        </InlineAlert>
+      </div>
+      <div className="mt-4 grid grid-cols-1 gap-3 px-5 sm:grid-cols-2 xl:grid-cols-5">
         {coverageItems.map((item) => (
           <div key={item.label} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
             <div className="flex items-center justify-between gap-2">
@@ -1138,24 +1687,39 @@ function DataCoverageCard({ coverage, warnings }: { coverage: PeaDataCoverage; w
           </div>
         ))}
       </div>
-      <div className="mt-4 grid grid-cols-1 gap-3 text-sm text-slate-600 md:grid-cols-3">
+      <div className="mt-4 grid grid-cols-1 gap-3 px-5 text-sm text-slate-600 md:grid-cols-2 xl:grid-cols-6">
         <div className="rounded-lg bg-white p-3 ring-1 ring-slate-200">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">คลัง / WH Id</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">รหัสคลังพื้นที่ (WH Id)</p>
           <p className="mt-1 font-semibold text-slate-900">{coverage.requestedWarehouseId} → {coverage.resolvedWarehouseId}</p>
           <p className="mt-1 text-xs">พื้นที่ที่เกิดความต้องการใช้และใช้ดึงประวัติการเบิกจ่าย</p>
         </div>
         <div className="rounded-lg bg-white p-3 ring-1 ring-slate-200">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">รหัสโรงงาน / Plant</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">เขตจากชีต WH</p>
+          <p className="mt-1 font-semibold text-slate-900">{formatPeaRegionCode(coverage.warehouseRegionCode)}</p>
+          <p className="mt-1 text-xs">ใช้ข้อมูล Region (เขต) จาก column ในชีต WH ไม่เดาจากรหัสคลัง</p>
+        </div>
+        <div className="rounded-lg bg-white p-3 ring-1 ring-slate-200">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">รหัสคลังหลัก/โรงงานใน SAP (Factory/Plant)</p>
           <p className="mt-1 font-semibold text-slate-900">{coverage.mappedFactoryId ?? "ยังไม่มีการจับคู่"}</p>
-          <p className="mt-1 text-xs">จุดที่ผูกสต็อก batch movement และระยะเวลาส่งมอบในข้อมูลลักษณะ SAP</p>
+          <p className="mt-1 text-xs">จุดที่ผูก Stock, batch, movement และ Lead Time ในข้อมูลลักษณะ SAP</p>
+        </div>
+        <div className="rounded-lg bg-white p-3 ring-1 ring-slate-200">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Supplier Id จาก Factory</p>
+          <p className="mt-1 font-semibold text-slate-900">{coverage.mappedFactorySupplierId ?? "ยังไม่มีข้อมูล"}</p>
+          <p className="mt-1 text-xs">มาจากชีต Supplier Factory ใช้บอก source id ที่ผูกกับ Factory/Plant</p>
+        </div>
+        <div className="rounded-lg bg-white p-3 ring-1 ring-slate-200">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">ประเภทการจับคู่</p>
+          <p className="mt-1 font-semibold text-slate-900">{coverage.mappingType ? mappingTypeLabels[coverage.mappingType] : "ยังไม่มีข้อมูล"}</p>
+          <p className="mt-1 text-xs">{coverage.mappingConfidence ? confidenceLabels[coverage.mappingConfidence] : "ต้องยืนยัน mapping เพิ่ม"}{coverage.mappingRemark ? ` · ${coverage.mappingRemark}` : ""}</p>
         </div>
         <div className="rounded-lg bg-white p-3 ring-1 ring-slate-200">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">ซัพพลายเออร์</p>
           <p className="mt-1 font-semibold text-slate-900">{coverage.requestedSupplierId ?? "ซัพพลายเออร์จำลองใดก็ได้"}</p>
-          <p className="mt-1 text-xs">ผู้ขายจริงสำหรับราคา ปริมาณสั่งขั้นต่ำ ผู้ติดต่อ และระยะเวลาส่งมอบมาตรฐาน</p>
+          <p className="mt-1 text-xs">ผู้ขายจริงสำหรับราคา จำนวนสั่งซื้อขั้นต่ำ (MOQ) ผู้ติดต่อ และ Lead Time มาตรฐาน</p>
         </div>
       </div>
-      <div className="mt-4">
+      <div className="mt-4 px-5 pb-5">
         {warnings.length > 0 ? (
           <InlineAlert tone="warning">
             <p className="font-semibold">ข้อมูลไม่ครบสำหรับการคำนวณเต็มรูปแบบ</p>
@@ -1166,7 +1730,102 @@ function DataCoverageCard({ coverage, warnings }: { coverage: PeaDataCoverage; w
             </ul>
           </InlineAlert>
         ) : (
-          <InlineAlert tone="success">ข้อมูลครบสำหรับเชื่อมความต้องการใช้ สต็อก ระยะเวลาส่งมอบ และราคาซัพพลายเออร์จำลอง</InlineAlert>
+          <InlineAlert tone="success">ข้อมูลครบสำหรับเชื่อมความต้องการใช้ Stock ปัจจุบัน ระยะเวลารอพัสดุ และราคา Supplier จำลอง</InlineAlert>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function PeaRelationshipInsightCard({
+  coverage,
+  relationshipRecord,
+  skuLeadTimeSummary,
+  supplierLeadTimeDays,
+}: {
+  coverage: PeaDataCoverage;
+  relationshipRecord?: PeaRiskCoverageRecord;
+  skuLeadTimeSummary?: PeaLeadTimeSkuSummary;
+  supplierLeadTimeDays: number;
+}) {
+  const leadTimeValue = relationshipRecord?.leadDaysBest ?? skuLeadTimeSummary?.avgLeadDaysSku ?? supplierLeadTimeDays;
+  const leadTimeSource = relationshipRecord?.leadDaysBest
+    ? "Factory/SKU จาก relationship file"
+    : skuLeadTimeSummary
+      ? "ค่าเฉลี่ยระดับ SKU จาก Lead Time Summary"
+      : "ค่า Lead Time มาตรฐานจาก Supplier mock";
+  const missingPlantLeadTime = !relationshipRecord?.leadDaysBest;
+
+  return (
+    <Card>
+      <SectionHeader
+        title="สัญญาณจาก Relationship Analysis"
+        subtitle="อ่านค่าประกอบจาก inventory_relationship_analysis.xlsx เพื่อเทียบ stock, usage, lead time และความเหมาะสม VMI"
+      />
+      <div className="p-5">
+        {relationshipRecord ? (
+          <>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <MetricCard
+                label="Stock cover"
+                value={`${formatNumber(relationshipRecord.stockCoverPeriods, 2)} รอบ`}
+                helper={relationshipRecord.riskStatus.replace("Critical:", "Critical ·").replace("Risk:", "Risk ·")}
+                tone={relationshipRecord.riskStatus.startsWith("Critical") ? "red" : "yellow"}
+              />
+              <MetricCard
+                label="ใช้เฉลี่ยต่อเดือน"
+                value={`${formatNumber(relationshipRecord.avgPeriodUsage, 0)} ${relationshipRecord.usageUnit}`}
+                helper={`CV ${formatNumber(relationshipRecord.cv, 2)} · ${relationshipRecord.activePeriods} เดือนที่มีข้อมูล`}
+                tone="blue"
+              />
+              <MetricCard
+                label="Lead Time ที่ใช้ประกอบ"
+                value={`${formatNumber(leadTimeValue, 1)} วัน`}
+                helper={leadTimeSource}
+                tone={missingPlantLeadTime ? "yellow" : "green"}
+              />
+              <MetricCard
+                label="VMI score"
+                value={formatNumber(relationshipRecord.vmiScore, 1)}
+                helper={`Stability ${formatNumber(relationshipRecord.stabilityScore, 1)} · Lead ${formatNumber(relationshipRecord.leadScore, 1)}`}
+                tone="purple"
+              />
+            </div>
+            <div className="mt-4 grid grid-cols-1 gap-3 text-sm text-slate-600 lg:grid-cols-3">
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <p className="font-semibold text-slate-900">รหัสที่ใช้เทียบ</p>
+                <p className="mt-1">WH/Factory: {coverage.resolvedWarehouseId} → {coverage.mappedFactoryId ?? "ยังไม่มี mapping"}</p>
+                <p>SKU จริง: {coverage.resolvedSkuId}</p>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <p className="font-semibold text-slate-900">Lead Time จากไฟล์</p>
+                {relationshipRecord.leadCount ? (
+                  <p className="mt-1">
+                    มี {relationshipRecord.leadCount} transaction · เฉลี่ย {formatNumber(relationshipRecord.avgLeadDays ?? 0, 1)} วัน · P90 {formatNumber(relationshipRecord.p90LeadDays ?? 0, 1)} วัน
+                  </p>
+                ) : (
+                  <p className="mt-1">ยังไม่พบ Lead Time เฉพาะ Factory/SKU นี้ใน relationship file</p>
+                )}
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <p className="font-semibold text-slate-900">ความหมาย</p>
+                <p className="mt-1">
+                  Stock cover ต่ำกว่า 1 รอบหมายถึงสต็อกปัจจุบันต่ำกว่าการใช้เฉลี่ยหนึ่งรอบ จึงควรตรวจแผนเติมของและงบประมาณก่อนอนุมัติ
+                </p>
+              </div>
+            </div>
+            {missingPlantLeadTime ? (
+              <div className="mt-4">
+                <InlineAlert tone="warning">
+                  ไม่พบ Lead Time เฉพาะ Factory/SKU นี้จากไฟล์ relationship ระบบจึงแสดงค่า fallback จาก {skuLeadTimeSummary ? "ค่าเฉลี่ยระดับ SKU" : "Supplier mock"} เพื่อไม่ให้ผู้ใช้เข้าใจว่าข้อมูลครบทั้งหมด
+                </InlineAlert>
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <InlineAlert tone="warning">
+            ยังไม่มี relationship record สำหรับ {coverage.resolvedWarehouseId} / {coverage.resolvedSkuId} จึงยังไม่สามารถแสดง stock cover, VMI score และ lead time จากไฟล์วิเคราะห์ได้
+          </InlineAlert>
         )}
       </div>
     </Card>
@@ -1315,8 +1974,8 @@ function SupplierDetailPage({
         <div className="space-y-5">
           <SupplierProfileForm mode="edit" supplier={supplier} onSave={onUpdateSupplier} />
           <Card>
-            <SectionHeader title="รายการ SKU ที่รองรับ" subtitle="SKU ที่ซัพพลายเออร์เสนอราคาและระยะเวลาส่งมอบ" />
-            <DataTable columns={["SKU", "รายการ", "หมวดหมู่", "ราคาต่อหน่วย", "ระยะเวลาส่งมอบ", "ปริมาณสั่งขั้นต่ำ", "ความน่าเชื่อถือ", "ดำเนินการ"]}>
+            <SectionHeader title="รายการ SKU ที่รองรับ" subtitle="SKU ที่ซัพพลายเออร์เสนอราคา ระยะเวลารอพัสดุ (Lead Time) และจำนวนสั่งซื้อขั้นต่ำ (MOQ)" />
+            <DataTable columns={["SKU", "รายการ", "หมวดหมู่", "ราคาต่อหน่วย", "Lead Time", "MOQ", "ความน่าเชื่อถือ", "ดำเนินการ"]}>
               {offers.map((offer) => {
                 const sku = getSku(offer.skuId);
                 return (
@@ -1327,7 +1986,7 @@ function SupplierDetailPage({
           </Card>
           {showAddSupportedItems ? <SupplierCatalogForm fixedSupplier={supplier} supplierOfferData={supplierOfferData} formulaPolicy={formulaPolicy} onSave={saveSupportedItem} /> : null}
           <Card>
-            <SectionHeader title="ประวัติการแก้ไขซัพพลายเออร์" subtitle="ประวัติการแก้ไขระยะเวลาส่งมอบ ปริมาณสั่งขั้นต่ำ ราคา และความน่าเชื่อถือ" />
+            <SectionHeader title="ประวัติการแก้ไขซัพพลายเออร์" subtitle="ประวัติการแก้ไข Lead Time, MOQ, ราคา และความน่าเชื่อถือ" />
             <DataTable columns={["วันที่", "เป้าหมาย", "ฟิลด์", "ค่าเดิม", "ค่าใหม่", "หมายเหตุ"]} empty={supplierChangeLogs.length === 0}>
               {supplierChangeLogs.map((log) => (
                 <tr key={log.id}>
@@ -1522,7 +2181,7 @@ function SupplierCatalogForm({
     unitPrice: 1_000,
     leadTimeDays: 20,
     moq: 10,
-    note: "เพิ่ม SKU ที่ซัพพลายเออร์รองรับ พร้อมราคา ระยะเวลาส่งมอบ และปริมาณสั่งขั้นต่ำ",
+    note: "เพิ่ม SKU ที่ซัพพลายเออร์รองรับ พร้อมราคา Lead Time และ MOQ",
   });
   const regionOptions: Region[] = ["North", "Northeast", "East", "South", "National"];
   const criticalityOptions: Array<Sku["criticality"]> = ["Critical", "High", "Medium"];
@@ -1531,7 +2190,7 @@ function SupplierCatalogForm({
   const systemReliability = getSystemSupplierReliability(form.supplierId.trim(), supplierOfferData);
 
   // ฟอร์มนี้ตั้งใจให้ตรงกับตารางรายการ SKU ที่รองรับ:
-  // ผู้ใช้กรอกเฉพาะข้อมูลหลักของ SKU และข้อเสนอซัพพลายเออร์ เช่น ราคา ระยะเวลาส่งมอบ และปริมาณสั่งขั้นต่ำ
+  // ผู้ใช้กรอกเฉพาะข้อมูลหลักของ SKU และข้อเสนอซัพพลายเออร์ เช่น ราคา Lead Time และ MOQ
   // ส่วนสต็อกปัจจุบัน ประวัติความต้องการ ระดับความมั่นใจ ตัวคูณฤดูกาล/งบประมาณ และความน่าเชื่อถือ
   // เป็นข้อมูลจากระบบหรือหน้าตั้งค่ากลาง จึงดึงมาแสดงด้านล่างแทนการให้กรอกเอง
   const updateNumber = (field: keyof typeof form, value: number) => {
@@ -1596,7 +2255,7 @@ function SupplierCatalogForm({
     <Card>
       <SectionHeader
         title={fixedSupplier ? "เพิ่ม SKU ที่รองรับ" : "เพิ่มซัพพลายเออร์ / SKU ที่รองรับ"}
-        subtitle="เพิ่ม SKU ที่ซัพพลายเออร์รองรับ พร้อมราคา ระยะเวลาส่งมอบ และปริมาณสั่งขั้นต่ำ"
+        subtitle="เพิ่ม SKU ที่ซัพพลายเออร์รองรับ พร้อมราคา Lead Time และ MOQ"
       />
       <form onSubmit={handleSubmit} className="space-y-5 p-5">
         {!fixedSupplier ? (
@@ -1661,10 +2320,10 @@ function SupplierCatalogForm({
             <Field label="ราคาต่อหน่วย">
               <input className={inputClass} type="number" min="0" value={form.unitPrice} onChange={(event) => updateNumber("unitPrice", Number(event.target.value))} />
             </Field>
-            <Field label="ระยะเวลาส่งมอบ (วัน)">
+            <Field label="ระยะเวลารอพัสดุ (Lead Time / วัน)">
               <input className={inputClass} type="number" min="1" value={form.leadTimeDays} onChange={(event) => updateNumber("leadTimeDays", Number(event.target.value))} />
             </Field>
-            <Field label="MOQ">
+            <Field label="จำนวนสั่งซื้อขั้นต่ำ (MOQ)">
               <input className={inputClass} type="number" min="1" value={form.moq} onChange={(event) => updateNumber("moq", Number(event.target.value))} />
             </Field>
           </div>
@@ -1713,13 +2372,13 @@ function SupplierOfferEditorRow({
   onSave: (offer: SupplierOffer, note: string) => void;
 }) {
   const [draft, setDraft] = useState(offer);
-  const [note, setNote] = useState("ปรับข้อมูลซัพพลายเออร์สำหรับคำนวณระยะเวลาส่งมอบและต้นทุน");
+  const [note, setNote] = useState("ปรับข้อมูลซัพพลายเออร์สำหรับคำนวณ Lead Time และต้นทุน");
   const numericInputClass = `${inputClass} !w-28 text-right tabular-nums`;
 
   // แถวนี้เป็นตัวแก้ไขเฉพาะข้อเสนอซัพพลายเออร์
-  // ผู้ใช้แก้ระยะเวลาส่งมอบ ปริมาณสั่งขั้นต่ำ ราคาต่อหน่วย หรือความน่าเชื่อถือ แล้วกดบันทึก
+  // ผู้ใช้แก้ Lead Time, MOQ, ราคาต่อหน่วย หรือความน่าเชื่อถือ แล้วกดบันทึก
   // เพื่ออัปเดต mock state และสร้างประวัติการแก้ไขกลับไปที่ App
-  // ใช้ !w-28 เพื่อทับ w-full จาก inputClass ไม่ให้ช่องปริมาณสั่งขั้นต่ำ/ตัวเลขถูกบีบจนอ่านค่าไม่เห็น
+  // ใช้ !w-28 เพื่อทับ w-full จาก inputClass ไม่ให้ช่อง MOQ/ตัวเลขถูกบีบจนอ่านค่าไม่เห็น
   const updateNumber = (field: keyof Pick<SupplierOffer, "unitPrice" | "leadTimeDays" | "moq" | "reliabilityScore">, value: number) => {
     setDraft((current) => ({ ...current, [field]: value }));
   };
@@ -1769,7 +2428,7 @@ function ContactLogForm({
     skuId,
     requestId,
     channel: "Phone" as ContactChannel,
-    purpose: "ยืนยันราคาและระยะเวลาส่งมอบ",
+    purpose: "ยืนยันราคาและ Lead Time",
     note: "",
     followUpDate: "2026-05-08",
   });
@@ -1869,7 +2528,7 @@ function CreatePurchaseRequestPage({
   const budget = getBudgetContextForInventory(record);
   const [requestedQuantity, setRequestedQuantity] = useState(skuId === "C01" ? 20 : recommendation.suggestedQuantity);
   const [reasonCategory, setReasonCategory] = useState(skuId === "C01" ? "มีแผนซ่อมบำรุงเพิ่มเติม" : "");
-  const [reasonText, setReasonText] = useState(skuId === "C01" ? "รวมแผนซ่อมบำรุงเพิ่มเติมของคลังเชียงใหม่ 1 ในรอบเดียวกัน" : "");
+  const [reasonText, setReasonText] = useState(skuId === "C01" ? "รวมแผนซ่อมบำรุงเพิ่มเติมของคลัง I010 ในรอบเดียวกัน" : "");
   const [showExplanation, setShowExplanation] = useState(false);
 
   const preview = calculatePurchaseRequestPreview({
@@ -1943,8 +2602,8 @@ function CreatePurchaseRequestPage({
       overrideReasonText: quantityDiffers ? reasonText : undefined,
       formulaVersion,
       calculationSnapshot: snapshot,
-      supplierContactLogSummary: "โทรศัพท์ยืนยันราคาและระยะเวลาส่งมอบกับซัพพลายเออร์แล้ว",
-      localReason: "สต็อกปัจจุบันต่ำกว่าจุดสั่งซื้อ และงบคลังพื้นที่ไม่เพียงพอสำหรับปริมาณที่ขอ",
+      supplierContactLogSummary: "โทรศัพท์ยืนยันราคาและ Lead Time กับซัพพลายเออร์แล้ว",
+      localReason: "Stock ปัจจุบันต่ำกว่าจุดสั่งซื้อใหม่ และงบคลังพื้นที่ไม่เพียงพอสำหรับปริมาณที่ขอ",
       regionalEscalationReason: recommendedLayer === "Central" ? "งบระดับเขตไม่เพียงพอ ต้องส่งต่อส่วนกลาง" : undefined,
       createdAt: "2026-05-05 14:00",
       timeline: [
@@ -1986,13 +2645,13 @@ function CreatePurchaseRequestPage({
             <Field label="ราคาต่อหน่วยจากซัพพลายเออร์">
               <input className={inputClass} value={`${formatTHB(offer.unitPrice)}/${offer.unit}`} readOnly />
             </Field>
-            <Field label="ระยะเวลาส่งมอบของซัพพลายเออร์">
+            <Field label="ระยะเวลารอพัสดุของ Supplier (Lead Time)">
               <input className={inputClass} value={`${offer.leadTimeDays} วัน`} readOnly />
             </Field>
-            <Field label="ระยะเวลาส่งมอบที่ปรับแล้ว">
+            <Field label="ระยะเวลารอพัสดุที่ปรับแล้ว (Adjusted Lead Time)">
               <input className={inputClass} value={`${formatNumber(recommendation.adjustedLeadTimeDays)} วัน`} readOnly />
             </Field>
-            <Field label="ปริมาณสั่งขั้นต่ำ">
+            <Field label="จำนวนสั่งซื้อขั้นต่ำ (MOQ)">
               <input className={inputClass} value={`${offer.moq} ${offer.unit}`} readOnly />
             </Field>
             <Field label="จำนวนที่ต้องการขอ" hint={`หน่วย: ${sku.unit}`}>
@@ -2004,7 +2663,7 @@ function CreatePurchaseRequestPage({
                 onChange={(event) => setRequestedQuantity(Number(event.target.value))}
               />
             </Field>
-            <Field label="ส่วนต่างจำนวน">
+            <Field label="ส่วนต่างจากค่าที่ระบบแนะนำ">
               <input className={inputClass} value={`${variance.variance > 0 ? "+" : ""}${formatNumber(variance.variance)} ${sku.unit} (${formatPercent(variance.variancePercent)})`} readOnly />
             </Field>
             <Field label="มูลค่าประมาณการ">
@@ -2022,13 +2681,13 @@ function CreatePurchaseRequestPage({
 
             {quantityDiffers ? (
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <Field label="หมวดเหตุผลการขอต่างจากระบบ">
+                <Field label="หมวดเหตุผลการขอแตกต่างจากค่าที่ระบบแนะนำ">
                   <select className={inputClass} value={reasonCategory} onChange={(event) => setReasonCategory(event.target.value)}>
                     <option value="">เลือกเหตุผล</option>
                     {reasonOptions.map((reason) => <option key={reason}>{reason}</option>)}
                   </select>
                 </Field>
-                <Field label="รายละเอียดเหตุผลการขอต่างจากระบบ" hint={highVariance ? "จำเป็นเมื่อส่วนต่างตั้งแต่ ±50%" : "ระบุรายละเอียดเพิ่มเติมเพื่อช่วยผู้อนุมัติ"}>
+                <Field label="รายละเอียดเหตุผลการขอแตกต่างจากค่าที่ระบบแนะนำ" hint={highVariance ? "จำเป็นเมื่อส่วนต่างตั้งแต่ ±50%" : "ระบุรายละเอียดเพิ่มเติมเพื่อช่วยผู้อนุมัติ"}>
                   <textarea className={textareaClass} value={reasonText} onChange={(event) => setReasonText(event.target.value)} />
                 </Field>
               </div>
@@ -2175,12 +2834,12 @@ function RegionalReviewDetail({
       <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3">
         <ReviewMetric label="จำนวนที่ระบบแนะนำ" value={`${request.aiSuggestedQuantity} ${request.unit}`} />
         <ReviewMetric label="จำนวนที่ขอ" value={`${request.requestedQuantity} ${request.unit}`} />
-        <ReviewMetric label="ส่วนต่าง" value={`${request.variancePercent > 0 ? "+" : ""}${formatNumber(request.variancePercent)}%`} />
+        <ReviewMetric label="ส่วนต่างจากค่าที่ระบบแนะนำ" value={`${request.variancePercent > 0 ? "+" : ""}${formatNumber(request.variancePercent)}%`} />
         <ReviewMetric label="ซัพพลายเออร์" value={supplier.name} />
         <ReviewMetric label="มูลค่าประมาณการ" value={formatTHB(request.estimatedCost)} />
-        <ReviewMetric label="ระยะเวลาส่งมอบ" value={`${request.leadTimeDays} วัน`} />
-        <ReviewMetric label="สต็อกสำรอง" value={`${formatNumber(request.calculationSnapshot.safetyStock)} ${request.unit}`} />
-        <ReviewMetric label="จุดสั่งซื้อ" value={`${formatNumber(request.calculationSnapshot.reorderPoint)} ${request.unit}`} />
+        <ReviewMetric label="ระยะเวลารอพัสดุ (Lead Time)" value={`${request.leadTimeDays} วัน`} />
+        <ReviewMetric label="ระดับพัสดุสำรองปลอดภัย (Safety Stock)" value={`${formatNumber(request.calculationSnapshot.safetyStock)} ${request.unit}`} />
+        <ReviewMetric label="จุดสั่งซื้อใหม่ (Reorder Point)" value={`${formatNumber(request.calculationSnapshot.reorderPoint)} ${request.unit}`} />
         <ReviewMetric label="ราคาต่อหน่วย ณ วันที่ขอ" value={`${formatTHB(request.calculationSnapshot.unitPriceAtRequestDate)}/${request.unit}`} />
       </div>
       <div className="grid grid-cols-1 gap-4 px-5 pb-5 sm:grid-cols-2 xl:grid-cols-3">
@@ -2190,8 +2849,8 @@ function RegionalReviewDetail({
       </div>
       <div className="grid grid-cols-1 gap-4 border-t border-slate-200 p-5 lg:grid-cols-2">
         <Card className="p-4">
-          <h3 className="font-semibold text-slate-950">เหตุผลการขอต่างจากระบบ</h3>
-          <p className="mt-2 text-sm font-medium text-slate-700">{request.overrideReasonCategory ?? "ไม่พบการขอต่างจากระบบ"}</p>
+          <h3 className="font-semibold text-slate-950">เหตุผลการขอแตกต่างจากค่าที่ระบบแนะนำ</h3>
+          <p className="mt-2 text-sm font-medium text-slate-700">{request.overrideReasonCategory ?? "ไม่พบการขอแตกต่างจากค่าที่ระบบแนะนำ"}</p>
           <p className="mt-2 text-sm leading-6 text-slate-500">{request.overrideReasonText ?? "จำนวนที่ขอตรงกับจำนวนที่ระบบแนะนำ"}</p>
         </Card>
         <Card className="p-4">
@@ -2245,9 +2904,9 @@ function CentralReviewDetail({
         <ReviewMetric label="ส่วนต่างงบประมาณ" value={formatTHB(budgetGap)} />
         <ReviewMetric label="ซัพพลายเออร์" value={supplier.name} />
         <ReviewMetric label="ราคาต่อหน่วย ณ วันที่ขอ" value={`${formatTHB(request.unitPrice)}/${request.unit}`} />
-        <ReviewMetric label="สต็อกสำรอง" value={`${formatNumber(request.calculationSnapshot.safetyStock)} ${request.unit}`} />
-        <ReviewMetric label="จุดสั่งซื้อ" value={`${formatNumber(request.calculationSnapshot.reorderPoint)} ${request.unit}`} />
-        <ReviewMetric label="ส่วนต่าง" value={formatPercent(request.calculationSnapshot.quantityVariancePercent)} />
+        <ReviewMetric label="ระดับพัสดุสำรองปลอดภัย (Safety Stock)" value={`${formatNumber(request.calculationSnapshot.safetyStock)} ${request.unit}`} />
+        <ReviewMetric label="จุดสั่งซื้อใหม่ (Reorder Point)" value={`${formatNumber(request.calculationSnapshot.reorderPoint)} ${request.unit}`} />
+        <ReviewMetric label="ส่วนต่างจากค่าที่ระบบแนะนำ" value={formatPercent(request.calculationSnapshot.quantityVariancePercent)} />
         <ReviewMetric label="เส้นทางอนุมัติ" value={getApprovalLayerLabel(request.calculationSnapshot.approvalRoutingAtRequestDate.layer)} />
       </div>
       <div className="grid grid-cols-1 gap-4 px-5 pb-5 lg:grid-cols-2">
@@ -2262,7 +2921,7 @@ function CentralReviewDetail({
         <Card className="p-4">
           <h3 className="font-semibold text-slate-950">ข้อมูลซัพพลายเออร์</h3>
           <p className="mt-2 text-sm text-slate-600">{supplier.contactPerson} · {supplier.phone} · {supplier.email}</p>
-          <p className="mt-2 text-sm text-slate-600">ระยะเวลาส่งมอบ {request.leadTimeDays} วัน · ปริมาณสั่งขั้นต่ำ {request.moq} {request.unit}</p>
+          <p className="mt-2 text-sm text-slate-600">ระยะเวลารอพัสดุ (Lead Time) {request.leadTimeDays} วัน · จำนวนสั่งซื้อขั้นต่ำ (MOQ) {request.moq} {request.unit}</p>
         </Card>
         <Card className="p-4">
           <h3 className="font-semibold text-slate-950">ประวัติการติดต่อซัพพลายเออร์</h3>
@@ -2361,21 +3020,21 @@ function HistoryDetail({ request, logs }: { request: PurchaseRequest; logs: Supp
           <ReviewMetric label="จำนวนที่ระบบแนะนำ" value={`${request.aiSuggestedQuantity} ${request.unit}`} />
           <ReviewMetric label="จำนวนที่ขอ" value={`${request.requestedQuantity} ${request.unit}`} />
           <ReviewMetric label="จำนวนที่อนุมัติ" value={`${request.approvedQuantity ?? "-"} ${request.approvedQuantity ? request.unit : ""}`} />
-          <ReviewMetric label="ส่วนต่าง" value={`${request.variancePercent > 0 ? "+" : ""}${formatNumber(request.variancePercent)}%`} />
+          <ReviewMetric label="ส่วนต่างจากค่าที่ระบบแนะนำ" value={`${request.variancePercent > 0 ? "+" : ""}${formatNumber(request.variancePercent)}%`} />
           <ReviewMetric label="เวอร์ชันสูตร" value={request.formulaVersion} />
-          <ReviewMetric label="ระยะเวลาส่งมอบของซัพพลายเออร์" value={`${request.leadTimeDays} วัน`} />
+          <ReviewMetric label="ระยะเวลารอพัสดุของ Supplier (Lead Time)" value={`${request.leadTimeDays} วัน`} />
           <ReviewMetric label="ราคาต่อหน่วย ณ วันที่ขอ" value={`${formatTHB(request.unitPrice)}/${request.unit}`} />
           <ReviewMetric label="ซัพพลายเออร์" value={supplier.name} />
         </div>
         <Card className="p-4">
-          <h3 className="font-semibold text-slate-950">เหตุผลการขอต่างจากระบบ</h3>
-          <p className="mt-2 text-sm text-slate-600">{request.overrideReasonCategory ?? "ไม่มีการขอต่างจากระบบ"}</p>
+          <h3 className="font-semibold text-slate-950">เหตุผลการขอแตกต่างจากค่าที่ระบบแนะนำ</h3>
+          <p className="mt-2 text-sm text-slate-600">{request.overrideReasonCategory ?? "ไม่มีการขอแตกต่างจากค่าที่ระบบแนะนำ"}</p>
           <p className="mt-1 text-sm text-slate-500">{request.overrideReasonText ?? "-"}</p>
         </Card>
         <Card className="p-4">
           <h3 className="font-semibold text-slate-950">ภาพบันทึกการคำนวณ</h3>
-          <p className="mt-2 text-sm text-slate-600">สต็อกสำรอง: {request.calculationSnapshot.safetyStock}</p>
-          <p className="mt-1 text-sm text-slate-600">จุดสั่งซื้อ: {request.calculationSnapshot.reorderPoint}</p>
+          <p className="mt-2 text-sm text-slate-600">ระดับพัสดุสำรองปลอดภัย (Safety Stock): {request.calculationSnapshot.safetyStock}</p>
+          <p className="mt-1 text-sm text-slate-600">จุดสั่งซื้อใหม่ (Reorder Point): {request.calculationSnapshot.reorderPoint}</p>
           <p className="mt-1 text-sm text-slate-600">จำนวนที่ระบบแนะนำ: {request.calculationSnapshot.suggestedQuantity}</p>
           <p className="mt-2 text-xs text-slate-400">ภาพบันทึกนี้ถูกเก็บ ณ วันที่ส่งคำขอ และไม่คำนวณย้อนหลังใหม่</p>
         </Card>
@@ -2466,9 +3125,9 @@ function VmiSimulationPage({
   const currentManualOrders = 4;
   const vmiManualOrders = 1;
   const rows = [
-    buildVmiRow("สต็อกสำรอง", currentSafetyStock, vmiSafetyStock, "m"),
-    buildVmiRow("จุดสั่งซื้อ", currentReorderPoint, vmiReorderPoint, "m"),
-    buildVmiRow("ระยะเวลาส่งมอบ", currentLeadTime, vmiLeadTime, "วัน"),
+    buildVmiRow("ระดับพัสดุสำรองปลอดภัย (Safety Stock)", currentSafetyStock, vmiSafetyStock, "m"),
+    buildVmiRow("จุดสั่งซื้อใหม่ (Reorder Point)", currentReorderPoint, vmiReorderPoint, "m"),
+    buildVmiRow("ระยะเวลารอพัสดุ (Lead Time)", currentLeadTime, vmiLeadTime, "วัน"),
     buildVmiRow("มูลค่าสินค้าคงคลัง", currentInventoryValue, vmiInventoryValue, "THB"),
     buildVmiRow("คำสั่งซื้อที่ทำด้วยมือต่อเดือน", currentManualOrders, vmiManualOrders, ""),
   ];
@@ -2478,12 +3137,17 @@ function VmiSimulationPage({
       <PageTitle
         eyebrow="จำลอง VMI"
         title="เปรียบเทียบโมเดลคลังปัจจุบันกับ VMI"
-        subtitle="จำลองผลกระทบด้านสต็อกสำรอง จุดสั่งซื้อ ระยะเวลาส่งมอบ มูลค่าสินค้าคงคลัง และจำนวนคำสั่งซื้อที่ทำด้วยมือ"
+        subtitle="จำลองผลกระทบด้านระดับพัสดุสำรองปลอดภัย จุดสั่งซื้อใหม่ ระยะเวลารอพัสดุ มูลค่าสินค้าคงคลัง และจำนวนคำสั่งซื้อที่ทำด้วยมือ"
         action={<Button variant="secondary" onClick={onBack}><ArrowLeft className="h-4 w-4" /> ย้อนกลับ</Button>}
       />
+      <div className="mb-5">
+        <InlineAlert tone="info">
+          VMI ใน PoC นี้เป็นการจำลองผลลัพธ์ ไม่ใช่การให้ Supplier เติมของจริง ใช้เพื่อเปรียบเทียบผลกระทบก่อนตัดสินใจทดลองในระดับเขต
+        </InlineAlert>
+      </div>
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card>
-          <SectionHeader title="ตารางเปรียบเทียบ" subtitle="C01 สายไฟแรงต่ำ · WH-001" />
+          <SectionHeader title="ตารางเปรียบเทียบ" subtitle="C01 สายไฟแรงต่ำ · I010" />
           <DataTable columns={["ตัวชี้วัด", "ปัจจุบัน", "VMI", "ผลกระทบ"]}>
             {rows.map((row) => (
               <tr key={row.metric}>
@@ -2542,7 +3206,7 @@ function SettingsPage({
 
   return (
     <>
-      <PageTitle eyebrow="ตั้งค่า" title="สูตรคำนวณและนโยบาย" subtitle="ตั้งค่าเวอร์ชันสูตร นโยบายอนุมัติ และนโยบายการขอต่างจากระบบสำหรับต้นแบบ" />
+      <PageTitle eyebrow="ตั้งค่า" title="สูตรคำนวณและนโยบาย" subtitle="ตั้งค่าเวอร์ชันสูตร นโยบายอนุมัติ และนโยบายการขอแตกต่างจากค่าที่ระบบแนะนำสำหรับต้นแบบ" />
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
         <Card>
           <SectionHeader title={`เวอร์ชันสูตร ${draftPolicy.formulaVersion}`} subtitle="แก้ไขค่านโยบายแล้วบันทึกเป็นเวอร์ชันใหม่เพื่อใช้ตรวจสอบย้อนหลัง" />
@@ -2610,7 +3274,7 @@ function SettingsPage({
             </div>
           </Card>
           <Card className="p-5">
-            <h3 className="font-semibold text-slate-950">นโยบายการขอต่างจากระบบ</h3>
+            <h3 className="font-semibold text-slate-950">นโยบายการขอแตกต่างจากค่าที่ระบบแนะนำ</h3>
             <div className="mt-4 space-y-3 text-sm leading-6 text-slate-600">
               <p>ต้องระบุเหตุผลเมื่อจำนวนที่ขอต่างจากจำนวนที่ระบบแนะนำ</p>
               <p>เกณฑ์ส่วนต่างสูง = {draftPolicy.highVarianceThreshold}%</p>
@@ -2657,6 +3321,11 @@ function getNextSkuId() {
 
 function getSupplierStatus(supplierId: string, offers: SupplierOffer[]): SupplierStatus {
   return offers.some((offer) => offer.supplierId === supplierId) ? "Active" : "No Catalog";
+}
+
+function formatPeaRegionCode(regionCode?: string) {
+  if (!regionCode) return "ไม่พบเขต";
+  return `เขต ${regionCode}`;
 }
 
 function getSystemSupplierReliability(supplierId: string, offers: SupplierOffer[]): number {
@@ -2730,8 +3399,8 @@ function getDemandStabilityLabel(stability: "High" | "Medium" | "Low") {
 function getChangeLogFieldLabel(field: string) {
   const labels: Record<string, string> = {
     unitPrice: "ราคาต่อหน่วย",
-    leadTimeDays: "ระยะเวลาส่งมอบ",
-    moq: "ปริมาณสั่งขั้นต่ำ",
+    leadTimeDays: "ระยะเวลารอพัสดุ",
+    moq: "จำนวนสั่งซื้อขั้นต่ำ",
     reliabilityScore: "ความน่าเชื่อถือ",
     name: "ชื่อซัพพลายเออร์",
     contactPerson: "ผู้ติดต่อ",
@@ -2741,7 +3410,7 @@ function getChangeLogFieldLabel(field: string) {
     coverage: "พื้นที่ให้บริการ",
     formulaVersion: "เวอร์ชันสูตร",
     serviceLevel: "ระดับความมั่นใจ",
-    zScore: "Z-score",
+    zScore: "ค่า Z-score",
     seasonalFactor: "ตัวคูณฤดูกาล",
     budgetFactor: "ตัวคูณงบประมาณ",
     highVarianceThreshold: "เกณฑ์ส่วนต่างสูง",

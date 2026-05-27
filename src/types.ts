@@ -1,6 +1,6 @@
 export type Region = "North" | "Northeast" | "East" | "South" | "National";
 
-export type Unit = "????" | "???" | "???" | "pcs" | "m";
+export type Unit = "เมตร" | "ลูก" | "ต้น" | "pcs" | "m";
 
 export type Warehouse = {
   id: string;

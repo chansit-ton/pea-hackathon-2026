@@ -6,7 +6,7 @@ import { formatCurrency, formatNumber, formatPercent } from "../utils/formatters
  * แสดงภาพบันทึกการคำนวณที่ถูกบันทึกไว้ตอนสร้างคำขอ
  *
  * หน้านี้ต้องอ่านค่าจากภาพบันทึกเดิมเท่านั้น ไม่คำนวณใหม่จากข้อมูลจำลองปัจจุบัน
- * เพราะราคา ระยะเวลาส่งมอบ งบประมาณ หรือเวอร์ชันสูตรอาจเปลี่ยนในอนาคต
+ * เพราะราคา Lead Time งบประมาณ หรือเวอร์ชันสูตรอาจเปลี่ยนในอนาคต
  */
 export function CalculationSnapshotView({ snapshot, unit }: { snapshot: PurchaseRequestCalculationSnapshot; unit: string }) {
   const layerLabels: Record<string, string> = {
@@ -20,13 +20,13 @@ export function CalculationSnapshotView({ snapshot, unit }: { snapshot: Purchase
     ["การใช้ย้อนหลังรวม", `${formatNumber(snapshot.historicalUsageTotal)} ${unit} / ${snapshot.historicalUsageDays} วัน`],
     ["ค่าเฉลี่ยการใช้ต่อวัน", `${formatNumber(snapshot.averageDailyDemand)} ${unit}/วัน`],
     ["ความผันผวนของการใช้", `${formatNumber(snapshot.demandVariabilityPerDay)} ${unit}/วัน`],
-    ["ระยะเวลาส่งมอบของซัพพลายเออร์", `${formatNumber(snapshot.supplierLeadTimeDaysAtRequestDate)} วัน`],
-    ["ระยะเวลาส่งมอบที่ปรับแล้ว", `${formatNumber(snapshot.adjustedLeadTimeDays)} วัน`],
+    ["ระยะเวลารอพัสดุของ Supplier (Lead Time)", `${formatNumber(snapshot.supplierLeadTimeDaysAtRequestDate)} วัน`],
+    ["ระยะเวลารอพัสดุที่ปรับแล้ว (Adjusted Lead Time)", `${formatNumber(snapshot.adjustedLeadTimeDays)} วัน`],
     ["ระดับความมั่นใจ", `${formatNumber(snapshot.serviceLevel * 100)}%`],
-    ["Z-score", formatNumber(snapshot.zScore)],
-    ["สต็อกสำรอง", `${formatNumber(snapshot.safetyStock)} ${unit}`],
-    ["ความต้องการระหว่างรอของ", `${formatNumber(snapshot.demandDuringLeadTime)} ${unit}`],
-    ["จุดสั่งซื้อ", `${formatNumber(snapshot.reorderPoint)} ${unit}`],
+    ["ค่า Z-score", formatNumber(snapshot.zScore)],
+    ["ระดับพัสดุสำรองปลอดภัย (Safety Stock)", `${formatNumber(snapshot.safetyStock)} ${unit}`],
+    ["ความต้องการใช้ระหว่างรอพัสดุ", `${formatNumber(snapshot.demandDuringLeadTime)} ${unit}`],
+    ["จุดสั่งซื้อใหม่ (Reorder Point)", `${formatNumber(snapshot.reorderPoint)} ${unit}`],
     ["ระดับสต็อกเป้าหมาย", `${formatNumber(snapshot.targetStockLevel)} ${unit}`],
     ["จำนวนที่ระบบแนะนำ", `${formatNumber(snapshot.suggestedQuantity)} ${unit}`],
     ["จำนวนที่ผู้ใช้ขอจริง", `${formatNumber(snapshot.requestedQuantity)} ${unit}`],
@@ -36,7 +36,7 @@ export function CalculationSnapshotView({ snapshot, unit }: { snapshot: Purchase
     ["ราคาต่อหน่วย ณ วันที่ขอ", `${formatCurrency(snapshot.unitPriceAtRequestDate)}/${unit}`],
     ["มูลค่าประมาณการ", formatCurrency(snapshot.estimatedCostForRequestedQuantity)],
     ["เส้นทางอนุมัติ", layerLabels[snapshot.approvalRoutingAtRequestDate.layer] ?? snapshot.approvalRoutingAtRequestDate.layer],
-    ["เหตุผลการขอต่างจากระบบ", snapshot.overrideReasonCategory ?? "-"],
+    ["เหตุผลการขอแตกต่างจากค่าที่ระบบแนะนำ", snapshot.overrideReasonCategory ?? "-"],
   ];
 
   return (

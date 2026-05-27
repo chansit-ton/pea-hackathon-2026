@@ -17,8 +17,8 @@ export function OverrideExplanation({
   if (!variance.isOverride) {
     return (
       <Card className="p-4">
-        <h3 className="font-semibold text-slate-950">เหตุผลที่ต้องกรอกเมื่อขอต่างจากระบบ</h3>
-        <p className="mt-2 text-sm text-slate-600">จำนวนที่ขอตรงกับจำนวนที่ระบบแนะนำ จึงไม่ต้องกรอกเหตุผลการขอต่างจากระบบ</p>
+        <h3 className="font-semibold text-slate-950">เหตุผลที่ต้องกรอกเมื่อขอแตกต่างจากค่าที่ระบบแนะนำ</h3>
+        <p className="mt-2 text-sm text-slate-600">จำนวนที่ขอตรงกับจำนวนที่ระบบแนะนำ จึงไม่ต้องกรอกเหตุผลเพิ่มเติม</p>
       </Card>
     );
   }
@@ -30,7 +30,7 @@ export function OverrideExplanation({
           <AlertTriangle className="h-4 w-4" />
         </div>
         <div>
-          <h3 className="font-semibold text-slate-950">เหตุผลที่ต้องกรอกเมื่อขอต่างจากระบบ</h3>
+          <h3 className="font-semibold text-slate-950">เหตุผลที่ต้องกรอกเมื่อขอแตกต่างจากค่าที่ระบบแนะนำ</h3>
           <p className="mt-2 text-sm leading-6 text-slate-600">
             จำนวนที่ระบบแนะนำ = {formatNumber(suggestedQuantity)} {unit}, จำนวนที่ผู้ใช้ขอ = {formatNumber(requestedQuantity)} {unit}
           </p>
@@ -42,7 +42,7 @@ export function OverrideExplanation({
           <p className="mt-3 text-sm leading-6 text-slate-600">
             {variance.isOverRequest
               ? "คุณกำลังขอจำนวนมากกว่าค่าที่ระบบแนะนำ ระบบจึงต้องการเหตุผลประกอบ เพื่อให้ผู้อนุมัติพิจารณาผลกระทบด้านงบประมาณ พื้นที่จัดเก็บ และความเสี่ยงสต็อกเกิน"
-              : "คุณกำลังขอจำนวนน้อยกว่าค่าที่ระบบแนะนำ ซึ่งอาจทำให้สต็อกต่ำกว่าสต็อกสำรอง หรือเกิดความเสี่ยงขาดแคลนในรอบถัดไป จึงต้องระบุเหตุผลประกอบ"}
+              : "คุณกำลังขอจำนวนน้อยกว่าค่าที่ระบบแนะนำ ซึ่งอาจทำให้ Stock ต่ำกว่าระดับพัสดุสำรองปลอดภัย หรือเกิดความเสี่ยงขาดแคลนในรอบถัดไป จึงต้องระบุเหตุผลประกอบ"}
           </p>
         </div>
       </div>

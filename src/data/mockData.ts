@@ -22,11 +22,12 @@ import {
 export const formulaVersion = "v1.0";
 
 export const warehouses: Warehouse[] = [
-  { id: "WH-001", name: "คลังเชียงใหม่ 1", region: "North", level: "Local", localBudget: 25_000, capacityUsed: 82 },
-  { id: "WH-002", name: "คลังลำปาง", region: "North", level: "Local", localBudget: 120_000, capacityUsed: 70 },
-  { id: "WH-003", name: "คลังขอนแก่น", region: "Northeast", level: "Local", localBudget: 80_000, capacityUsed: 88 },
-  { id: "WH-004", name: "คลังชลบุรี", region: "East", level: "Local", localBudget: 300_000, capacityUsed: 65 },
-  { id: "WH-005", name: "คลังสุราษฎร์", region: "South", level: "Local", localBudget: 50_000, capacityUsed: 91 },
+  // ใช้รหัส WH Id จากชีต WH ในไฟล์ PEA Data Summary เพื่อให้ demo ตรงกับ source data จริง
+  { id: "I010", name: "คลัง I010", region: "North", level: "Local", localBudget: 25_000, capacityUsed: 82 },
+  { id: "I020", name: "คลัง I020", region: "North", level: "Local", localBudget: 120_000, capacityUsed: 70 },
+  { id: "K010", name: "คลัง K010", region: "Northeast", level: "Local", localBudget: 80_000, capacityUsed: 88 },
+  { id: "K020", name: "คลัง K020", region: "East", level: "Local", localBudget: 300_000, capacityUsed: 65 },
+  { id: "K030", name: "คลัง K030", region: "South", level: "Local", localBudget: 50_000, capacityUsed: 91 },
 ];
 
 export const regionalBudgets: RegionalBudget[] = [
@@ -93,17 +94,17 @@ export const supplierOffers: SupplierOffer[] = [
  * inventoryRecords เก็บข้อมูลตั้งต้นที่ใช้คำนวณ
  *
  * หมายเหตุ:
- * ค่าอย่าง Safety Stock, Reorder Point และ AI Suggested Quantity
+ * ค่าอย่างระดับพัสดุสำรองปลอดภัย, จุดสั่งซื้อใหม่ และจำนวนที่ระบบแนะนำ
  * จะไม่ hardcode ใน mock data แล้ว แต่จะคำนวณจาก historicalUsage,
  * currentStock, supplier lead time, factor และ MOQ ผ่าน inventoryCalculations.ts
  */
 export const inventoryRecords: InventoryRecord[] = [
   {
     skuId: "C01",
-    warehouseId: "WH-001",
+    warehouseId: "I010",
     currentStock: 60,
     // C01 ใช้ข้อมูลย้อนหลัง 6 เดือน รวม 600 เมตร / 180 วัน
-    // เพื่อให้ Average Daily Demand = 600 / 180 = 3.33 เมตร/วัน
+    // เพื่อให้ค่าเฉลี่ยการใช้ต่อวัน = 600 / 180 = 3.33 เมตร/วัน
     historicalUsage: [
       { periodLabel: "Month 1", days: 30, quantity: 80 },
       { periodLabel: "Month 2", days: 30, quantity: 100 },
@@ -127,7 +128,7 @@ export const inventoryRecords: InventoryRecord[] = [
   },
   {
     skuId: "T01",
-    warehouseId: "WH-003",
+    warehouseId: "K010",
     currentStock: 1,
     historicalUsage: [
       { periodLabel: "Month 1", days: 30, quantity: 0 },
@@ -148,7 +149,7 @@ export const inventoryRecords: InventoryRecord[] = [
   },
   {
     skuId: "P01",
-    warehouseId: "WH-005",
+    warehouseId: "K030",
     currentStock: 8,
     historicalUsage: [
       { periodLabel: "Month 1", days: 30, quantity: 8 },
@@ -169,7 +170,7 @@ export const inventoryRecords: InventoryRecord[] = [
   },
   {
     skuId: "B05",
-    warehouseId: "WH-002",
+    warehouseId: "I020",
     currentStock: 5,
     historicalUsage: [
       { periodLabel: "Month 1", days: 30, quantity: 12 },
@@ -190,7 +191,7 @@ export const inventoryRecords: InventoryRecord[] = [
   },
   {
     skuId: "D12",
-    warehouseId: "WH-001",
+    warehouseId: "I010",
     currentStock: 150,
     historicalUsage: [
       { periodLabel: "Month 1", days: 30, quantity: 170 },
@@ -213,12 +214,13 @@ export const inventoryRecords: InventoryRecord[] = [
 
 export const formulaList = [
   "ค่าเฉลี่ยการใช้ต่อวัน = การใช้ย้อนหลังรวม / จำนวนวันย้อนหลัง",
-  "ระยะเวลาส่งมอบที่ปรับแล้ว = ระยะเวลาส่งมอบของซัพพลายเออร์ × ตัวคูณฤดูกาล × ตัวคูณงบประมาณ",
-  "สต็อกสำรอง = Z-score × ความผันผวนของการใช้ × √ระยะเวลาส่งมอบที่ปรับแล้ว",
-  "ความต้องการระหว่างรอของ = ค่าเฉลี่ยการใช้ต่อวัน × ระยะเวลาส่งมอบที่ปรับแล้ว",
-  "จุดสั่งซื้อ = ความต้องการระหว่างรอของ + สต็อกสำรอง",
-  "ระดับสต็อกเป้าหมาย = ความต้องการคาดการณ์ในรอบแผน + สต็อกสำรอง หรือค่าเป้าหมายจากนโยบาย",
-  "จำนวนที่ระบบแนะนำ = ระดับสต็อกเป้าหมาย - สต็อกปัจจุบัน แล้วปัดขึ้นตามปริมาณสั่งขั้นต่ำ",
+  "ความผันผวนของการใช้ = ส่วนเบี่ยงเบนมาตรฐานของข้อมูลการใช้ย้อนหลัง",
+  "ระยะเวลารอพัสดุที่ปรับแล้ว = ระยะเวลารอพัสดุของซัพพลายเออร์ × ตัวคูณฤดูกาล × ตัวคูณงบประมาณ",
+  "ระดับพัสดุสำรองปลอดภัย = Z-score × ความผันผวนของการใช้ต่อวัน × √ระยะเวลารอพัสดุที่ปรับแล้ว",
+  "ความต้องการใช้ระหว่างรอพัสดุ = ค่าเฉลี่ยการใช้ต่อวัน × ระยะเวลารอพัสดุที่ปรับแล้ว",
+  "จุดสั่งซื้อใหม่ = ความต้องการใช้ระหว่างรอพัสดุ + ระดับพัสดุสำรองปลอดภัย",
+  "ระดับสต็อกเป้าหมาย = ความต้องการคาดการณ์ในรอบแผน + ระดับพัสดุสำรองปลอดภัย หรือค่าเป้าหมายจากนโยบาย",
+  "จำนวนที่ระบบแนะนำ = ระดับสต็อกเป้าหมาย - สต็อกปัจจุบัน แล้วปัดขึ้นตามจำนวนสั่งซื้อขั้นต่ำ (MOQ)",
   "มูลค่าประมาณการ = จำนวนที่ผู้ใช้ขอ × ราคาต่อหน่วยของซัพพลายเออร์",
 ];
 
@@ -373,11 +375,11 @@ export const c01CalculationSnapshot = createSnapshot({
   supplier: c01Supplier,
   requestedQuantity: 20,
   overrideReasonCategory: "มีแผนซ่อมบำรุงเพิ่มเติม",
-  overrideReasonDetail: "รวมแผนซ่อมบำรุงเพิ่มเติมของคลังเชียงใหม่ 1 ในรอบเดียวกัน",
+  overrideReasonDetail: "รวมแผนซ่อมบำรุงเพิ่มเติมของคลัง I010 ในรอบเดียวกัน",
 });
 
 // Snapshot ของ T01 ใช้แสดงกรณี escalation:
-// Estimated Cost สูงกว่า Local และ Regional Budget จึงต้องส่งต่อ Central
+// มูลค่าประมาณการสูงกว่างบคลังพื้นที่และงบเขต จึงต้องส่งต่อส่วนกลาง
 const t01CalculationSnapshot = createSnapshot({
   requestId: "REQ-002",
   createdAt: "2026-05-05 10:42",
@@ -402,7 +404,7 @@ export const initialRequests: PurchaseRequest[] = [
   {
     id: "REQ-002",
     skuId: "T01",
-    warehouseId: "WH-003",
+    warehouseId: "K010",
     supplierId: "S003",
     aiSuggestedQuantity: t01CalculationSnapshot.suggestedQuantity,
     requestedQuantity: 3,
@@ -423,18 +425,18 @@ export const initialRequests: PurchaseRequest[] = [
     formulaVersion,
     calculationSnapshot: t01CalculationSnapshot,
     supplierContactLogSummary: "อีเมลขอใบเสนอราคาแล้ว ซัพพลายเออร์ยืนยันราคาและระยะเวลาส่งมอบ",
-    localReason: "คลังขอนแก่นมีสต็อกต่ำกว่าสต็อกสำรอง และมีความเสี่ยงงานบริการหยุดชะงักสูง",
+    localReason: "คลัง K010 มีสต็อกต่ำกว่าสต็อกสำรอง และมีความเสี่ยงงานบริการหยุดชะงักสูง",
     regionalEscalationReason: "วงเงินเกินงบเขต ต้องขออนุมัติส่วนกลาง",
     createdAt: "2026-05-05 10:42",
     timeline: [
-      { role: "Local Warehouse", action: "Submitted", actor: "คลังขอนแก่น", date: "2026-05-05 10:42", note: "งบคลังพื้นที่ไม่เพียงพอ" },
+      { role: "Local Warehouse", action: "Submitted", actor: "คลัง K010", date: "2026-05-05 10:42", note: "งบคลังพื้นที่ไม่เพียงพอ" },
       { role: "Regional", action: "Waiting Review", actor: "เขตภาคตะวันออกเฉียงเหนือ", date: "2026-05-05 10:45" },
     ],
   },
   {
     id: "REQ-003",
     skuId: "T01",
-    warehouseId: "WH-003",
+    warehouseId: "K010",
     supplierId: "S003",
     aiSuggestedQuantity: t01CalculationSnapshot.suggestedQuantity,
     requestedQuantity: 3,
@@ -460,11 +462,11 @@ export const initialRequests: PurchaseRequest[] = [
       overrideReasonDetail: "ใช้เป็นตัวอย่างคิวส่วนกลางที่ถูกส่งต่อแล้ว",
     },
     supplierContactLogSummary: "อีเมลขอใบเสนอราคาแล้ว ซัพพลายเออร์ยืนยันราคาและระยะเวลาส่งมอบ",
-    localReason: "คลังขอนแก่นมีสต็อกต่ำกว่าสต็อกสำรอง",
+    localReason: "คลัง K010 มีสต็อกต่ำกว่าสต็อกสำรอง",
     regionalEscalationReason: "งบระดับเขตขาด 3,150,000 บาท จึงส่งต่อส่วนกลาง",
     createdAt: "2026-05-04 15:20",
     timeline: [
-      { role: "Local Warehouse", action: "Submitted", actor: "คลังขอนแก่น", date: "2026-05-04 15:20" },
+      { role: "Local Warehouse", action: "Submitted", actor: "คลัง K010", date: "2026-05-04 15:20" },
       { role: "Regional", action: "Approve & Pass to Central", actor: "เขตภาคตะวันออกเฉียงเหนือ", date: "2026-05-04 16:05", note: "งบเขตไม่เพียงพอ" },
       { role: "Central", action: "Waiting Review", actor: "จัดซื้อส่วนกลาง", date: "2026-05-04 16:10" },
     ],
@@ -472,7 +474,7 @@ export const initialRequests: PurchaseRequest[] = [
   {
     id: "REQ-010",
     skuId: "P01",
-    warehouseId: "WH-005",
+    warehouseId: "K030",
     supplierId: "S001",
     aiSuggestedQuantity: p01CalculationSnapshot.suggestedQuantity,
     requestedQuantity: 10,
@@ -494,7 +496,7 @@ export const initialRequests: PurchaseRequest[] = [
     supplierContactLogSummary: "โทรยืนยันวันจัดส่งแล้ว",
     createdAt: "2026-04-28 13:10",
     timeline: [
-      { role: "Local Warehouse", action: "Submitted", actor: "คลังสุราษฎร์", date: "2026-04-28 13:10" },
+      { role: "Local Warehouse", action: "Submitted", actor: "คลัง K030", date: "2026-04-28 13:10" },
       { role: "Regional", action: "Approved", actor: "เขตภาคใต้", date: "2026-04-28 16:45" },
     ],
   },

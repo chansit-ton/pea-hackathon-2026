@@ -26,7 +26,7 @@ export function calculateHistoricalUsageTotal(historicalUsage: HistoricalUsagePe
  * รวมจำนวนวันของข้อมูลย้อนหลัง
  *
  * ความหมาย:
- * ใช้เป็นตัวหารในการคำนวณ Average Daily Demand
+ * ใช้เป็นตัวหารในการคำนวณค่าเฉลี่ยการใช้ต่อวัน (Average Daily Demand)
  *
  * ตัวอย่าง C01:
  * 6 เดือน เดือนละ 30 วัน = 180 วัน
@@ -39,13 +39,13 @@ export function calculateHistoricalUsageDays(historicalUsage: HistoricalUsagePer
  * คำนวณค่าเฉลี่ยการใช้ต่อวัน
  *
  * สูตร:
- * Average Daily Demand = Historical Usage Total / Historical Usage Days
+ * ค่าเฉลี่ยการใช้ต่อวัน = การใช้ย้อนหลังรวม / จำนวนวันย้อนหลัง
  *
  * ตัวอย่าง C01:
  * 600 / 180 = 3.33 เมตร/วัน
  *
  * ใช้ต่อใน:
- * Demand During Lead Time และ Reorder Point
+ * ความต้องการใช้ระหว่างรอพัสดุ และจุดสั่งซื้อใหม่
  */
 export function calculateAverageDailyDemand(historicalUsageTotal: number, historicalUsageDays: number): number {
   if (historicalUsageDays <= 0) return 0;
@@ -57,7 +57,7 @@ export function calculateAverageDailyDemand(historicalUsageTotal: number, histor
  *
  * ความหมาย:
  * ใช้วัดว่าปริมาณการใช้แกว่งมากน้อยแค่ไหน
- * ถ้าค่านี้สูง แปลว่า demand ไม่สม่ำเสมอ และควรมี Safety Stock สูงขึ้น
+ * ถ้าค่านี้สูง แปลว่าความต้องการใช้ไม่สม่ำเสมอ และควรมีระดับพัสดุสำรองปลอดภัยสูงขึ้น
  */
 export function calculateStandardDeviation(values: number[]): number {
   if (values.length === 0) return 0;
@@ -69,15 +69,15 @@ export function calculateStandardDeviation(values: number[]): number {
 }
 
 /**
- * คำนวณความผันผวนของ Demand ต่อวัน
+ * คำนวณความผันผวนของความต้องการใช้ต่อวัน
  *
  * วิธีคิด:
  * 1. คำนวณ standard deviation จากปริมาณใช้ราย period เช่น รายเดือน
  * 2. แปลงความผันผวนราย period ให้เป็นรายวัน โดยหารด้วย sqrt(จำนวนวันเฉลี่ยต่อ period)
  *
  * ตัวอย่าง:
- * ถ้า usage รายเดือนแกว่งมาก ระบบจะได้ demandVariabilityPerDay สูงขึ้น
- * และทำให้ Safety Stock สูงขึ้นตาม
+ * ถ้าการใช้รายเดือนแกว่งมาก ระบบจะได้ demandVariabilityPerDay สูงขึ้น
+ * และทำให้ระดับพัสดุสำรองปลอดภัยสูงขึ้นตาม
  */
 export function calculateDemandVariabilityPerDay(
   historicalUsage: HistoricalUsagePeriod[],
@@ -102,13 +102,13 @@ export function calculateDemandVariabilityPerDay(
 }
 
 /**
- * คำนวณ Lead Time ที่ปรับแล้ว
+ * คำนวณระยะเวลารอพัสดุที่ปรับแล้ว
  *
  * สูตร:
- * Adjusted Lead Time = Supplier Lead Time × Seasonal Factor × Budget Factor
+ * ระยะเวลารอพัสดุที่ปรับแล้ว = ระยะเวลารอพัสดุของซัพพลายเออร์ × ตัวคูณฤดูกาล × ตัวคูณงบประมาณ
  *
  * ความหมาย:
- * Supplier อาจแจ้ง Lead Time 25 วัน แต่ระบบต้องเผื่อฤดูกาลหรือระยะเวลาอนุมัติภายใน
+ * ซัพพลายเออร์อาจแจ้งระยะเวลารอพัสดุ 25 วัน แต่ระบบต้องเผื่อฤดูกาลหรือระยะเวลาอนุมัติภายใน
  *
  * ตัวอย่าง C01:
  * 25 × 1.20 × 1.00 = 30 วัน
@@ -147,14 +147,14 @@ export function calculateZScoreFromServiceLevel(serviceLevelInput: number): numb
 }
 
 /**
- * คำนวณ Safety Stock
+ * คำนวณระดับพัสดุสำรองปลอดภัย
  *
  * สูตร:
- * Safety Stock = Z-score × Demand Variability × √Adjusted Lead Time
+ * ระดับพัสดุสำรองปลอดภัย = Z-score × ความผันผวนของการใช้ × √ระยะเวลารอพัสดุที่ปรับแล้ว
  *
  * ความหมาย:
- * จำนวนสำรองขั้นต่ำเพื่อกันความเสี่ยงจาก demand ที่มากกว่าคาด
- * หรือ Lead Time ที่นานกว่าปกติ
+ * จำนวนสำรองขั้นต่ำเพื่อกันความเสี่ยงจากความต้องการใช้ที่มากกว่าคาด
+ * หรือระยะเวลารอพัสดุที่นานกว่าปกติ
  *
  * ตัวอย่าง C01:
  * 1.65 × 2.4 × √30 ≈ 21.69 แล้วปัดขึ้นเป็น 22 เมตรในขั้น orchestrator
@@ -171,7 +171,7 @@ export function calculateSafetyStock(
 /**
  * ปัดค่าขึ้นเป็นจำนวนเต็ม
  *
- * ใช้กับค่าที่ต้องนำไปปฏิบัติงานจริง เช่น Safety Stock หรือ Reorder Point
+ * ใช้กับค่าที่ต้องนำไปปฏิบัติงานจริง เช่น ระดับพัสดุสำรองปลอดภัย หรือจุดสั่งซื้อใหม่
  * เพราะไม่ควรแสดงจำนวนพัสดุที่ต้องเก็บเป็นเศษถ้าเป็นหน่วยใช้งานจริง
  */
 export function roundUpQuantity(value: number): number {
@@ -179,10 +179,10 @@ export function roundUpQuantity(value: number): number {
 }
 
 /**
- * คำนวณปริมาณที่จะถูกใช้ระหว่างรอ Supplier ส่งของ
+ * คำนวณปริมาณที่จะถูกใช้ระหว่างรอซัพพลายเออร์ส่งของ
  *
  * สูตร:
- * Demand During Lead Time = Average Daily Demand × Adjusted Lead Time
+ * ความต้องการใช้ระหว่างรอพัสดุ = ค่าเฉลี่ยการใช้ต่อวัน × ระยะเวลารอพัสดุที่ปรับแล้ว
  *
  * ตัวอย่าง C01:
  * 3.33 × 30 = 99.9 เมตร
@@ -195,25 +195,25 @@ export function calculateDemandDuringLeadTime(averageDailyDemand: number, adjust
  * คำนวณจุดเริ่มเติมของหรือเริ่มจัดซื้อ
  *
  * สูตร:
- * Reorder Point = Demand During Lead Time + Safety Stock
+ * จุดสั่งซื้อใหม่ = ความต้องการใช้ระหว่างรอพัสดุ + ระดับพัสดุสำรองปลอดภัย
  *
  * ความหมาย:
- * ถ้า Current Stock ต่ำกว่าค่านี้ ระบบควรเตือนให้เริ่มกระบวนการเติม stock
+ * ถ้าสต็อกปัจจุบันต่ำกว่าค่านี้ ระบบควรเตือนให้เริ่มกระบวนการเติมพัสดุ
  */
 export function calculateReorderPoint(demandDuringLeadTime: number, safetyStock: number): number {
   return demandDuringLeadTime + safetyStock;
 }
 
 /**
- * คำนวณระดับ Stock เป้าหมายหลังเติมของ
+ * คำนวณระดับสต็อกเป้าหมายหลังเติมของ
  *
  * วิธีเลือกค่า:
  * - ถ้ามี targetStockLevelOverride ให้ใช้ค่านั้นก่อน
  *   เหมาะกับ policy แบบ Min-Max หรือค่าเป้าหมายที่องค์กรกำหนดไว้
- * - ถ้าไม่มี override ให้ใช้ Forecast Demand + Safety Stock
+ * - ถ้าไม่มี override ให้ใช้ความต้องการคาดการณ์ + ระดับพัสดุสำรองปลอดภัย
  *
  * ตัวอย่าง C01:
- * ใช้ Policy Override = 70 เมตร เพื่อให้ demo flow คงที่และอธิบายง่าย
+ * ใช้ค่าเป้าหมายจากนโยบาย = 70 เมตร เพื่อให้ demo flow คงที่และอธิบายง่าย
  */
 export function calculateTargetStockLevel(params: {
   forecastDemandForPlanningPeriod: number;
@@ -237,10 +237,10 @@ export function calculateTargetStockLevel(params: {
 }
 
 /**
- * ปัดจำนวนสั่งซื้อขึ้นตาม MOQ ของ Supplier
+ * ปัดจำนวนสั่งซื้อขึ้นตามจำนวนสั่งซื้อขั้นต่ำ (MOQ) ของซัพพลายเออร์
  *
  * ความหมาย:
- * ถ้า Supplier กำหนด MOQ = 10 และระบบคำนวณได้ 13
+ * ถ้าซัพพลายเออร์กำหนด MOQ = 10 และระบบคำนวณได้ 13
  * ต้องปัดเป็น 20 เพื่อให้ตรงเงื่อนไขขั้นต่ำ/รอบสั่งซื้อ
  */
 export function roundUpToMoq(quantity: number, moq: number): number {
@@ -251,14 +251,14 @@ export function roundUpToMoq(quantity: number, moq: number): number {
 }
 
 /**
- * คำนวณ AI Suggested Quantity
+ * คำนวณจำนวนที่ระบบแนะนำ
  *
  * สูตร:
- * Suggested Quantity = Target Stock Level - Current Stock
- * จากนั้นปัดขึ้นตาม MOQ
+ * จำนวนที่ระบบแนะนำ = ระดับสต็อกเป้าหมาย - สต็อกปัจจุบัน
+ * จากนั้นปัดขึ้นตามจำนวนสั่งซื้อขั้นต่ำ (MOQ)
  *
  * ตัวอย่าง C01:
- * Target 70 - Current 60 = 10 เมตร
+ * ระดับเป้าหมาย 70 - สต็อกปัจจุบัน 60 = 10 เมตร
  * MOQ = 10 จึงแนะนำ 10 เมตรพอดี
  */
 export function calculateSuggestedQuantity(targetStockLevel: number, currentStock: number, moq: number): number {
@@ -273,12 +273,12 @@ export function calculateSuggestedQuantity(targetStockLevel: number, currentStoc
  * คำนวณส่วนต่างระหว่างจำนวนที่ระบบแนะนำกับจำนวนที่ผู้ใช้ขอจริง
  *
  * สูตร:
- * Variance = Requested Quantity - AI Suggested Quantity
- * Variance % = Variance / AI Suggested Quantity × 100
+ * ส่วนต่างจำนวน = จำนวนที่ผู้ใช้ขอจริง - จำนวนที่ระบบแนะนำ
+ * ส่วนต่างเป็นเปอร์เซ็นต์ = ส่วนต่างจำนวน / จำนวนที่ระบบแนะนำ × 100
  *
  * ใช้เพื่อ:
- * - แสดง warning ว่าขอมากหรือน้อยกว่าคำแนะนำ
- * - บังคับกรอก Override Reason เมื่อจำนวนไม่ตรงกับ AI
+ * - แสดงคำเตือนว่าขอมากหรือน้อยกว่าคำแนะนำ
+ * - บังคับกรอกเหตุผลเมื่อจำนวนไม่ตรงกับค่าที่ระบบแนะนำ
  */
 export function calculateQuantityVariance(
   suggestedQuantity: number,
@@ -301,7 +301,7 @@ export function calculateQuantityVariance(
  * คำนวณมูลค่าประมาณการของคำขอซื้อ
  *
  * สูตร:
- * Estimated Cost = Requested Quantity × Unit Price
+ * มูลค่าประมาณการ = จำนวนที่ผู้ใช้ขอจริง × ราคาต่อหน่วย
  *
  * ตัวอย่าง C01:
  * 20 × 2,000 = 40,000 THB
@@ -314,13 +314,13 @@ export function calculateEstimatedCost(requestedQuantity: number, unitPrice: num
  * กำหนดเส้นทางอนุมัติจากงบประมาณ 3 ชั้น
  *
  * กติกา:
- * 1. ถ้า Estimated Cost <= Local Budget ให้ไป Local
- * 2. ถ้าเกิน Local แต่ <= Regional Budget ให้ไป Regional
- * 3. ถ้าเกิน Regional ให้ไป Central
+ * 1. ถ้ามูลค่าประมาณการ <= งบคลังพื้นที่ ให้ไปอนุมัติระดับคลัง
+ * 2. ถ้าเกินงบคลังพื้นที่ แต่ <= งบเขต ให้ไปอนุมัติระดับเขต
+ * 3. ถ้าเกินงบเขต ให้ส่งต่อส่วนกลาง
  *
  * ตัวอย่าง C01:
  * 40,000 > Local 25,000 แต่ 40,000 <= Regional 300,000
- * ดังนั้น route = Regional
+ * ดังนั้นเส้นทางอนุมัติ = ระดับเขต
  */
 export function determineApprovalLayer(
   estimatedCost: number,
@@ -360,15 +360,15 @@ export function determineApprovalLayer(
 }
 
 /**
- * Orchestrator หลักสำหรับคำนวณคำแนะนำเติม stock
+ * Orchestrator หลักสำหรับคำนวณคำแนะนำเติมสต็อก
  *
  * หน้าที่:
  * รวมสูตรย่อยทั้งหมดให้ได้ผลลัพธ์เดียวที่ UI ใช้แสดง เช่น
- * Average Daily Demand, Safety Stock, Reorder Point,
- * Target Stock Level, AI Suggested Quantity และ Estimated Cost ของจำนวนที่ระบบแนะนำ
+ * ค่าเฉลี่ยการใช้ต่อวัน, ระดับพัสดุสำรองปลอดภัย, จุดสั่งซื้อใหม่,
+ * ระดับสต็อกเป้าหมาย, จำนวนที่ระบบแนะนำ และมูลค่าประมาณการของจำนวนที่ระบบแนะนำ
  *
  * หมายเหตุ:
- * ฟังก์ชันนี้ไม่ควรรู้เรื่อง Requested Quantity เพราะ Requested Quantity เป็น input จากผู้ใช้
+ * ฟังก์ชันนี้ไม่ควรรู้เรื่องจำนวนที่ผู้ใช้ขอจริง เพราะเป็น input จากผู้ใช้
  * และจะถูกคำนวณต่อใน calculatePurchaseRequestPreview
  */
 export function calculateInventoryRecommendation(params: {
@@ -433,13 +433,13 @@ export function calculateInventoryRecommendation(params: {
 }
 
 /**
- * คำนวณ preview ของ Purchase Request จากจำนวนที่ผู้ใช้กรอก
+ * คำนวณตัวอย่างผลลัพธ์ของคำขอซื้อจากจำนวนที่ผู้ใช้กรอก
  *
  * หน้าที่:
- * - คำนวณ Variance ระหว่าง Requested Quantity กับ AI Suggested Quantity
- * - คำนวณ Estimated Cost จาก Requested Quantity
- * - คำนวณ Approval Routing จากงบประมาณ
- * - บอกว่าต้องกรอก Override Reason หรือไม่
+ * - คำนวณส่วนต่างระหว่างจำนวนที่ผู้ใช้ขอจริงกับจำนวนที่ระบบแนะนำ
+ * - คำนวณมูลค่าประมาณการจากจำนวนที่ผู้ใช้ขอจริง
+ * - คำนวณเส้นทางการอนุมัติจากงบประมาณ
+ * - บอกว่าต้องกรอกเหตุผลการขอแตกต่างจากค่าที่ระบบแนะนำหรือไม่
  */
 export function calculatePurchaseRequestPreview(params: {
   recommendation: InventoryCalculationResult;
