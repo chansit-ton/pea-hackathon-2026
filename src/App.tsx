@@ -1,4 +1,5 @@
 ﻿import { useState, type ReactNode } from "react";
+import { useEffect, type InputHTMLAttributes } from "react";
 import {
   ArrowLeft,
   ArrowDown,
@@ -10,6 +11,7 @@ import {
   ClipboardCheck,
   FileText,
   History,
+  Landmark,
   Mail,
   Menu,
   Minus,
@@ -50,6 +52,7 @@ import {
   peaRiskCoverageRecords,
   peaSkuMaster,
   peaWarehouseMaster,
+  resolvePeaSkuId,
 } from "./data/peaDataModel";
 import type { PeaDataCoverage, PeaLeadTimeSkuSummary, PeaRiskCoverageRecord } from "./data/peaDataModel";
 import { CalculationExplanationPanel } from "./components/CalculationExplanationPanel";
@@ -84,14 +87,19 @@ import {
   getVmiRecommendation,
 } from "./utils/inventoryCalculations";
 import { formatCurrency, formatPercent } from "./utils/formatters";
+import { isGooglePoFeedbackEnabled, sendGooglePoFeedback, type GooglePoFeedbackAction } from "./utils/googlePoFeedback";
+import { loadPersistentJson, savePersistentJson } from "./utils/persistentJsonStore";
 import type {
+  ApprovalTimelineItem,
   BudgetContext,
   ContactChannel,
+  InventoryCalculationResult,
   InventoryRecord,
   PurchaseRequest,
   PurchaseRequestCalculationSnapshot,
   Region,
   Sku,
+  StockStatus,
   Supplier,
   SupplierOffer,
   SupplierSkuRecord,
@@ -112,6 +120,7 @@ type View =
   | "history"
   | "vmi"
   | "vmi-simulation"
+  | "budget-settings"
   | "settings";
 
 type ApprovalTab = "regional" | "central";
@@ -125,9 +134,25 @@ type FormulaPolicyState = {
   highVarianceThreshold: number;
 };
 
+type BudgetRegion = Exclude<Region, "National">;
+
+type BudgetSettingsState = {
+  localBudgets: Record<string, number>;
+  regionalBudgets: Record<BudgetRegion, number>;
+  centralBudgetRemaining: number;
+  updatedAt: string;
+};
+
+type BudgetInputDraftState = {
+  localBudgets: Record<string, string>;
+  regionalBudgets: Record<BudgetRegion, string>;
+  centralBudgetRemaining: string;
+  updatedAt: string;
+};
+
 type ChangeLogEntry = {
   id: string;
-  area: "Settings" | "Supplier";
+  area: "Settings" | "Supplier" | "Budget";
   target: string;
   field: string;
   oldValue: string;
@@ -140,6 +165,27 @@ type ChangeLogEntry = {
 type FormulaVersionRecord = FormulaPolicyState & {
   createdAt: string;
   note: string;
+};
+
+type AiSuggestionFeedback = {
+  id: string;
+  requestId: string;
+  skuId: string;
+  warehouseId: string;
+  formulaVersion: string;
+  aiSuggestedQuantity: number;
+  actualQuantity: number;
+  errorQuantity: number;
+  errorPercent: number;
+  note: string;
+  createdAt: string;
+};
+
+type AiFeedbackStats = {
+  count: number;
+  meanAbsoluteErrorPercent: number;
+  averageBiasPercent: number;
+  latest?: AiSuggestionFeedback;
 };
 
 type SupplierCatalogInput = {
@@ -190,41 +236,323 @@ const usageSeasons = [
   { id: "rainy", label: "ฤดูฝน", helper: "มิ.ย.-ต.ค.", months: [6, 7, 8, 9, 10] },
 ];
 
+const persistentKeys = {
+  suppliers: "suppliers",
+  skus: "skus",
+  inventoryRecords: "inventoryRecords",
+  supplierOffers: "supplierOffers",
+  requests: "purchaseRequests",
+  contactLogs: "supplierContactLogs",
+  changeLogs: "changeLogs",
+  formulaPolicy: "formulaPolicy",
+  formulaVersions: "formulaVersions",
+  aiFeedbackLogs: "aiFeedbackLogs",
+  budgetSettings: "budgetSettings",
+};
+
+const defaultFormulaPolicy: FormulaPolicyState = {
+  formulaVersion,
+  serviceLevel: 0.95,
+  zScore: calculateZScoreFromServiceLevel(0.95),
+  seasonalFactor: 1.2,
+  budgetFactor: 1,
+  highVarianceThreshold: 50,
+};
+
+const defaultFormulaVersions: FormulaVersionRecord[] = [
+  {
+    ...defaultFormulaPolicy,
+    createdAt: "2026-05-05 09:00",
+    note: "นโยบายสูตรเริ่มต้นของข้อมูล seed",
+  },
+];
+
+function buildDefaultBudgetSettings(): BudgetSettingsState {
+  return {
+    localBudgets: Object.fromEntries(warehouses.map((warehouse) => [warehouse.id, warehouse.localBudget])),
+    regionalBudgets: Object.fromEntries(regionalBudgets.map((budget) => [budget.region, budget.remaining])) as Record<BudgetRegion, number>,
+    centralBudgetRemaining,
+    updatedAt: "2026-05-05 09:00:00",
+  };
+}
+
+const defaultBudgetSettings = buildDefaultBudgetSettings();
+
+function normalizeBudgetSettings(settings: BudgetSettingsState): BudgetSettingsState {
+  // เผื่อกรณี user เคยมี localStorage version เก่าที่ไม่มีคลังหรือเขตใหม่
+  // ระบบจะเติมค่าตั้งต้นจาก seed โดยไม่ทับค่าที่ผู้ใช้เคยแก้ไว้
+  return {
+    localBudgets: {
+      ...defaultBudgetSettings.localBudgets,
+      ...settings.localBudgets,
+    },
+    regionalBudgets: {
+      ...defaultBudgetSettings.regionalBudgets,
+      ...settings.regionalBudgets,
+    },
+    centralBudgetRemaining: settings.centralBudgetRemaining ?? defaultBudgetSettings.centralBudgetRemaining,
+    updatedAt: settings.updatedAt ?? defaultBudgetSettings.updatedAt,
+  };
+}
+
+function budgetSettingsToInputDraft(settings: BudgetSettingsState): BudgetInputDraftState {
+  return {
+    localBudgets: Object.fromEntries(
+      warehouses.map((warehouse) => [warehouse.id, String(settings.localBudgets[warehouse.id] ?? warehouse.localBudget)]),
+    ),
+    regionalBudgets: Object.fromEntries(
+      regionalBudgets.map((budget) => [budget.region, String(settings.regionalBudgets[budget.region] ?? budget.remaining)]),
+    ) as Record<BudgetRegion, string>,
+    centralBudgetRemaining: String(settings.centralBudgetRemaining),
+    updatedAt: settings.updatedAt,
+  };
+}
+
+function parseBudgetInput(value: string, fallback = 0) {
+  const trimmedValue = value.trim();
+
+  if (trimmedValue === "") return 0;
+
+  const parsedValue = Number(trimmedValue);
+
+  return Number.isFinite(parsedValue) ? Math.max(0, parsedValue) : fallback;
+}
+
+function budgetInputDraftToSettings(draft: BudgetInputDraftState, fallback: BudgetSettingsState = defaultBudgetSettings): BudgetSettingsState {
+  return {
+    localBudgets: Object.fromEntries(
+      warehouses.map((warehouse) => [
+        warehouse.id,
+        parseBudgetInput(draft.localBudgets[warehouse.id] ?? "", fallback.localBudgets[warehouse.id] ?? warehouse.localBudget),
+      ]),
+    ),
+    regionalBudgets: Object.fromEntries(
+      regionalBudgets.map((budget) => [
+        budget.region,
+        parseBudgetInput(draft.regionalBudgets[budget.region] ?? "", fallback.regionalBudgets[budget.region] ?? budget.remaining),
+      ]),
+    ) as Record<BudgetRegion, number>,
+    centralBudgetRemaining: parseBudgetInput(draft.centralBudgetRemaining, fallback.centralBudgetRemaining),
+    updatedAt: draft.updatedAt || fallback.updatedAt,
+  };
+}
+
+function replaceArrayContents<T>(target: T[], source: T[]) {
+  target.splice(0, target.length, ...source);
+}
+
+function cloneJson<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function buildFormulaHistoryBaseline(policy: FormulaPolicyState, createdAt: string): FormulaVersionRecord {
+  return {
+    ...policy,
+    createdAt,
+    note: "ตั้งเป็น baseline หลังล้างประวัติทดสอบ",
+  };
+}
+
+function getNextFormulaVersion(currentVersion: string) {
+  const fallbackVersion = currentVersion.trim() || "v1.0";
+  const match = fallbackVersion.match(/^(.*?)(\d+)(?!.*\d)(.*)$/);
+
+  if (!match) return `${fallbackVersion}-next`;
+
+  const [, prefix, numberPart, suffix] = match;
+  const nextNumber = String(Number(numberPart) + 1).padStart(numberPart.length, "0");
+
+  return `${prefix}${nextNumber}${suffix}`;
+}
+
+function calculateAiSuggestionError(aiSuggestedQuantity: number, actualQuantity: number) {
+  const errorQuantity = actualQuantity - aiSuggestedQuantity;
+  const errorPercent = aiSuggestedQuantity === 0 ? (actualQuantity > 0 ? 100 : 0) : (errorQuantity / aiSuggestedQuantity) * 100;
+
+  return { errorQuantity, errorPercent };
+}
+
+function buildAiFeedbackStats(logs: AiSuggestionFeedback[]): AiFeedbackStats {
+  if (logs.length === 0) {
+    return {
+      count: 0,
+      meanAbsoluteErrorPercent: 0,
+      averageBiasPercent: 0,
+    };
+  }
+
+  const meanAbsoluteErrorPercent = logs.reduce((sum, log) => sum + Math.abs(log.errorPercent), 0) / logs.length;
+  const averageBiasPercent = logs.reduce((sum, log) => sum + log.errorPercent, 0) / logs.length;
+
+  return {
+    count: logs.length,
+    meanAbsoluteErrorPercent,
+    averageBiasPercent,
+    latest: logs[0],
+  };
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function roundTo(value: number, decimals: number) {
+  const multiplier = Math.pow(10, decimals);
+  return Math.round(value * multiplier) / multiplier;
+}
+
+function buildAutoTunedFormulaPolicy(basePolicy: FormulaPolicyState, errorPercent: number): FormulaPolicyState {
+  // AI Feedback loop สำหรับ PoC:
+  // error เป็นบวก = ระบบแนะนำน้อยกว่าค่าจริง จึงเพิ่มความ conservative ทีละน้อย
+  // error เป็นลบ = ระบบแนะนำมากกว่าค่าจริง จึงลด buffer ทีละน้อย
+  // ทุกครั้งที่ปรับต้องออกเป็น formula version ใหม่ ไม่แก้ snapshot เดิมย้อนหลัง
+  const direction = errorPercent > 0 ? 1 : -1;
+  const serviceLevel = roundTo(clampNumber(basePolicy.serviceLevel + direction * 0.005, 0.8, 0.995), 3);
+  const seasonalFactor = roundTo(clampNumber(basePolicy.seasonalFactor + direction * 0.02, 0.8, 1.8), 2);
+
+  return applyAutoFormulaVersion(basePolicy, {
+    ...basePolicy,
+    serviceLevel,
+    zScore: calculateZScoreFromServiceLevel(serviceLevel),
+    seasonalFactor,
+  });
+}
+
+function hasFormulaPolicyValueChange(basePolicy: FormulaPolicyState, nextPolicy: FormulaPolicyState) {
+  return (
+    basePolicy.serviceLevel !== nextPolicy.serviceLevel ||
+    basePolicy.seasonalFactor !== nextPolicy.seasonalFactor ||
+    basePolicy.budgetFactor !== nextPolicy.budgetFactor ||
+    basePolicy.highVarianceThreshold !== nextPolicy.highVarianceThreshold
+  );
+}
+
+function applyAutoFormulaVersion(basePolicy: FormulaPolicyState, nextPolicy: FormulaPolicyState): FormulaPolicyState {
+  const policyWithDerivedZScore = {
+    ...nextPolicy,
+    zScore: calculateZScoreFromServiceLevel(nextPolicy.serviceLevel),
+  };
+  const formulaVersion = hasFormulaPolicyValueChange(basePolicy, policyWithDerivedZScore)
+    ? getNextFormulaVersion(basePolicy.formulaVersion)
+    : basePolicy.formulaVersion;
+
+  return {
+    ...policyWithDerivedZScore,
+    formulaVersion,
+  };
+}
+
+function hydratePersistentSeedData() {
+  // Seed data ใช้เฉพาะตอนเปิดระบบครั้งแรก หลังจากนั้นข้อมูล master ที่ผู้ใช้แก้จะถูกโหลดจาก JSON storage
+  replaceArrayContents(suppliers, loadPersistentJson(persistentKeys.suppliers, suppliers));
+  replaceArrayContents(skus, loadPersistentJson(persistentKeys.skus, skus));
+  replaceArrayContents(inventoryRecords, loadPersistentJson(persistentKeys.inventoryRecords, inventoryRecords));
+}
+
+function getBangkokDateParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Bangkok",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const getPart = (type: string) => parts.find((part) => part.type === type)?.value ?? "00";
+
+  return {
+    year: getPart("year"),
+    month: getPart("month"),
+    day: getPart("day"),
+    hour: getPart("hour"),
+    minute: getPart("minute"),
+    second: getPart("second"),
+  };
+}
+
+function getCurrentDateTimeLabel(date = new Date()) {
+  const parts = getBangkokDateParts(date);
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`;
+}
+
+function getDateInputValue(date = new Date()) {
+  const parts = getBangkokDateParts(date);
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function addDays(date: Date, days: number) {
+  const nextDate = new Date(date);
+  nextDate.setDate(nextDate.getDate() + days);
+  return nextDate;
+}
+
+function getNextRequestId(requests: PurchaseRequest[]) {
+  const usedNumbers = new Set(
+    requests
+      .map((request) => Number(request.id.replace(/^REQ-/, "")))
+      .filter((value) => Number.isInteger(value) && value > 0),
+  );
+  let nextNumber = 1;
+
+  while (usedNumbers.has(nextNumber)) {
+    nextNumber += 1;
+  }
+
+  return `REQ-${String(nextNumber).padStart(3, "0")}`;
+}
+
 function App() {
+  const [masterDataVersion, setMasterDataVersion] = useState(() => {
+    hydratePersistentSeedData();
+    return 0;
+  });
   const [view, setView] = useState<View>("dashboard");
   const [selectedSkuId, setSelectedSkuId] = useState("C01");
   const [selectedSupplierId, setSelectedSupplierId] = useState("S001");
   const [selectedRequestId, setSelectedRequestId] = useState("REQ-002");
   const [approvalTab, setApprovalTab] = useState<ApprovalTab>("regional");
   const [toast, setToast] = useState("");
-  const [editableSupplierOffers, setEditableSupplierOffers] = useState<SupplierOffer[]>(supplierOffers);
-  const [formulaPolicy, setFormulaPolicy] = useState<FormulaPolicyState>({
-    formulaVersion,
-    serviceLevel: 0.95,
-    zScore: calculateZScoreFromServiceLevel(0.95),
-    seasonalFactor: 1.2,
-    budgetFactor: 1,
-    highVarianceThreshold: 50,
-  });
-  const [changeLogs, setChangeLogs] = useState<ChangeLogEntry[]>([]);
-  const [formulaVersions, setFormulaVersions] = useState<FormulaVersionRecord[]>([
-    {
-      formulaVersion: formulaPolicy.formulaVersion,
-      serviceLevel: 0.95,
-      zScore: calculateZScoreFromServiceLevel(0.95),
-      seasonalFactor: 1.2,
-      budgetFactor: 1,
-      highVarianceThreshold: 50,
-      createdAt: "2026-05-05 09:00",
-      note: "นโยบายสูตรเริ่มต้นของต้นแบบจำลอง",
-    },
-  ]);
+  const [editableSupplierOffers, setEditableSupplierOffers] = useState<SupplierOffer[]>(() =>
+    loadPersistentJson(persistentKeys.supplierOffers, supplierOffers),
+  );
+  const [formulaPolicy, setFormulaPolicy] = useState<FormulaPolicyState>(() =>
+    loadPersistentJson(persistentKeys.formulaPolicy, defaultFormulaPolicy),
+  );
+  const [changeLogs, setChangeLogs] = useState<ChangeLogEntry[]>(() => loadPersistentJson(persistentKeys.changeLogs, []));
+  const [formulaVersions, setFormulaVersions] = useState<FormulaVersionRecord[]>(() =>
+    loadPersistentJson(persistentKeys.formulaVersions, defaultFormulaVersions),
+  );
+  const [budgetSettings, setBudgetSettings] = useState<BudgetSettingsState>(() =>
+    normalizeBudgetSettings(loadPersistentJson(persistentKeys.budgetSettings, defaultBudgetSettings)),
+  );
 
-  // จุดต่อ API ในอนาคต: เปลี่ยน in-memory store เหล่านี้เป็น service call
-  // ไปยังระบบ SAP/procurement/budget โดยยังคง snapshot ของคำขอให้แก้ย้อนหลังไม่ได้
-  const [requests, setRequests] = useState<PurchaseRequest[]>(initialRequests);
-  const [contactLogs, setContactLogs] = useState<SupplierContactLog[]>(initialContactLogs);
+  // จุดต่อ API ในอนาคต: ตอนนี้ state เหล่านี้ persist เป็น JSON ใน browser storage
+  // เมื่อมี backend ให้เปลี่ยนเป็น service call โดยยังคง snapshot ของคำขอให้แก้ย้อนหลังไม่ได้
+  const [requests, setRequests] = useState<PurchaseRequest[]>(() => loadPersistentJson(persistentKeys.requests, initialRequests));
+  const [contactLogs, setContactLogs] = useState<SupplierContactLog[]>(() =>
+    loadPersistentJson(persistentKeys.contactLogs, initialContactLogs),
+  );
+  const [aiFeedbackLogs, setAiFeedbackLogs] = useState<AiSuggestionFeedback[]>(() => loadPersistentJson(persistentKeys.aiFeedbackLogs, []));
   const [submittedConfirmation, setSubmittedConfirmation] = useState<PurchaseRequest | null>(null);
+
+  useEffect(() => {
+    savePersistentJson(persistentKeys.suppliers, suppliers);
+    savePersistentJson(persistentKeys.skus, skus);
+    savePersistentJson(persistentKeys.inventoryRecords, inventoryRecords);
+  }, [masterDataVersion]);
+
+  useEffect(() => savePersistentJson(persistentKeys.supplierOffers, editableSupplierOffers), [editableSupplierOffers]);
+  useEffect(() => savePersistentJson(persistentKeys.formulaPolicy, formulaPolicy), [formulaPolicy]);
+  useEffect(() => savePersistentJson(persistentKeys.changeLogs, changeLogs), [changeLogs]);
+  useEffect(() => savePersistentJson(persistentKeys.formulaVersions, formulaVersions), [formulaVersions]);
+  useEffect(() => savePersistentJson(persistentKeys.budgetSettings, budgetSettings), [budgetSettings]);
+  useEffect(() => savePersistentJson(persistentKeys.requests, requests), [requests]);
+  useEffect(() => savePersistentJson(persistentKeys.contactLogs, contactLogs), [contactLogs]);
+  useEffect(() => savePersistentJson(persistentKeys.aiFeedbackLogs, aiFeedbackLogs), [aiFeedbackLogs]);
+
+  const markMasterDataChanged = () => setMasterDataVersion((version) => version + 1);
 
   const notify = (message: string) => {
     setToast(message);
@@ -239,7 +567,7 @@ function App() {
         ...entry,
         id: `CHG-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         actor: "Demo Admin",
-        createdAt: "2026-05-05 14:30",
+        createdAt: getCurrentDateTimeLabel(),
       },
       ...current,
     ]);
@@ -299,6 +627,7 @@ function App() {
     } else {
       suppliers.push(supplier);
     }
+    markMasterDataChanged();
 
     addChangeLog({
       area: "Supplier",
@@ -327,6 +656,7 @@ function App() {
 
     if (existingIndex >= 0) {
       suppliers[existingIndex] = updated;
+      markMasterDataChanged();
     }
 
     // Contact/profile edit ถูกย้ายมาไว้ใน Supplier Detail
@@ -394,6 +724,7 @@ function App() {
     } else {
       inventoryRecords.push(inventoryWithStatus);
     }
+    markMasterDataChanged();
 
     // Supplier Offer เป็น state อยู่แล้ว เพราะผู้ใช้แก้ราคา/Lead Time/MOQ ได้ในหน้า Supplier Detail
     // เมื่อเพิ่ม catalog ใหม่จึง upsert เข้า state นี้เพื่อให้ calculation engine ใช้ราคากับ MOQ ล่าสุด
@@ -427,15 +758,37 @@ function App() {
 
   const saveFormulaPolicy = (nextPolicy: FormulaPolicyState, note: string) => {
     const previous = formulaPolicy;
-    const policyWithDerivedZScore = {
-      ...nextPolicy,
-      zScore: calculateZScoreFromServiceLevel(nextPolicy.serviceLevel),
-    };
+    const policyWithDerivedZScore = applyAutoFormulaVersion(previous, nextPolicy);
+
+    if (!hasFormulaPolicyValueChange(previous, policyWithDerivedZScore)) {
+      notify("ยังไม่มีการเปลี่ยนค่านโยบาย สูตรจึงยังไม่สร้างเวอร์ชันใหม่");
+      return;
+    }
+
     setFormulaPolicy(policyWithDerivedZScore);
-    setFormulaVersions((current) => [{ ...policyWithDerivedZScore, createdAt: "2026-05-05 14:30", note }, ...current]);
+    setFormulaVersions((current) => [{ ...policyWithDerivedZScore, createdAt: getCurrentDateTimeLabel(), note }, ...current]);
 
     addFormulaPolicyChangeLogs(previous, policyWithDerivedZScore, note, addChangeLog);
     notify(`บันทึกสูตรคำนวณ ${policyWithDerivedZScore.formulaVersion} แล้ว`);
+  };
+
+  const saveBudgetSettings = (nextSettings: BudgetSettingsState, note: string) => {
+    const previous = budgetSettings;
+    const normalizedSettings = normalizeBudgetSettings({
+      ...nextSettings,
+      updatedAt: getCurrentDateTimeLabel(),
+    });
+
+    if (!hasBudgetSettingsChange(previous, normalizedSettings)) {
+      notify("ยังไม่มีการเปลี่ยนค่างบประมาณ");
+      return;
+    }
+
+    // งบประมาณเป็น source สำหรับ Budget Check และ Approval Routing ครั้งถัดไป
+    // Request/Snapshot เดิมต้องไม่ถูกแก้ย้อนหลัง จึงเก็บเป็น state ปัจจุบันแยกจาก snapshot
+    setBudgetSettings(normalizedSettings);
+    addBudgetChangeLogs(previous, normalizedSettings, note, addChangeLog);
+    notify("บันทึกค่างบประมาณแล้ว");
   };
 
   const copyToClipboard = (value: string) => {
@@ -449,10 +802,18 @@ function App() {
   };
 
   const submitRequest = (request: PurchaseRequest) => {
+    const feedbackAction: GooglePoFeedbackAction = request.status === "Draft" ? "draft_saved" : "request_submitted";
+
     setRequests((current) => [request, ...current.filter((item) => item.id !== request.id)]);
     setSelectedRequestId(request.id);
     setApprovalTab(request.status === "Pending Central" ? "central" : "regional");
     setView(request.status === "Draft" ? "history" : "approval");
+    void sendGooglePoFeedback({
+      action: feedbackAction,
+      request,
+      actionAt: getCurrentDateTimeLabel(),
+      note: request.status === "Draft" ? "บันทึกแบบร่าง" : "ส่งคำขอซื้อเข้าคิวอนุมัติ",
+    });
     // แสดงสรุปหลัง submit เพื่อย้ำว่า request, route และ Calculation Snapshot ถูกบันทึกแล้ว
     if (request.status !== "Draft") {
       setSubmittedConfirmation(request);
@@ -471,28 +832,93 @@ function App() {
     notify("บันทึกประวัติการติดต่อแล้ว");
   };
 
+  const saveAiSuggestionFeedback = (request: PurchaseRequest, actualQuantity: number, note: string) => {
+    const { errorQuantity, errorPercent } = calculateAiSuggestionError(request.aiSuggestedQuantity, actualQuantity);
+    const shouldAutoTune = Math.abs(errorPercent) >= formulaPolicy.highVarianceThreshold;
+    const feedback: AiSuggestionFeedback = {
+      id: `AIFB-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      requestId: request.id,
+      skuId: request.skuId,
+      warehouseId: request.warehouseId,
+      formulaVersion: request.formulaVersion,
+      aiSuggestedQuantity: request.aiSuggestedQuantity,
+      actualQuantity,
+      errorQuantity,
+      errorPercent,
+      note: note || "บันทึกผลจริงเพื่อเทียบกับ AI Suggest",
+      createdAt: getCurrentDateTimeLabel(),
+    };
+
+    // เก็บ feedback loop เพื่อวัด error ของ AI Suggest และใช้เป็นหลักฐานสำหรับปรับสูตรเวอร์ชันถัดไป
+    setAiFeedbackLogs((current) => [feedback, ...current]);
+
+    if (shouldAutoTune) {
+      const previousPolicy = formulaPolicy;
+      const tunedPolicy = buildAutoTunedFormulaPolicy(previousPolicy, errorPercent);
+
+      if (hasFormulaPolicyValueChange(previousPolicy, tunedPolicy)) {
+        const autoTuneNote = `Auto-tune จาก AI Feedback ${request.id}: error ${formatPercent(errorPercent)} เทียบค่าที่ระบบแนะนำกับค่าจริง`;
+
+        // ถ้า error เกินเกณฑ์ ระบบปรับ policy แบบก้าวเล็กและสร้าง version ใหม่ทันที
+        // เพื่อให้คำแนะนำครั้งถัดไปเรียนรู้จากค่าจริง แต่ยังรักษา snapshot เก่าตามเดิม
+        setFormulaPolicy(tunedPolicy);
+        setFormulaVersions((current) => [{ ...tunedPolicy, createdAt: getCurrentDateTimeLabel(), note: autoTuneNote }, ...current]);
+        addFormulaPolicyChangeLogs(previousPolicy, tunedPolicy, autoTuneNote, addChangeLog);
+        notify(`บันทึก AI feedback แล้ว · error ${formatPercent(errorPercent)} · ปรับสูตรเป็น ${tunedPolicy.formulaVersion}`);
+        return;
+      }
+    }
+
+    notify(`บันทึก AI feedback แล้ว · error ${formatPercent(errorPercent)}`);
+  };
+
   const updateRequest = (id: string, status: PurchaseRequest["status"], action: string, note?: string) => {
+    const actionAt = getCurrentDateTimeLabel();
+    const getFeedbackAction = (): GooglePoFeedbackAction => {
+      if (status === "Pending Central") return "regional_escalated";
+      if (status === "Approved") return "approved";
+      if (status === "Rejected") return "rejected";
+      if (status === "More Info") return "more_info_requested";
+      return "approval_action";
+    };
+    const buildUpdatedRequest = (request: PurchaseRequest): PurchaseRequest => ({
+      ...request,
+      status,
+      approvedQuantity: status === "Approved" ? request.requestedQuantity : request.approvedQuantity,
+      calculationSnapshot:
+        status === "Approved"
+          ? {
+              ...request.calculationSnapshot,
+              approvedQuantity: request.requestedQuantity,
+            }
+          : request.calculationSnapshot,
+      timeline: [
+        ...request.timeline,
+        {
+          role: status === "Pending Central" ? "Regional" : approvalTab === "central" ? "Central" : "Regional",
+          action,
+          actor: status === "Pending Central" ? "ผู้ตรวจระดับเขต" : approvalTab === "central" ? "จัดซื้อส่วนกลาง" : "ผู้ตรวจระดับเขต",
+          date: actionAt,
+          note,
+        },
+      ],
+    });
+    const feedbackRequest = requests.find((request) => request.id === id);
+
     setRequests((current) =>
       current.map((request) =>
-        request.id === id
-          ? {
-              ...request,
-              status,
-              approvedQuantity: status === "Approved" ? request.requestedQuantity : request.approvedQuantity,
-              timeline: [
-                ...request.timeline,
-                {
-                  role: status === "Pending Central" ? "Regional" : approvalTab === "central" ? "Central" : "Regional",
-                  action,
-                  actor: status === "Pending Central" ? "ผู้ตรวจระดับเขต" : approvalTab === "central" ? "จัดซื้อส่วนกลาง" : "ผู้ตรวจระดับเขต",
-                  date: "2026-05-05 14:00",
-                  note,
-                },
-              ],
-            }
-          : request,
+        request.id === id ? buildUpdatedRequest(request) : request,
       ),
     );
+    if (feedbackRequest) {
+      void sendGooglePoFeedback({
+        action: getFeedbackAction(),
+        request: buildUpdatedRequest(feedbackRequest),
+        actionAt,
+        note,
+        actor: approvalTab === "central" ? "จัดซื้อส่วนกลาง" : "ผู้ตรวจระดับเขต",
+      });
+    }
     if (status === "Pending Central") {
       setSelectedRequestId(id);
       setApprovalTab("central");
@@ -500,10 +926,42 @@ function App() {
     notify(`${id}: ${action}`);
   };
 
+  const clearDemoHistory = () => {
+    const confirmed = window.confirm("ต้องการล้างประวัติทดสอบและ log กลับเป็นค่าเริ่มต้นหรือไม่? ข้อมูล Supplier, SKU, งบประมาณ และค่าตั้งค่าปัจจุบันจะไม่ถูกลบ");
+
+    if (!confirmed) return;
+
+    // ใช้สำหรับช่วง demo/test ที่สร้าง request และ log จำนวนมาก
+    // รีเซ็ตเฉพาะ history/audit-like data โดยไม่แตะ master data หรือ policy ปัจจุบัน
+    const resetAt = getCurrentDateTimeLabel();
+    const resetRequests = cloneJson(initialRequests);
+    const resetContactLogs = cloneJson(initialContactLogs);
+    const resetChangeLogs: ChangeLogEntry[] = [];
+    const resetFormulaVersions = [buildFormulaHistoryBaseline(formulaPolicy, resetAt)];
+    const resetAiFeedbackLogs: AiSuggestionFeedback[] = [];
+
+    // เขียนลง persistent JSON โดยตรงก่อน setState เพื่อกันข้อมูลเก่าค้างหลัง refresh
+    savePersistentJson(persistentKeys.requests, resetRequests);
+    savePersistentJson(persistentKeys.contactLogs, resetContactLogs);
+    savePersistentJson(persistentKeys.changeLogs, resetChangeLogs);
+    savePersistentJson(persistentKeys.formulaVersions, resetFormulaVersions);
+    savePersistentJson(persistentKeys.aiFeedbackLogs, resetAiFeedbackLogs);
+
+    setRequests(resetRequests);
+    setContactLogs(resetContactLogs);
+    setChangeLogs(resetChangeLogs);
+    setFormulaVersions(resetFormulaVersions);
+    setAiFeedbackLogs(resetAiFeedbackLogs);
+    setSubmittedConfirmation(null);
+    setSelectedRequestId(resetRequests[0]?.id ?? "");
+    setApprovalTab("regional");
+    notify("ล้างประวัติทดสอบและรีเซ็ต log แล้ว");
+  };
+
   const page = (() => {
     switch (view) {
       case "dashboard":
-        return <DashboardPage openSku={openSku} requests={requests} supplierOfferData={editableSupplierOffers} formulaPolicy={formulaPolicy} />;
+        return <DashboardPage openSku={openSku} requests={requests} supplierOfferData={editableSupplierOffers} formulaPolicy={formulaPolicy} aiFeedbackLogs={aiFeedbackLogs} budgetSettings={budgetSettings} />;
       case "inventory":
         return <InventoryPage openSku={openSku} supplierOfferData={editableSupplierOffers} formulaPolicy={formulaPolicy} />;
       case "usage":
@@ -514,6 +972,7 @@ function App() {
             skuId={selectedSkuId}
             supplierOfferData={editableSupplierOffers}
             formulaPolicy={formulaPolicy}
+            budgetSettings={budgetSettings}
             onBack={() => setView("inventory")}
             onCalculation={() => setView("calculation")}
             onCreateRequest={(supplierId) => {
@@ -533,6 +992,7 @@ function App() {
             skuId={selectedSkuId}
             supplierOfferData={editableSupplierOffers}
             formulaPolicy={formulaPolicy}
+            budgetSettings={budgetSettings}
             request={requests.find((item) => item.id === selectedRequestId)}
             onBack={() => setView("sku-detail")}
           />
@@ -581,6 +1041,8 @@ function App() {
             supplierId={selectedSupplierId}
             supplierOfferData={editableSupplierOffers}
             formulaPolicy={formulaPolicy}
+            budgetSettings={budgetSettings}
+            existingRequests={requests}
             onBack={() => setView("sku-detail")}
             onContactSupplier={(supplierId) => {
               setSelectedSupplierId(supplierId);
@@ -615,16 +1077,34 @@ function App() {
           <RequestHistoryPage
             requests={requests}
             contactLogs={contactLogs}
+            aiFeedbackLogs={aiFeedbackLogs}
             selectedRequestId={selectedRequestId}
             onSelectRequest={setSelectedRequestId}
+            onSaveFeedback={saveAiSuggestionFeedback}
           />
         );
       case "vmi":
         return <VmiCandidatePage onSimulation={() => setView("vmi-simulation")} openSku={openSku} />;
       case "vmi-simulation":
         return <VmiSimulationPage supplierOfferData={editableSupplierOffers} formulaPolicy={formulaPolicy} onBack={() => setView("vmi")} onCreateProposal={() => notify("สร้างข้อเสนอ VMI แบบร่างแล้ว")} />;
+      case "budget-settings":
+        return (
+          <BudgetSettingsPage
+            budgetSettings={budgetSettings}
+            changeLogs={changeLogs}
+            onSave={saveBudgetSettings}
+          />
+        );
       case "settings":
-        return <SettingsPage formulaPolicy={formulaPolicy} formulaVersions={formulaVersions} changeLogs={changeLogs} onSaveFormulaPolicy={saveFormulaPolicy} />;
+        return (
+          <SettingsPage
+            formulaPolicy={formulaPolicy}
+            formulaVersions={formulaVersions}
+            changeLogs={changeLogs}
+            onSaveFormulaPolicy={saveFormulaPolicy}
+            onClearDemoHistory={clearDemoHistory}
+          />
+        );
       default:
         return null;
     }
@@ -737,6 +1217,7 @@ function AppLayout({
     { id: "approval", label: "อนุมัติ", icon: ClipboardCheck },
     { id: "history", label: "ประวัติ", icon: History },
     { id: "vmi", label: "VMI", icon: Workflow },
+    { id: "budget-settings", label: "งบประมาณ", icon: Landmark },
     { id: "settings", label: "ตั้งค่า", icon: Settings },
   ] as const;
 
@@ -888,25 +1369,171 @@ function PageTitle({
   );
 }
 
+type EditableNumberInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "value" | "onChange"> & {
+  value: number;
+  onValueChange: (value: number) => void;
+};
+
+function EditableNumberInput({
+  value,
+  onValueChange,
+  className = inputClass,
+  onBlur,
+  onFocus,
+  ...props
+}: EditableNumberInputProps) {
+  const [draftValue, setDraftValue] = useState(String(value));
+  const [isFocused, setIsFocused] = useState(false);
+
+  // เก็บค่าระหว่างพิมพ์เป็น string เพื่อให้ผู้ใช้ลบ 0 ออกจนช่องว่างได้
+  // แล้วค่อยส่งค่าตัวเลขกลับไปคำนวณเมื่อกรอกเป็นตัวเลขที่ถูกต้อง
+  useEffect(() => {
+    if (!isFocused) {
+      setDraftValue(String(value));
+    }
+  }, [isFocused, value]);
+
+  return (
+    <input
+      {...props}
+      className={className}
+      type="number"
+      value={draftValue}
+      onFocus={(event) => {
+        setIsFocused(true);
+        onFocus?.(event);
+      }}
+      onBlur={(event) => {
+        setIsFocused(false);
+        const parsed = Number(draftValue);
+
+        if (draftValue.trim() === "" || !Number.isFinite(parsed)) {
+          setDraftValue(String(value));
+        }
+
+        onBlur?.(event);
+      }}
+      onChange={(event) => {
+        const nextValue = event.target.value;
+        setDraftValue(nextValue);
+
+        if (nextValue.trim() === "") return;
+
+        const parsed = Number(nextValue);
+        if (Number.isFinite(parsed)) {
+          onValueChange(parsed);
+        }
+      }}
+    />
+  );
+}
+
+function getSharedUsageWarehouseOptions() {
+  const warehouseIdsWithUsage = new Set(peaMonthlyUsage.map((usage) => usage.warehouseId));
+
+  // ใช้ WH master + monthly usage เป็น source กลางของตัวเลือกคลัง
+  // เพื่อให้ Dashboard และหน้าการใช้ SKU เห็นรายการคลังชุดเดียวกันเสมอ
+  return peaWarehouseMaster.filter((warehouse) => warehouseIdsWithUsage.has(warehouse.warehouseId));
+}
+
+function getSharedUsageRegionOptions() {
+  const usageWarehouseOptions = getSharedUsageWarehouseOptions();
+
+  // Region/เขต ต้องมาจาก WH master ชุดเดียวกับ usage ไม่ใช้ค่าคงที่คนละหน้า
+  return Array.from(new Set(usageWarehouseOptions.map((warehouse) => warehouse.regionCode))).sort();
+}
+
+function getSharedUsageSkuOptions() {
+  const skuIdsWithUsage = new Set(peaMonthlyUsage.map((usage) => usage.skuId));
+
+  // SKU filter ใช้ SKU master ที่มี usage จริงเท่านั้น เพื่อป้องกันเลือกแล้วตารางว่างโดยไม่จำเป็น
+  return peaSkuMaster.filter((sku) => skuIdsWithUsage.has(sku.skuId));
+}
+
+function getFilteredUsageWarehouseOptions(selectedRegionCode: string) {
+  return getSharedUsageWarehouseOptions().filter((warehouse) => selectedRegionCode === "all" || warehouse.regionCode === selectedRegionCode);
+}
+
+function getSelectedUsageWarehouseIds(selectedRegionCode: string, selectedWarehouseId: string) {
+  if (selectedWarehouseId !== "all") return [selectedWarehouseId];
+
+  return getFilteredUsageWarehouseOptions(selectedRegionCode).map((warehouse) => warehouse.warehouseId);
+}
+
+function filterWarehouseUsageRows(rows: WarehouseUsageRow[], selectedSkuId: string, search: string) {
+  const keyword = search.trim().toLowerCase();
+
+  return rows
+    .filter((row) => selectedSkuId === "all" || row.skuId === selectedSkuId)
+    .filter((row) => {
+      if (!keyword) return true;
+      return `${row.skuId} ${row.skuName} ${row.category} ${row.warehouseLabel} ${row.regionLabel}`.toLowerCase().includes(keyword);
+    });
+}
+
 function DashboardPage({
   openSku,
   requests,
   supplierOfferData,
   formulaPolicy,
+  aiFeedbackLogs,
+  budgetSettings,
 }: {
   openSku: (skuId: string) => void;
   requests: PurchaseRequest[];
   supplierOfferData: SupplierOffer[];
   formulaPolicy: FormulaPolicyState;
+  aiFeedbackLogs: AiSuggestionFeedback[];
+  budgetSettings: BudgetSettingsState;
 }) {
+  const [selectedRegionCode, setSelectedRegionCode] = useState("all");
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState("all");
+  const [selectedSkuId, setSelectedSkuId] = useState("all");
+  const [dashboardSearch, setDashboardSearch] = useState("");
   const pendingCount = requests.filter((request) => request.status.startsWith("Pending")).length;
-  const riskCount = inventoryRecords.filter((record) => record.status !== "Normal").length;
+  const regionOptions = getSharedUsageRegionOptions();
+  const warehouseOptions = getFilteredUsageWarehouseOptions(selectedRegionCode);
+  const skuOptions = getSharedUsageSkuOptions();
+  const selectedWarehouseIds = getSelectedUsageWarehouseIds(selectedRegionCode, selectedWarehouseId);
+  const selectedWarehouseIdSet = new Set(selectedWarehouseIds);
+  const dashboardUsageRows = filterWarehouseUsageRows(buildWarehouseUsageRows(selectedWarehouseIds), selectedSkuId, dashboardSearch);
+  const dashboardSkuCount = dashboardUsageRows.length;
+  const dashboardAnnualUsage = dashboardUsageRows.reduce((sum, row) => sum + row.total, 0);
+  const dashboardKeyword = dashboardSearch.trim().toLowerCase();
+  const filteredRelationshipRecords = peaRiskCoverageRecords.filter((record) => {
+    const sku = peaSkuMaster.find((item) => item.skuId === record.skuId);
+    const matchesWarehouse = selectedWarehouseIdSet.has(record.plantId);
+    const matchesSku = selectedSkuId === "all" || record.skuId === selectedSkuId;
+    const matchesSearch =
+      !dashboardKeyword ||
+      `${record.skuId} ${sku?.skuName ?? ""} ${sku?.category ?? ""} ${record.plantId} ${formatPeaRegionCode(record.regionCode)}`.toLowerCase().includes(dashboardKeyword);
+
+    return matchesWarehouse && matchesSku && matchesSearch;
+  });
+  const filteredInventoryRecords = inventoryRecords.filter((record) => {
+    const sku = getSku(record.skuId);
+    const matchesWarehouse = selectedWarehouseIdSet.has(record.warehouseId);
+    const matchesSku = selectedSkuId === "all" || resolvePeaSkuId(record.skuId) === selectedSkuId;
+    const matchesSearch =
+      !dashboardKeyword || `${record.skuId} ${resolvePeaSkuId(record.skuId)} ${sku.name} ${sku.category} ${record.warehouseId}`.toLowerCase().includes(dashboardKeyword);
+
+    return matchesWarehouse && matchesSku && matchesSearch;
+  });
+  const riskCount = filteredRelationshipRecords.filter((record) => record.riskStatus.startsWith("Critical") || record.stockCoverPeriods < 1).length;
+  const vmiCandidateCount = filteredRelationshipRecords.filter((record) => record.vmiScore >= 80).length;
+  const aiFeedbackStats = buildAiFeedbackStats(aiFeedbackLogs);
   const relationshipCoveragePercent =
     peaRelationshipSummary.mergedSkuPlantKeys > 0
       ? (peaRelationshipSummary.stockUsageIntersectionKeys / peaRelationshipSummary.mergedSkuPlantKeys) * 100
       : 0;
-  const criticalRelationshipCount = peaRiskCoverageRecords.filter((record) => record.riskStatus.startsWith("Critical")).length;
-  const topRelationshipRisk = [...peaRiskCoverageRecords].sort((a, b) => a.stockCoverPeriods - b.stockCoverPeriods)[0];
+  const topRelationshipRisk = [...filteredRelationshipRecords].sort((a, b) => a.stockCoverPeriods - b.stockCoverPeriods)[0];
+  const selectedBudgetWarehouses = warehouses.filter((warehouse) => selectedWarehouseIdSet.has(warehouse.id));
+  const localBudgetTotal = selectedBudgetWarehouses.reduce((sum, warehouse) => sum + (budgetSettings.localBudgets[warehouse.id] ?? warehouse.localBudget), 0);
+  const budgetRegionKeys = Array.from(new Set(selectedBudgetWarehouses.map((warehouse) => warehouse.region))).filter(
+    (region): region is BudgetRegion => region !== "National",
+  );
+  const regionalBudgetTotal = budgetRegionKeys.reduce((sum, region) => sum + (budgetSettings.regionalBudgets[region] ?? 0), 0);
+  const regionalBudgetHelper = budgetRegionKeys.length > 0 ? budgetRegionKeys.map((region) => regionLabels[region]).join(", ") : "ไม่มีเขตงบประมาณในตัวกรอง";
 
   return (
     <>
@@ -917,16 +1544,63 @@ function DashboardPage({
       />
       <Card className="mb-5 p-4">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
-          {["ปีงบประมาณ 2026", "ภูมิภาค: ภาคเหนือ", "คลัง: I010", "หมวดหมู่: ทั้งหมด"].map((value) => (
-            <select key={value} className={inputClass} defaultValue={value}>
-              <option>{value}</option>
+          <Field label="ปีข้อมูล">
+            <select className={inputClass} value="2026" onChange={() => undefined}>
+              <option value="2026">ปีข้อมูล 2026</option>
             </select>
-          ))}
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" />
-            <input className={`${inputClass} pl-9`} placeholder="ค้นหา SKU / คลัง" />
-          </div>
+          </Field>
+          <Field label="เขตจากชีต WH">
+            <select
+              className={inputClass}
+              value={selectedRegionCode}
+              onChange={(event) => {
+                setSelectedRegionCode(event.target.value);
+                setSelectedWarehouseId("all");
+              }}
+            >
+              <option value="all">ทุกเขต</option>
+              {regionOptions.map((regionCode) => (
+                <option key={regionCode} value={regionCode}>
+                  {formatPeaRegionCode(regionCode)}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="รหัสคลังพื้นที่ (WH Id)">
+            <select className={inputClass} value={selectedWarehouseId} onChange={(event) => setSelectedWarehouseId(event.target.value)}>
+              <option value="all">{selectedRegionCode === "all" ? "ทุกคลังที่มีข้อมูล usage" : `ทุกคลังใน ${formatPeaRegionCode(selectedRegionCode)}`}</option>
+              {warehouseOptions.map((warehouse) => (
+                <option key={warehouse.warehouseId} value={warehouse.warehouseId}>
+                  {warehouse.warehouseId} · {warehouse.warehouseName} · {formatPeaRegionCode(warehouse.regionCode)}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="SKU">
+            <select className={inputClass} value={selectedSkuId} onChange={(event) => setSelectedSkuId(event.target.value)}>
+              <option value="all">ทุก SKU ที่มีข้อมูล usage</option>
+              {skuOptions.map((sku) => (
+                <option key={sku.skuId} value={sku.skuId}>
+                  {sku.skuId} · {sku.skuName}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="ค้นหา">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" />
+              <input
+                className={`${inputClass} pl-9`}
+                value={dashboardSearch}
+                onChange={(event) => setDashboardSearch(event.target.value)}
+                placeholder="ค้นหา SKU / คลัง"
+              />
+            </div>
+          </Field>
         </div>
+        <p className="mt-3 text-xs leading-5 text-slate-500">
+          ตัวกรองชุดนี้ใช้ source กลางเดียวกับหน้า “การใช้ SKU”: `peaWarehouseMaster`, `peaSkuMaster` และ `peaMonthlyUsage` จาก Excel seed เพื่อให้ตัวเลือกเขต คลัง และ SKU ตรงกันทุกหน้า
+        </p>
       </Card>
 
       <Card className="mb-5 overflow-hidden border-blue-200">
@@ -952,28 +1626,62 @@ function DashboardPage({
       </Card>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="จำนวน SKU ทั้งหมด" value={String(skus.length)} helper="รายการ" tone="slate" />
-        <MetricCard label="SKU เสี่ยง" value={String(riskCount)} helper="ต้องติดตาม" tone="red" />
-        <MetricCard label="PR รออนุมัติ" value={String(pendingCount)} helper="รออนุมัติ" tone="blue" />
-        <MetricCard label="SKU เหมาะกับ VMI" value="1" helper="แนะนำ C01" tone="purple" />
+        <MetricCard
+          label="SKU ในตัวกรอง"
+          value={String(dashboardSkuCount)}
+          helper={`Usage รวม ${formatNumber(dashboardAnnualUsage, 0)}`}
+          tone="slate"
+          formula={`นับ SKU จาก monthly usage ที่ผ่านตัวกรอง = ${dashboardSkuCount} รายการ`}
+          changes="เลือกเขต/คลัง/SKU ใหม่ หรือ import WH Season Data Item / SKU master ใหม่"
+        />
+        <MetricCard
+          label="SKU/Plant เสี่ยง"
+          value={String(riskCount)}
+          helper="ต้องติดตาม"
+          tone="red"
+          formula={`นับ relationship record ที่ stock cover < 1 รอบ ตามตัวกรอง = ${riskCount} รายการ`}
+          changes="เลือก filter ใหม่, import relationship analysis ใหม่ หรือข้อมูล stock/usage เปลี่ยน"
+        />
+        <MetricCard
+          label="PR รออนุมัติ"
+          value={String(pendingCount)}
+          helper="รออนุมัติ"
+          tone="blue"
+          formula={`นับคำขอที่สถานะขึ้นต้นด้วย Pending = ${pendingCount} รายการ`}
+          changes="ส่งคำขอใหม่ อนุมัติ ไม่อนุมัติ หรือส่งต่อส่วนกลาง"
+        />
+        <MetricCard
+          label="SKU เหมาะกับ VMI"
+          value={String(vmiCandidateCount)}
+          helper="VMI score ≥ 80"
+          tone="purple"
+          formula={`นับ relationship record ที่ VMI Score ≥ 80 ตามตัวกรอง = ${vmiCandidateCount} รายการ`}
+          changes="เลือก filter ใหม่ หรือข้อมูล demand stability, lead time และ stock coverage เปลี่ยน"
+        />
       </div>
 
       <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
-        <Card className="p-5">
-          <p className="text-sm font-semibold text-slate-600">งบคลังพื้นที่</p>
-          <p className="mt-2 text-2xl font-semibold text-slate-950">{formatTHB(25_000)}</p>
-          <p className="mt-2 text-sm text-slate-500">I010 คลัง I010</p>
-        </Card>
-        <Card className="p-5">
-          <p className="text-sm font-semibold text-slate-600">งบระดับเขต</p>
-          <p className="mt-2 text-2xl font-semibold text-slate-950">{formatTHB(300_000)}</p>
-          <p className="mt-2 text-sm text-slate-500">เขตภาคเหนือ</p>
-        </Card>
-        <Card className="p-5">
-          <p className="text-sm font-semibold text-slate-600">งบส่วนกลาง</p>
-          <p className="mt-2 text-2xl font-semibold text-slate-950">{formatTHB(centralBudgetRemaining)}</p>
-          <p className="mt-2 text-sm text-slate-500">ส่วนกลางทั่วประเทศ</p>
-        </Card>
+        <MetricCard
+          label="งบคลังพื้นที่"
+          value={formatTHB(localBudgetTotal)}
+          helper={selectedBudgetWarehouses.length > 0 ? `${selectedBudgetWarehouses.length} คลังตามตัวกรอง` : "ไม่มีคลัง demo ในตัวกรอง"}
+          formula={`รวมงบ Local ของคลัง demo ที่อยู่ในตัวกรอง = ${formatTHB(localBudgetTotal)}`}
+          changes="แก้หน้า งบประมาณ หรือเลือกเขต/คลังบน Dashboard ใหม่"
+        />
+        <MetricCard
+          label="งบระดับเขต"
+          value={formatTHB(regionalBudgetTotal)}
+          helper={regionalBudgetHelper}
+          formula={`รวมงบ Regional ของเขตที่สัมพันธ์กับคลังในตัวกรอง = ${formatTHB(regionalBudgetTotal)}`}
+          changes="แก้หน้า งบประมาณ หรือเลือกเขต/คลังบน Dashboard ใหม่"
+        />
+        <MetricCard
+          label="งบส่วนกลาง"
+          value={formatTHB(budgetSettings.centralBudgetRemaining)}
+          helper="ส่วนกลางทั่วประเทศ"
+          formula={`อ่านจาก Budget Settings: Central National = ${formatTHB(budgetSettings.centralBudgetRemaining)}`}
+          changes="แก้หน้า งบประมาณ"
+        />
       </div>
 
       <Card className="mt-5">
@@ -982,11 +1690,46 @@ function DashboardPage({
           subtitle="สรุปจากไฟล์ inventory_relationship_analysis.xlsx เพื่อบอกว่า stock, usage และ lead time เชื่อมกันได้มากน้อยแค่ไหน"
         />
         <div className="grid grid-cols-1 gap-3 p-5 sm:grid-cols-2 xl:grid-cols-5">
-          <MetricCard label="Stock SKU/Plant" value={formatNumber(peaRelationshipSummary.stockSkuPlantKeys, 0)} helper={`${formatNumber(peaRelationshipSummary.stockRows, 0)} rows`} tone="slate" />
-          <MetricCard label="Usage SKU/คลัง" value={formatNumber(peaRelationshipSummary.movingSkuPlantKeys, 0)} helper={`${formatNumber(peaRelationshipSummary.movingRows, 0)} rows`} tone="blue" />
-          <MetricCard label="เชื่อม Stock+Usage ได้" value={`${formatNumber(relationshipCoveragePercent, 1)}%`} helper={`${formatNumber(peaRelationshipSummary.stockUsageIntersectionKeys, 0)} keys จาก ${formatNumber(peaRelationshipSummary.mergedSkuPlantKeys, 0)}`} tone="green" />
-          <MetricCard label="Lead Time SKU" value={formatNumber(peaRelationshipSummary.leadTimeSkuKeys, 0)} helper={`${formatNumber(peaRelationshipSummary.leadTimeRows, 0)} rows`} tone="purple" />
-          <MetricCard label="Critical coverage" value={String(criticalRelationshipCount)} helper="stock cover < 1 รอบ" tone="red" />
+          <MetricCard
+            label="Stock SKU/Plant"
+            value={formatNumber(peaRelationshipSummary.stockSkuPlantKeys, 0)}
+            helper={`${formatNumber(peaRelationshipSummary.stockRows, 0)} rows`}
+            tone="slate"
+            formula={`นับ SKU+Factory/Plant key ที่มี stock = ${formatNumber(peaRelationshipSummary.stockSkuPlantKeys, 0)} key จาก ${formatNumber(peaRelationshipSummary.stockRows, 0)} rows`}
+            changes="import stock/batch data รอบใหม่ หรือแก้ mapping Factory/Plant"
+          />
+          <MetricCard
+            label="Usage SKU/คลัง"
+            value={formatNumber(peaRelationshipSummary.movingSkuPlantKeys, 0)}
+            helper={`${formatNumber(peaRelationshipSummary.movingRows, 0)} rows`}
+            tone="blue"
+            formula={`นับ SKU+WH key ที่มี usage = ${formatNumber(peaRelationshipSummary.movingSkuPlantKeys, 0)} key จาก ${formatNumber(peaRelationshipSummary.movingRows, 0)} rows`}
+            changes="import WH Season Data Item หรือปรับรหัสคลังพื้นที่"
+          />
+          <MetricCard
+            label="เชื่อม Stock+Usage ได้"
+            value={`${formatNumber(relationshipCoveragePercent, 1)}%`}
+            helper={`${formatNumber(peaRelationshipSummary.stockUsageIntersectionKeys, 0)} keys จาก ${formatNumber(peaRelationshipSummary.mergedSkuPlantKeys, 0)}`}
+            tone="green"
+            formula={`${formatNumber(peaRelationshipSummary.stockUsageIntersectionKeys, 0)} / ${formatNumber(peaRelationshipSummary.mergedSkuPlantKeys, 0)} × 100 = ${formatNumber(relationshipCoveragePercent, 1)}%`}
+            changes="มี mapping WH-Factory เพิ่ม หรือข้อมูล stock/usage ครบขึ้น"
+          />
+          <MetricCard
+            label="Lead Time SKU"
+            value={formatNumber(peaRelationshipSummary.leadTimeSkuKeys, 0)}
+            helper={`${formatNumber(peaRelationshipSummary.leadTimeRows, 0)} rows`}
+            tone="purple"
+            formula={`นับ SKU+Factory/Plant key ที่มี Lead Time = ${formatNumber(peaRelationshipSummary.leadTimeSkuKeys, 0)} key จาก ${formatNumber(peaRelationshipSummary.leadTimeRows, 0)} rows`}
+            changes="import LT Data/LT Analyst รอบใหม่"
+          />
+          <MetricCard
+            label="Critical coverage"
+            value={String(riskCount)}
+            helper="stock cover < 1 รอบ"
+            tone="red"
+            formula={`นับรายการ relationship ที่ stock cover < 1 รอบ จากตัวกรองปัจจุบัน = ${riskCount} รายการ`}
+            changes="filter, stock, usage เฉลี่ย หรือ relationship analysis ถูกอัปเดต"
+          />
         </div>
         <div className="border-t border-slate-200 px-5 py-4 text-sm leading-6 text-slate-600">
           {topRelationshipRisk ? (
@@ -1003,11 +1746,12 @@ function DashboardPage({
       <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card>
           <SectionHeader title="แจ้งเตือนสต็อกวิกฤต" subtitle="รายการที่สต็อกต่ำกว่าจุดสั่งซื้อใหม่ (Reorder Point) หรือระดับพัสดุสำรองปลอดภัย (Safety Stock)" />
-          <DataTable columns={["SKU", "รายการ", "คลัง", "Stock", "จุดสั่งซื้อใหม่", "สถานะ", "ดำเนินการ"]}>
-            {inventoryRecords.map((record) => {
+          <DataTable columns={["SKU", "รายการ", "คลัง", "Stock", "จุดสั่งซื้อใหม่", "สถานะ", "ดำเนินการ"]} empty={filteredInventoryRecords.length === 0}>
+            {filteredInventoryRecords.map((record) => {
               const sku = getSku(record.skuId);
               const warehouse = getWarehouse(record.warehouseId);
               const recommendation = getDefaultRecommendation(record, supplierOfferData, formulaPolicy);
+              const calculatedStatus = getInventoryStatusFromRecommendation(record, recommendation);
               return (
                 <tr key={`${record.skuId}-${record.warehouseId}`} className="hover:bg-slate-50">
                   <td className="px-4 py-3 font-semibold text-slate-900">{sku.id}</td>
@@ -1015,7 +1759,7 @@ function DashboardPage({
                   <td className="px-4 py-3 text-slate-600">{warehouse.name}</td>
                   <td className="px-4 py-3 text-slate-700">{formatNumber(record.currentStock)} {sku.unit}</td>
                   <td className="px-4 py-3 text-slate-700">{formatNumber(recommendation.reorderPoint)} {sku.unit}</td>
-                  <td className="px-4 py-3"><StatusBadge status={record.status} /></td>
+                  <td className="px-4 py-3"><StatusBadge status={calculatedStatus} /></td>
                   <td className="px-4 py-3">
                     <Button variant="secondary" onClick={() => openSku(record.skuId)}>เปิดรายละเอียด</Button>
                   </td>
@@ -1035,6 +1779,20 @@ function DashboardPage({
             <p>จาก relationship analysis พบว่า C01 ที่ I010 มี stock cover ประมาณ 0.09 รอบ และยังไม่พบ Lead Time เฉพาะ Factory/SKU จึงควรใช้ Lead Time จากซัพพลายเออร์เป็นค่าตั้งต้นใน PoC</p>
             <p>หากขอซื้อ 20 เมตรจาก S001 จะใช้เงิน 40,000 บาท จึงต้องส่งอนุมัติระดับเขต</p>
             <p>C01 มีความต้องการค่อนข้างสม่ำเสมอและซัพพลายเออร์มีความน่าเชื่อถือ 96% เหมาะสำหรับทดลอง VMI ระดับเขต</p>
+          </div>
+          <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <h4 className="font-semibold text-slate-950">AI Accuracy Feedback</h4>
+            {aiFeedbackStats.count > 0 ? (
+              <div className="mt-3 space-y-2 text-sm leading-6 text-slate-600">
+                <p>มี feedback จริงแล้ว {aiFeedbackStats.count} รายการ · ค่า error เฉลี่ยแบบ absolute {formatNumber(aiFeedbackStats.meanAbsoluteErrorPercent, 1)}%</p>
+                <p>Bias เฉลี่ย {formatPercent(aiFeedbackStats.averageBiasPercent)}: ค่าเป็นบวกหมายถึง AI แนะนำต่ำกว่าค่าจริง ค่าเป็นลบหมายถึง AI แนะนำสูงกว่าค่าจริง</p>
+                <p className="text-xs text-slate-500">ถ้า error สูงกว่าเกณฑ์ใน Settings ระบบจะ auto-tune policy แบบก้าวเล็กและสร้างสูตรเวอร์ชันใหม่ โดยไม่แก้ snapshot เดิมย้อนหลัง</p>
+              </div>
+            ) : (
+              <p className="mt-3 text-sm leading-6 text-slate-600">
+                ยังไม่มี feedback ค่าจริง หลังอนุมัติหรือใช้งานจริงให้ไปที่หน้า History แล้วบันทึกจำนวนจริง ระบบจะเทียบกับ AI Suggested Quantity และใช้ error เพื่อ auto-tune สูตรเมื่อเกินเกณฑ์
+              </p>
+            )}
           </div>
           <Button className="mt-5 w-full" onClick={() => openSku("C01")}>
             <Boxes className="h-4 w-4" />
@@ -1062,6 +1820,39 @@ function InventoryPage({
         title="รายการสต็อกตามคลัง"
         subtitle="ตรวจสอบ Stock ปัจจุบัน ระดับพัสดุสำรองปลอดภัย จุดสั่งซื้อใหม่ และจำนวนที่ระบบแนะนำ"
       />
+      <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          label="สต็อกปัจจุบัน"
+          value="Stock"
+          helper="คอลัมน์ในตาราง"
+          formula="อ่านจาก Inventory/Stock balance ของคลังและ SKU นั้นโดยตรง"
+          changes="มี stock movement, import stock ใหม่ หรือแก้ข้อมูลตั้งต้นของ SKU"
+        />
+        <MetricCard
+          label="พัสดุสำรองปลอดภัย"
+          value="Safety Stock"
+          helper="สูตรความเสี่ยง"
+          tone="green"
+          formula="Safety Stock = Z-score × Demand Variability × √Adjusted Lead Time"
+          changes="แก้ Service Level, Demand History, Lead Time, Seasonal Factor หรือ Budget Factor"
+        />
+        <MetricCard
+          label="จุดสั่งซื้อใหม่"
+          value="ROP"
+          helper="จุดเริ่มจัดซื้อ"
+          tone="red"
+          formula="Reorder Point = Demand During Lead Time + Safety Stock"
+          changes="Average Demand, Adjusted Lead Time หรือ Safety Stock เปลี่ยน"
+        />
+        <MetricCard
+          label="จำนวนที่ระบบแนะนำ"
+          value="AI Suggest"
+          helper="ปัดตาม MOQ"
+          tone="blue"
+          formula="Suggested Quantity = Target Stock Level - Current Stock แล้วปัดขึ้นตาม MOQ"
+          changes="Target Stock, Current Stock, MOQ หรือสูตรกลางใน Settings เปลี่ยน"
+        />
+      </div>
       <Card>
         <SectionHeader title="รายการความเสี่ยงในคลัง" subtitle="คลิกเปิดรายละเอียด SKU เพื่อดูตัวเลือกซัพพลายเออร์และวิธีคำนวณ" />
         <DataTable columns={["SKU", "รายการ", "คลัง", "สต็อกปัจจุบัน", "พัสดุสำรองปลอดภัย", "จุดสั่งซื้อใหม่", "จำนวนที่แนะนำ", "สถานะ", "ดำเนินการ"]}>
@@ -1069,6 +1860,7 @@ function InventoryPage({
             const sku = getSku(record.skuId);
             const warehouse = getWarehouse(record.warehouseId);
             const recommendation = getDefaultRecommendation(record, supplierOfferData, formulaPolicy);
+            const calculatedStatus = getInventoryStatusFromRecommendation(record, recommendation);
             return (
               <tr key={`${record.skuId}-${record.warehouseId}`} className="hover:bg-slate-50">
                 <td className="px-4 py-3 font-semibold text-slate-900">{sku.id}</td>
@@ -1078,7 +1870,7 @@ function InventoryPage({
                 <td className="px-4 py-3">{formatNumber(recommendation.safetyStock)} {sku.unit}</td>
                 <td className="px-4 py-3">{formatNumber(recommendation.reorderPoint)} {sku.unit}</td>
                 <td className="px-4 py-3 font-semibold text-blue-700">{formatNumber(recommendation.suggestedQuantity)} {sku.unit}</td>
-                <td className="px-4 py-3"><StatusBadge status={record.status} /></td>
+                <td className="px-4 py-3"><StatusBadge status={calculatedStatus} /></td>
                 <td className="px-4 py-3"><Button variant="secondary" onClick={() => openSku(record.skuId)}>รายละเอียด</Button></td>
               </tr>
             );
@@ -1090,25 +1882,16 @@ function InventoryPage({
 }
 
 function WarehouseSkuUsagePage() {
-  const usageWarehouseOptions = peaWarehouseMaster.filter((warehouse) =>
-    peaMonthlyUsage.some((usage) => usage.warehouseId === warehouse.warehouseId),
-  );
-  const regionOptions = Array.from(new Set(peaWarehouseMaster.map((warehouse) => warehouse.regionCode))).sort();
-  const skuOptions = peaSkuMaster.filter((sku) => peaMonthlyUsage.some((usage) => usage.skuId === sku.skuId));
+  const regionOptions = getSharedUsageRegionOptions();
+  const skuOptions = getSharedUsageSkuOptions();
   const [selectedRegionCode, setSelectedRegionCode] = useState("all");
   const [selectedWarehouseId, setSelectedWarehouseId] = useState("all");
   const [selectedSkuId, setSelectedSkuId] = useState("all");
   const [search, setSearch] = useState("");
-  const warehouseOptions = usageWarehouseOptions.filter((warehouse) => selectedRegionCode === "all" || warehouse.regionCode === selectedRegionCode);
-  const selectedWarehouseIds = selectedWarehouseId === "all" ? warehouseOptions.map((warehouse) => warehouse.warehouseId) : [selectedWarehouseId];
+  const warehouseOptions = getFilteredUsageWarehouseOptions(selectedRegionCode);
+  const selectedWarehouseIds = getSelectedUsageWarehouseIds(selectedRegionCode, selectedWarehouseId);
 
-  const rows = buildWarehouseUsageRows(selectedWarehouseIds)
-    .filter((row) => selectedSkuId === "all" || row.skuId === selectedSkuId)
-    .filter((row) => {
-      const keyword = search.trim().toLowerCase();
-      if (!keyword) return true;
-      return `${row.skuId} ${row.skuName} ${row.category}`.toLowerCase().includes(keyword);
-    });
+  const rows = filterWarehouseUsageRows(buildWarehouseUsageRows(selectedWarehouseIds), selectedSkuId, search);
 
   const selectedWarehouse = peaWarehouseMaster.find((warehouse) => warehouse.warehouseId === selectedWarehouseId);
   const monthlyTotals = usageMonthLabels.map((_, index) => rows.reduce((sum, row) => sum + row.monthly[index], 0));
@@ -1130,7 +1913,6 @@ function WarehouseSkuUsagePage() {
         title="ปริมาณการใช้ SKU รายคลัง"
         subtitle="ดูประวัติการใช้รายเดือนจากชีต WH Season Data Item โดยแปลงข้อมูล Jan-Dec เป็น long format สำหรับคำนวณ demand"
       />
-
       <Card className="mb-5 p-4">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
           <Field label="เขตจากชีต WH">
@@ -1183,11 +1965,46 @@ function WarehouseSkuUsagePage() {
       </Card>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <MetricCard label="เขต" value={regionScopeLabel} helper="จากชีต WH" tone="slate" />
-        <MetricCard label="ขอบเขตคลัง" value={warehouseScopeLabel} helper={warehouseScopeHelper} tone="slate" />
-        <MetricCard label="Usage รวมทั้งปี" value={formatNumber(annualTotal)} helper="หน่วยตาม SKU" tone="blue" />
-        <MetricCard label="SKU ที่มีการใช้" value={String(activeSkuCount)} helper={`${activeWarehouseCount} คลัง`} tone="green" />
-        <MetricCard label="Season ที่ใช้สูงสุด" value={peakSeason.label} helper={`${peakSeason.helper} · เฉลี่ย ${formatNumber(seasonTotals[peakSeason.id])}`} tone="purple" />
+        <MetricCard
+          label="เขต"
+          value={regionScopeLabel}
+          helper="จากชีต WH"
+          tone="slate"
+          formula={selectedRegionCode === "all" ? "แสดงทุก Region จากชีต WH" : `อ่าน Region จากชีต WH = ${regionScopeLabel}`}
+          changes="เลือกเขตใหม่ หรือ import WH master ที่มี Region ใหม่"
+        />
+        <MetricCard
+          label="ขอบเขตคลัง"
+          value={warehouseScopeLabel}
+          helper={warehouseScopeHelper}
+          tone="slate"
+          formula={selectedWarehouseId === "all" ? `นับคลังที่มี usage ตามตัวกรอง = ${selectedWarehouseIds.length} คลัง` : `เลือก WH Id = ${warehouseScopeLabel}`}
+          changes="เลือกคลัง เปลี่ยนเขต หรือมี usage data ของคลังใหม่"
+        />
+        <MetricCard
+          label="Usage รวมทั้งปี"
+          value={formatNumber(annualTotal)}
+          helper="หน่วยตาม SKU"
+          tone="blue"
+          formula={`ผลรวม Jan-Dec ของแถวที่ผ่านตัวกรอง = ${formatNumber(annualTotal)} หน่วยตาม SKU`}
+          changes="เลือกเขต/คลัง/SKU หรือ import WH Season Data Item ใหม่"
+        />
+        <MetricCard
+          label="SKU ที่มีการใช้"
+          value={String(activeSkuCount)}
+          helper={`${activeWarehouseCount} คลัง`}
+          tone="green"
+          formula={`นับ SKU ที่มี usage หลังกรอง = ${activeSkuCount} SKU ใน ${activeWarehouseCount} คลัง`}
+          changes="filter หรือข้อมูล usage ราย SKU เปลี่ยน"
+        />
+        <MetricCard
+          label="Season ที่ใช้สูงสุด"
+          value={peakSeason.label}
+          helper={`${peakSeason.helper} · เฉลี่ย ${formatNumber(seasonTotals[peakSeason.id])}`}
+          tone="purple"
+          formula={`เปรียบเทียบค่าเฉลี่ยแต่ละ season แล้วเลือกค่าสูงสุด = ${peakSeason.label} (${formatNumber(seasonTotals[peakSeason.id])})`}
+          changes="usage รายเดือนหรือการเลือกคลัง/SKU เปลี่ยน"
+        />
       </div>
 
       <Card className="mt-5">
@@ -1202,6 +2019,14 @@ function WarehouseSkuUsagePage() {
               <p className="mt-1 text-xs text-slate-500">{season.helper}</p>
               <p className="mt-3 text-2xl font-semibold text-blue-700">{formatNumber(seasonTotals[season.id])}</p>
               <p className="mt-1 text-xs text-slate-500">ค่าเฉลี่ยต่อเดือนใน season นี้</p>
+              <div className="mt-3 border-t border-slate-200 pt-3 text-xs leading-5 text-slate-600">
+                <p>
+                  <span className="font-semibold text-slate-800">คำนวณจริงจาก:</span> ผลรวมเดือน {season.months.map((month) => usageMonthLabels[month - 1]).join(", ")} / {season.months.length} = {formatNumber(seasonTotals[season.id])}
+                </p>
+                <p className="mt-1">
+                  <span className="font-semibold text-slate-800">เปลี่ยนเมื่อ:</span> เลือกเขต/คลัง/SKU ใหม่ หรือมี usage รายเดือนใหม่
+                </p>
+              </div>
             </div>
           ))}
         </div>
@@ -1459,6 +2284,7 @@ function SkuDetailPage({
   skuId,
   supplierOfferData,
   formulaPolicy,
+  budgetSettings,
   onBack,
   onCalculation,
   onCreateRequest,
@@ -1468,6 +2294,7 @@ function SkuDetailPage({
   skuId: string;
   supplierOfferData: SupplierOffer[];
   formulaPolicy: FormulaPolicyState;
+  budgetSettings: BudgetSettingsState;
   onBack: () => void;
   onCalculation: () => void;
   onCreateRequest: (supplierId: string) => void;
@@ -1482,12 +2309,14 @@ function SkuDetailPage({
   const primarySupplier = getSupplier(primaryOffer?.supplierId ?? "S001");
   const primarySupplierRecord = getSupplierSkuRecord(primaryOffer?.supplierId ?? "S001", skuId, supplierOfferData);
   const recommendation = calculateInventoryRecommendation({ inventory: record, supplier: primarySupplierRecord, formulaVersion: formulaPolicy.formulaVersion });
-  const budget = getBudgetContextForInventory(record);
+  const budget = getBudgetContextForInventory(record, budgetSettings);
   const dataCoverage = getPeaDataCoverage({ warehouseId: record.warehouseId, skuId: sku.id, supplierId: primarySupplier.id });
   const coverageWarnings = getPeaDataCoverageWarnings(dataCoverage);
   const relationshipRecord = getPeaRiskCoverageRecord(record.warehouseId, sku.id);
   const skuLeadTimeSummary = getPeaLeadTimeSkuSummary(sku.id);
   const [showExplanation, setShowExplanation] = useState(false);
+  const reorderPointRaw = recommendation.demandDuringLeadTime + recommendation.safetyStock;
+  const rawSuggestedQuantity = recommendation.targetStockLevel - record.currentStock;
 
   return (
     <>
@@ -1499,12 +2328,51 @@ function SkuDetailPage({
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
-        <MetricCard label="สต็อกปัจจุบัน" value={`${formatNumber(record.currentStock)} ${sku.unit}`} helper="คงเหลือ" />
-        <MetricCard label="ค่าเฉลี่ยการใช้ต่อวัน" value={`${formatNumber(recommendation.averageDailyDemand)} ${sku.unit}`} helper="ต่อวัน" />
-        <MetricCard label="ระดับพัสดุสำรองปลอดภัย" value={`${formatNumber(recommendation.safetyStock)} ${sku.unit}`} helper="กันความเสี่ยงขาดสต็อก" tone="green" />
-        <MetricCard label="จุดสั่งซื้อใหม่" value={`${formatNumber(recommendation.reorderPoint)} ${sku.unit}`} helper="จุดเริ่มจัดซื้อ" tone="red" />
-        <MetricCard label="ความต้องการคาดการณ์" value={`${formatNumber(recommendation.forecastDemandForPlanningPeriod)} ${sku.unit}`} helper="รอบแผน" />
-        <MetricCard label="จำนวนที่ระบบแนะนำ" value={`${formatNumber(recommendation.suggestedQuantity)} ${sku.unit}`} helper="AI" tone="blue" />
+        <MetricCard
+          label="สต็อกปัจจุบัน"
+          value={`${formatNumber(record.currentStock)} ${sku.unit}`}
+          helper="คงเหลือ"
+          formula={`อ่านจาก Inventory record ของ ${record.warehouseId}/${sku.id} = ${formatNumber(record.currentStock)} ${sku.unit}`}
+          changes="มี stock movement, import stock ใหม่ หรือแก้ inventory input ของ SKU นี้"
+        />
+        <MetricCard
+          label="ค่าเฉลี่ยการใช้ต่อวัน"
+          value={`${formatNumber(recommendation.averageDailyDemand)} ${sku.unit}`}
+          helper="ต่อวัน"
+          formula={`${formatNumber(recommendation.historicalUsageTotal)} ${sku.unit} / ${recommendation.historicalUsageDays} วัน = ${formatNumber(recommendation.averageDailyDemand)} ${sku.unit}/วัน`}
+          changes="ข้อมูลการใช้ย้อนหลังหรือจำนวนวันย้อนหลังเปลี่ยน"
+        />
+        <MetricCard
+          label="ระดับพัสดุสำรองปลอดภัย"
+          value={`${formatNumber(recommendation.safetyStock)} ${sku.unit}`}
+          helper="กันความเสี่ยงขาดสต็อก"
+          tone="green"
+          formula={`${formatNumber(recommendation.zScore)} × ${formatNumber(recommendation.demandVariabilityPerDay)} × √${formatNumber(recommendation.adjustedLeadTimeDays)} ≈ ${formatNumber(recommendation.safetyStock)} ${sku.unit}`}
+          changes="Service Level, Demand Variability, Lead Time หรือ factor ใน Settings เปลี่ยน"
+        />
+        <MetricCard
+          label="จุดสั่งซื้อใหม่"
+          value={`${formatNumber(recommendation.reorderPoint)} ${sku.unit}`}
+          helper="จุดเริ่มจัดซื้อ"
+          tone="red"
+          formula={`${formatNumber(recommendation.demandDuringLeadTime)} ${sku.unit} + ${formatNumber(recommendation.safetyStock)} ${sku.unit} = ${formatNumber(reorderPointRaw)} ${sku.unit}; ปัดเป็น ${formatNumber(recommendation.reorderPoint)} ${sku.unit}`}
+          changes="ค่าเฉลี่ยการใช้ต่อวัน, Adjusted Lead Time หรือ Safety Stock เปลี่ยน"
+        />
+        <MetricCard
+          label="ความต้องการคาดการณ์"
+          value={`${formatNumber(recommendation.forecastDemandForPlanningPeriod)} ${sku.unit}`}
+          helper="รอบแผน"
+          formula={`อ่านจาก forecastDemandForPlanningPeriod ของ ${sku.id} = ${formatNumber(recommendation.forecastDemandForPlanningPeriod)} ${sku.unit} ใน ${recommendation.planningPeriodDays} วัน`}
+          changes="forecast, planning period หรือข้อมูล demand รอบใหม่เปลี่ยน"
+        />
+        <MetricCard
+          label="จำนวนที่ระบบแนะนำ"
+          value={`${formatNumber(recommendation.suggestedQuantity)} ${sku.unit}`}
+          helper="AI"
+          tone="blue"
+          formula={`${formatNumber(recommendation.targetStockLevel)} - ${formatNumber(record.currentStock)} = ${formatNumber(rawSuggestedQuantity)} ${sku.unit}; ปัดตาม MOQ ${formatNumber(recommendation.moq)} เป็น ${formatNumber(recommendation.suggestedQuantity)} ${sku.unit}`}
+          changes="Target Stock, Current Stock, MOQ หรือ policy สูตรเปลี่ยน"
+        />
       </div>
       <div className="mt-3 flex justify-end">
         <Button variant="secondary" onClick={() => setShowExplanation((current) => !current)}>
@@ -1584,12 +2452,14 @@ function CalculationDetailPage({
   skuId,
   supplierOfferData,
   formulaPolicy,
+  budgetSettings,
   request,
   onBack,
 }: {
   skuId: string;
   supplierOfferData: SupplierOffer[];
   formulaPolicy: FormulaPolicyState;
+  budgetSettings: BudgetSettingsState;
   request?: PurchaseRequest;
   onBack: () => void;
 }) {
@@ -1599,7 +2469,7 @@ function CalculationDetailPage({
   const supplierRecord = getSupplierSkuRecord(supplierId, skuId, supplierOfferData);
   const recommendation = request?.calculationSnapshot ?? calculateInventoryRecommendation({ inventory: record, supplier: supplierRecord, formulaVersion: formulaPolicy.formulaVersion });
   const snapshot = request?.calculationSnapshot;
-  const budget = snapshot?.budgetContextAtRequestDate ?? getBudgetContextForInventory(record);
+  const budget = snapshot?.budgetContextAtRequestDate ?? getBudgetContextForInventory(record, budgetSettings);
   const preview = snapshot
     ? undefined
     : calculatePurchaseRequestPreview({
@@ -1608,6 +2478,7 @@ function CalculationDetailPage({
         unitPrice: supplierRecord.unitPrice,
         budget,
       });
+  const calculationDetailCards = buildActualCalculationCards(record, recommendation, supplierRecord.unit);
 
   return (
     <>
@@ -1618,10 +2489,12 @@ function CalculationDetailPage({
         action={<Button variant="secondary" onClick={onBack}><ArrowLeft className="h-4 w-4" /> กลับไปหน้ารายละเอียด SKU</Button>}
       />
       <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {formulaList.map((formula, index) => (
-          <Card key={formula} className="p-3">
-            <p className="text-xs font-semibold text-slate-500">สูตรที่ {index + 1}</p>
-            <p className="mt-2 text-sm text-slate-700">{formula}</p>
+        {calculationDetailCards.map((item, index) => (
+          <Card key={item.title} className="p-3">
+            <p className="text-xs font-semibold text-slate-500">ขั้นที่ {index + 1}</p>
+            <p className="mt-1 text-sm font-semibold text-slate-950">{item.title}</p>
+            <p className="mt-2 text-sm leading-6 text-slate-700">{item.calculation}</p>
+            <p className="mt-1 text-xs leading-5 text-slate-500">เปลี่ยนเมื่อ: {item.changes}</p>
           </Card>
         ))}
       </div>
@@ -1771,24 +2644,32 @@ function PeaRelationshipInsightCard({
                 value={`${formatNumber(relationshipRecord.stockCoverPeriods, 2)} รอบ`}
                 helper={relationshipRecord.riskStatus.replace("Critical:", "Critical ·").replace("Risk:", "Risk ·")}
                 tone={relationshipRecord.riskStatus.startsWith("Critical") ? "red" : "yellow"}
+                formula={`Stock ${formatNumber(relationshipRecord.stockQty, 0)} / Avg usage ${formatNumber(relationshipRecord.avgPeriodUsage, 0)} = ${formatNumber(relationshipRecord.stockCoverPeriods, 2)} รอบ`}
+                changes="stock หรือ usage เฉลี่ยจาก relationship file เปลี่ยน"
               />
               <MetricCard
                 label="ใช้เฉลี่ยต่อเดือน"
                 value={`${formatNumber(relationshipRecord.avgPeriodUsage, 0)} ${relationshipRecord.usageUnit}`}
                 helper={`CV ${formatNumber(relationshipRecord.cv, 2)} · ${relationshipRecord.activePeriods} เดือนที่มีข้อมูล`}
                 tone="blue"
+                formula={`ผลรวม usage รายเดือน / จำนวนเดือนที่มีข้อมูล = ${formatNumber(relationshipRecord.avgPeriodUsage, 0)} ${relationshipRecord.usageUnit}/เดือน`}
+                changes="ข้อมูล usage รายเดือนหรือจำนวนเดือน active เปลี่ยน"
               />
               <MetricCard
                 label="Lead Time ที่ใช้ประกอบ"
                 value={`${formatNumber(leadTimeValue, 1)} วัน`}
                 helper={leadTimeSource}
                 tone={missingPlantLeadTime ? "yellow" : "green"}
+                formula={`เลือก Lead Time จาก ${leadTimeSource} = ${formatNumber(leadTimeValue, 1)} วัน`}
+                changes="Lead Time ใน relationship/LT Summary หรือ Supplier Lead Time เปลี่ยน"
               />
               <MetricCard
                 label="VMI score"
                 value={formatNumber(relationshipRecord.vmiScore, 1)}
                 helper={`Stability ${formatNumber(relationshipRecord.stabilityScore, 1)} · Lead ${formatNumber(relationshipRecord.leadScore, 1)}`}
                 tone="purple"
+                formula={`คะแนนรวมจาก stability ${formatNumber(relationshipRecord.stabilityScore, 1)} และ lead ${formatNumber(relationshipRecord.leadScore, 1)} = ${formatNumber(relationshipRecord.vmiScore, 1)}`}
+                changes="เสถียรภาพ demand, lead time หรือค่าความเสี่ยง VMI เปลี่ยน"
               />
             </div>
             <div className="mt-4 grid grid-cols-1 gap-3 text-sm text-slate-600 lg:grid-cols-3">
@@ -2318,13 +3199,13 @@ function SupplierCatalogForm({
           <h3 className="mb-3 font-semibold text-slate-950">ข้อเสนอจากซัพพลายเออร์</h3>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             <Field label="ราคาต่อหน่วย">
-              <input className={inputClass} type="number" min="0" value={form.unitPrice} onChange={(event) => updateNumber("unitPrice", Number(event.target.value))} />
+              <EditableNumberInput min="0" value={form.unitPrice} onValueChange={(value) => updateNumber("unitPrice", value)} />
             </Field>
             <Field label="ระยะเวลารอพัสดุ (Lead Time / วัน)">
-              <input className={inputClass} type="number" min="1" value={form.leadTimeDays} onChange={(event) => updateNumber("leadTimeDays", Number(event.target.value))} />
+              <EditableNumberInput min="1" value={form.leadTimeDays} onValueChange={(value) => updateNumber("leadTimeDays", value)} />
             </Field>
             <Field label="จำนวนสั่งซื้อขั้นต่ำ (MOQ)">
-              <input className={inputClass} type="number" min="1" value={form.moq} onChange={(event) => updateNumber("moq", Number(event.target.value))} />
+              <EditableNumberInput min="1" value={form.moq} onValueChange={(value) => updateNumber("moq", value)} />
             </Field>
           </div>
         </div>
@@ -2389,16 +3270,16 @@ function SupplierOfferEditorRow({
       <td className="px-4 py-3">{skuName}</td>
       <td className="px-4 py-3">{category}</td>
       <td className="min-w-32 px-4 py-3">
-        <input className={numericInputClass} type="number" value={draft.unitPrice} onChange={(event) => updateNumber("unitPrice", Number(event.target.value))} />
+        <EditableNumberInput className={numericInputClass} value={draft.unitPrice} onValueChange={(value) => updateNumber("unitPrice", value)} />
       </td>
       <td className="min-w-32 px-4 py-3">
-        <input className={numericInputClass} type="number" value={draft.leadTimeDays} onChange={(event) => updateNumber("leadTimeDays", Number(event.target.value))} />
+        <EditableNumberInput className={numericInputClass} value={draft.leadTimeDays} onValueChange={(value) => updateNumber("leadTimeDays", value)} />
       </td>
       <td className="min-w-32 px-4 py-3">
-        <input className={numericInputClass} type="number" value={draft.moq} onChange={(event) => updateNumber("moq", Number(event.target.value))} />
+        <EditableNumberInput className={numericInputClass} value={draft.moq} onValueChange={(value) => updateNumber("moq", value)} />
       </td>
       <td className="min-w-32 px-4 py-3">
-        <input className={numericInputClass} type="number" value={draft.reliabilityScore ?? 0} onChange={(event) => updateNumber("reliabilityScore", Number(event.target.value))} />
+        <EditableNumberInput className={numericInputClass} value={draft.reliabilityScore ?? 0} onValueChange={(value) => updateNumber("reliabilityScore", value)} />
       </td>
       <td className="px-4 py-3">
         <div className="flex min-w-60 gap-2">
@@ -2430,7 +3311,7 @@ function ContactLogForm({
     channel: "Phone" as ContactChannel,
     purpose: "ยืนยันราคาและ Lead Time",
     note: "",
-    followUpDate: "2026-05-08",
+    followUpDate: getDateInputValue(addDays(new Date(), 3)),
   });
   const supplier = getSupplier(form.supplierId);
 
@@ -2487,7 +3368,7 @@ function ContactLogForm({
                 purpose: form.purpose,
                 note: form.note || "บันทึกผลการติดต่อสำหรับใช้ในหน้าตรวจอนุมัติ",
                 followUpDate: form.followUpDate,
-                createdAt: "2026-05-05 14:05",
+                createdAt: getCurrentDateTimeLabel(),
               })
             }
           >
@@ -2504,6 +3385,8 @@ function CreatePurchaseRequestPage({
   supplierId,
   supplierOfferData,
   formulaPolicy,
+  budgetSettings,
+  existingRequests,
   onBack,
   onContactSupplier,
   onSubmit,
@@ -2512,6 +3395,8 @@ function CreatePurchaseRequestPage({
   supplierId: string;
   supplierOfferData: SupplierOffer[];
   formulaPolicy: FormulaPolicyState;
+  budgetSettings: BudgetSettingsState;
+  existingRequests: PurchaseRequest[];
   onBack: () => void;
   onContactSupplier: (supplierId: string) => void;
   onSubmit: (request: PurchaseRequest) => void;
@@ -2525,7 +3410,7 @@ function CreatePurchaseRequestPage({
   const supplier = getSupplier(offer.supplierId);
   const supplierRecord = getSupplierSkuRecord(offer.supplierId, skuId, supplierOfferData);
   const recommendation = calculateInventoryRecommendation({ inventory: record, supplier: supplierRecord, formulaVersion: formulaPolicy.formulaVersion });
-  const budget = getBudgetContextForInventory(record);
+  const budget = getBudgetContextForInventory(record, budgetSettings);
   const [requestedQuantity, setRequestedQuantity] = useState(skuId === "C01" ? 20 : recommendation.suggestedQuantity);
   const [reasonCategory, setReasonCategory] = useState(skuId === "C01" ? "มีแผนซ่อมบำรุงเพิ่มเติม" : "");
   const [reasonText, setReasonText] = useState(skuId === "C01" ? "รวมแผนซ่อมบำรุงเพิ่มเติมของคลัง I010 ในรอบเดียวกัน" : "");
@@ -2556,9 +3441,9 @@ function CreatePurchaseRequestPage({
     (!quantityDiffers || !highVariance || Boolean(reasonText.trim()));
   const submitLabel = recommendedLayer === "Local" ? "ส่งอนุมัติระดับคลัง" : recommendedLayer === "Regional" ? "ส่งอนุมัติระดับเขต" : "ส่งอนุมัติส่วนกลาง";
 
-  const buildSnapshot = (requestId: string): PurchaseRequestCalculationSnapshot => ({
+  const buildSnapshot = (requestId: string, createdAt: string): PurchaseRequestCalculationSnapshot => ({
     requestId,
-    createdAt: "2026-05-05 14:00",
+    createdAt,
     ...recommendation,
     requestedQuantity,
     approvedQuantity: undefined,
@@ -2576,8 +3461,21 @@ function CreatePurchaseRequestPage({
   });
 
   const buildRequest = (status: PurchaseRequest["status"]): PurchaseRequest => {
-    const requestId = "REQ-001";
-    const snapshot = buildSnapshot(requestId);
+    const requestId = getNextRequestId(existingRequests);
+    const createdAt = getCurrentDateTimeLabel();
+    const snapshot = buildSnapshot(requestId, createdAt);
+    const timeline: ApprovalTimelineItem[] =
+      status === "Draft"
+        ? [{ role: "Local Warehouse", action: "Draft Created", actor: warehouse.name, date: createdAt }]
+        : [
+            {
+              role: "Local Warehouse",
+              action: "Submitted",
+              actor: warehouse.name,
+              date: createdAt,
+              note: `ระบบแนะนำให้อนุมัติที่${getApprovalLayerLabel(recommendedLayer)}`,
+            },
+          ];
 
     return {
       id: requestId,
@@ -2600,16 +3498,13 @@ function CreatePurchaseRequestPage({
       variancePercent: variance.variancePercent,
       overrideReasonCategory: quantityDiffers ? reasonCategory : undefined,
       overrideReasonText: quantityDiffers ? reasonText : undefined,
-      formulaVersion,
+      formulaVersion: formulaPolicy.formulaVersion,
       calculationSnapshot: snapshot,
       supplierContactLogSummary: "โทรศัพท์ยืนยันราคาและ Lead Time กับซัพพลายเออร์แล้ว",
       localReason: "Stock ปัจจุบันต่ำกว่าจุดสั่งซื้อใหม่ และงบคลังพื้นที่ไม่เพียงพอสำหรับปริมาณที่ขอ",
       regionalEscalationReason: recommendedLayer === "Central" ? "งบระดับเขตไม่เพียงพอ ต้องส่งต่อส่วนกลาง" : undefined,
-      createdAt: "2026-05-05 14:00",
-      timeline: [
-        { role: "Local Warehouse", action: "Draft Created", actor: warehouse.name, date: "2026-05-05 13:55" },
-        { role: "Local Warehouse", action: "Submitted", actor: warehouse.name, date: "2026-05-05 14:00", note: `ระบบแนะนำให้อนุมัติที่${getApprovalLayerLabel(recommendedLayer)}` },
-      ],
+      createdAt,
+      timeline,
     };
   };
 
@@ -2655,13 +3550,7 @@ function CreatePurchaseRequestPage({
               <input className={inputClass} value={`${offer.moq} ${offer.unit}`} readOnly />
             </Field>
             <Field label="จำนวนที่ต้องการขอ" hint={`หน่วย: ${sku.unit}`}>
-              <input
-                type="number"
-                min={1}
-                className={inputClass}
-                value={requestedQuantity}
-                onChange={(event) => setRequestedQuantity(Number(event.target.value))}
-              />
+              <EditableNumberInput min={1} value={requestedQuantity} onValueChange={setRequestedQuantity} />
             </Field>
             <Field label="ส่วนต่างจากค่าที่ระบบแนะนำ">
               <input className={inputClass} value={`${variance.variance > 0 ? "+" : ""}${formatNumber(variance.variance)} ${sku.unit} (${formatPercent(variance.variancePercent)})`} readOnly />
@@ -2767,6 +3656,14 @@ function ApprovalQueuePage({
         title="ศูนย์อนุมัติคำขอซื้อ"
         subtitle="คิวตรวจระดับเขตและคิวอนุมัติส่วนกลาง พร้อมข้อมูล AI งบประมาณ และประวัติการติดต่อซัพพลายเออร์"
       />
+      <div className="mb-4">
+        <InlineAlert tone="info">
+          <div className="space-y-1">
+            <p>ที่มาของค่าในคิวอนุมัติ: มูลค่าประมาณการ = Requested Quantity × Unit Price, เส้นทางอนุมัติ = ตรวจงบคลังพื้นที่ → งบเขต → งบส่วนกลางตาม snapshot ตอนส่งคำขอ</p>
+            <p>ค่าบนหน้าตรวจอนุมัติอ่านจาก Calculation Snapshot ของแต่ละคำขอ จึงไม่เปลี่ยนย้อนหลังแม้สูตรหรือราคา Supplier ปัจจุบันถูกแก้ไข</p>
+          </div>
+        </InlineAlert>
+      </div>
       <div className="mb-4 flex w-full overflow-x-auto rounded-lg border border-slate-200 bg-white p-1 sm:inline-flex sm:w-auto">
         <button className={`rounded-md px-4 py-2 text-sm font-semibold ${approvalTab === "regional" ? "bg-blue-700 text-white" : "text-slate-600"}`} onClick={() => onSetTab("regional")}>คิวอนุมัติระดับเขต</button>
         <button className={`rounded-md px-4 py-2 text-sm font-semibold ${approvalTab === "central" ? "bg-blue-700 text-white" : "text-slate-600"}`} onClick={() => onSetTab("central")}>คิวอนุมัติส่วนกลาง</button>
@@ -2952,13 +3849,17 @@ function ReviewMetric({ label, value }: { label: string; value: string }) {
 function RequestHistoryPage({
   requests,
   contactLogs,
+  aiFeedbackLogs,
   selectedRequestId,
   onSelectRequest,
+  onSaveFeedback,
 }: {
   requests: PurchaseRequest[];
   contactLogs: SupplierContactLog[];
+  aiFeedbackLogs: AiSuggestionFeedback[];
   selectedRequestId: string;
   onSelectRequest: (id: string) => void;
+  onSaveFeedback: (request: PurchaseRequest, actualQuantity: number, note: string) => void;
 }) {
   const [search, setSearch] = useState("");
   const filtered = requests.filter((request) => {
@@ -2968,10 +3869,19 @@ function RequestHistoryPage({
   });
   const selected = requests.find((request) => request.id === selectedRequestId) ?? requests[0];
   const logs = selected ? contactLogs.filter((log) => log.requestId === selected.id || log.supplierId === selected.supplierId) : [];
+  const selectedFeedbackLogs = selected ? aiFeedbackLogs.filter((log) => log.requestId === selected.id) : [];
 
   return (
     <>
       <PageTitle eyebrow="ประวัติ" title="ประวัติคำขอซื้อและบันทึกตรวจสอบย้อนหลัง" subtitle="แสดงคำขอซื้อย้อนหลังและภาพบันทึกการคำนวณที่ถูกเก็บ ณ วันที่ส่งคำขอ" />
+      <div className="mb-5">
+        <InlineAlert tone="info">
+          <div className="space-y-1">
+            <p>ประวัติหน้านี้ใช้ค่าจาก Calculation Snapshot ที่บันทึกตอนส่งคำขอ ไม่คำนวณใหม่จากสูตรหรือข้อมูล Supplier ปัจจุบัน</p>
+            <p>ช่อง AI Feedback ใช้บันทึกค่าจริงหลังใช้งาน เพื่อคำนวณ Error = Actual Quantity - AI Suggested Quantity และใช้ปรับสูตรเวอร์ชันถัดไปเมื่อ error สูงกว่าเกณฑ์</p>
+          </div>
+        </InlineAlert>
+      </div>
       <Card className="mb-5 p-4">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
           <div className="relative md:col-span-2">
@@ -3003,15 +3913,35 @@ function RequestHistoryPage({
             })}
           </DataTable>
         </Card>
-        {selected ? <HistoryDetail request={selected} logs={logs} /> : null}
+        {selected ? <HistoryDetail request={selected} logs={logs} aiFeedbackLogs={selectedFeedbackLogs} onSaveFeedback={onSaveFeedback} /> : null}
       </div>
     </>
   );
 }
 
-function HistoryDetail({ request, logs }: { request: PurchaseRequest; logs: SupplierContactLog[] }) {
+function HistoryDetail({
+  request,
+  logs,
+  aiFeedbackLogs,
+  onSaveFeedback,
+}: {
+  request: PurchaseRequest;
+  logs: SupplierContactLog[];
+  aiFeedbackLogs: AiSuggestionFeedback[];
+  onSaveFeedback: (request: PurchaseRequest, actualQuantity: number, note: string) => void;
+}) {
   const sku = getSku(request.skuId);
   const supplier = getSupplier(request.supplierId);
+  const [actualQuantity, setActualQuantity] = useState(request.approvedQuantity ?? request.requestedQuantity);
+  const [feedbackNote, setFeedbackNote] = useState("บันทึกผลจริงเพื่อเทียบกับ AI Suggest");
+
+  useEffect(() => {
+    setActualQuantity(request.approvedQuantity ?? request.requestedQuantity);
+    setFeedbackNote("บันทึกผลจริงเพื่อเทียบกับ AI Suggest");
+  }, [request.id, request.approvedQuantity, request.requestedQuantity]);
+
+  const previewError = calculateAiSuggestionError(request.aiSuggestedQuantity, actualQuantity);
+
   return (
     <Card>
       <SectionHeader title={`รายละเอียดการตรวจสอบย้อนหลัง · ${request.id}`} subtitle={`${sku.id} ${sku.name}`} action={<StatusBadge status={request.status} />} />
@@ -3040,6 +3970,42 @@ function HistoryDetail({ request, logs }: { request: PurchaseRequest; logs: Supp
         </Card>
         <CalculationSnapshotView snapshot={request.calculationSnapshot} unit={request.unit} />
         <Card className="p-4">
+          <h3 className="font-semibold text-slate-950">AI Feedback: เทียบค่าที่ระบบแนะนำกับค่าจริง</h3>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            หาก AI Suggest ไม่ตรงกับการใช้งานจริง ให้บันทึกจำนวนจริงตรงนี้ ระบบจะเก็บ error เทียบกับ snapshot เดิม และถ้า error เกินเกณฑ์ใน Settings จะ auto-tune policy แบบก้าวเล็กพร้อมสร้างสูตรเวอร์ชันใหม่
+          </p>
+          <p className="mt-1 text-xs leading-5 text-slate-500">
+            การ auto-tune มีผลกับการคำนวณครั้งถัดไปเท่านั้น ไม่แก้ Request History หรือ Calculation Snapshot เดิมย้อนหลัง
+          </p>
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label={`จำนวนจริง (${request.unit})`} hint="อาจเป็นจำนวนที่ใช้จริงหลังรอบแผน หรือจำนวนที่ควรเติมจริงหลังตรวจสอบหน้างาน">
+              <EditableNumberInput min="0" value={actualQuantity} onValueChange={setActualQuantity} />
+            </Field>
+            <Field label="หมายเหตุผลจริง">
+              <input className={inputClass} value={feedbackNote} onChange={(event) => setFeedbackNote(event.target.value)} />
+            </Field>
+          </div>
+          <div className="mt-3 rounded-md bg-slate-50 p-3 text-sm leading-6 text-slate-600">
+            <p>AI Suggested Quantity = {formatNumber(request.aiSuggestedQuantity)} {request.unit}</p>
+            <p>Actual Quantity = {formatNumber(actualQuantity)} {request.unit}</p>
+            <p>ส่วนต่าง = {previewError.errorQuantity > 0 ? "+" : ""}{formatNumber(previewError.errorQuantity)} {request.unit} ({formatPercent(previewError.errorPercent)})</p>
+          </div>
+          <Button className="mt-4 w-full" onClick={() => onSaveFeedback(request, actualQuantity, feedbackNote)}>บันทึก AI Feedback</Button>
+          <div className="mt-4">
+            <DataTable columns={["วันที่", "ค่าจริง", "ส่วนต่าง", "% Error", "หมายเหตุ"]} empty={aiFeedbackLogs.length === 0}>
+              {aiFeedbackLogs.map((feedback) => (
+                <tr key={feedback.id}>
+                  <td className="px-4 py-3">{feedback.createdAt}</td>
+                  <td className="px-4 py-3">{formatNumber(feedback.actualQuantity)} {request.unit}</td>
+                  <td className="px-4 py-3">{feedback.errorQuantity > 0 ? "+" : ""}{formatNumber(feedback.errorQuantity)} {request.unit}</td>
+                  <td className="px-4 py-3">{formatPercent(feedback.errorPercent)}</td>
+                  <td className="px-4 py-3">{feedback.note}</td>
+                </tr>
+              ))}
+            </DataTable>
+          </div>
+        </Card>
+        <Card className="p-4">
           <h3 className="mb-3 font-semibold text-slate-950">ไทม์ไลน์การอนุมัติ</h3>
           <ApprovalTimeline items={request.timeline} />
         </Card>
@@ -3060,6 +4026,14 @@ function VmiCandidatePage({ onSimulation, openSku }: { onSimulation: () => void;
   return (
     <>
       <PageTitle eyebrow="VMI" title="วิเคราะห์ SKU ที่เหมาะกับ VMI" subtitle="AI วิเคราะห์ SKU ที่เหมาะสมสำหรับการให้ซัพพลายเออร์ช่วยบริหารสินค้าคงคลัง" />
+      <div className="mb-5">
+        <InlineAlert tone="info">
+          <div className="space-y-1">
+            <p>ที่มาของคะแนน VMI: คะแนนรวม = Demand Stability + Supplier Reliability + Usage Frequency + Lead Time Stability + Inventory Value Impact - Procurement Complexity Penalty</p>
+            <p>ค่าจะเปลี่ยนเมื่อมีข้อมูล usage, lead time, supplier reliability, ราคา หรือมูลค่าสินค้าคงคลังใหม่ และ VMI ใน PoC นี้เป็นการจำลอง ไม่ใช่การเติมของจริงโดยซัพพลายเออร์</p>
+          </div>
+        </InlineAlert>
+      </div>
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card>
           <SectionHeader title="ตารางผู้สมัคร VMI" subtitle="จัดลำดับจากเสถียรภาพความต้องการ ความน่าเชื่อถือซัพพลายเออร์ และคะแนนรวม" />
@@ -3142,7 +4116,10 @@ function VmiSimulationPage({
       />
       <div className="mb-5">
         <InlineAlert tone="info">
-          VMI ใน PoC นี้เป็นการจำลองผลลัพธ์ ไม่ใช่การให้ Supplier เติมของจริง ใช้เพื่อเปรียบเทียบผลกระทบก่อนตัดสินใจทดลองในระดับเขต
+          <div className="space-y-1">
+            <p>VMI ใน PoC นี้เป็นการจำลองผลลัพธ์ ไม่ใช่การให้ Supplier เติมของจริง ใช้เพื่อเปรียบเทียบผลกระทบก่อนตัดสินใจทดลองในระดับเขต</p>
+            <p>สูตรหลัก: VMI Safety Stock = Z-score × Demand Variability × √VMI Lead Time, VMI Reorder Point = Average Demand × VMI Lead Time + VMI Safety Stock, Impact = ค่า VMI - ค่าปัจจุบัน</p>
+          </div>
         </InlineAlert>
       </div>
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -3174,16 +4151,235 @@ function VmiSimulationPage({
     </>
   );
 }
+
+const formulaSettingHelp = {
+  formulaVersion:
+    "ระบบเปลี่ยนอัตโนมัติเมื่อมีการแก้ค่า policy ที่กระทบการคำนวณ เช่น v1.0 เป็น v1.1 ใช้ติดป้ายเวอร์ชันใน Calculation Snapshot และ Audit Trail",
+  serviceLevel:
+    "ใช้กำหนดระดับความมั่นใจว่าพัสดุจะเพียงพอ ระบบจะคำนวณ Z-score ให้อัตโนมัติ เมื่อบันทึกแล้วหน้า Dashboard, SKU Detail, Create Request และ VMI จะคำนวณ Safety Stock / Reorder Point ใหม่",
+  zScore:
+    "เป็นค่าทางสถิติที่แปลงจาก Service Level และใช้ในสูตร Safety Stock ช่องนี้อ่านอย่างเดียวเพื่อป้องกัน Service Level กับ Z-score ไม่ตรงกัน",
+  seasonalFactor:
+    "ใช้ปรับ Lead Time ตามฤดูกาลหรือช่วง demand สูง เมื่อบันทึกแล้วการคำนวณใหม่จะเปลี่ยน Adjusted Lead Time, Safety Stock, Reorder Point และ Suggested Quantity",
+  budgetFactor:
+    "ใช้ปรับ Lead Time จากข้อจำกัดงบประมาณหรือรอบอนุมัติ เมื่อบันทึกแล้วการคำนวณใหม่จะเปลี่ยน Adjusted Lead Time, Safety Stock, Reorder Point และ Suggested Quantity",
+  highVarianceThreshold:
+    "ใช้ตรวจว่าผู้ใช้ขอจำนวนต่างจาก AI Suggested Quantity มากเกินเกณฑ์หรือไม่ เมื่อบันทึกแล้วฟอร์ม Create Request จะใช้เกณฑ์ใหม่นี้ในการบังคับรายละเอียดเหตุผล",
+  versionNote:
+    "ใช้เป็นคำอธิบายในประวัติเวอร์ชันสูตรและ change log เพื่อให้ผู้ตรวจสอบรู้ว่าเปลี่ยน policy เพราะอะไร ไม่กระทบสูตรโดยตรง",
+};
+
+function BudgetSettingsPage({
+  budgetSettings,
+  changeLogs,
+  onSave,
+}: {
+  budgetSettings: BudgetSettingsState;
+  changeLogs: ChangeLogEntry[];
+  onSave: (settings: BudgetSettingsState, note: string) => void;
+}) {
+  const [draftBudget, setDraftBudget] = useState<BudgetInputDraftState>(() => budgetSettingsToInputDraft(budgetSettings));
+  const [budgetNote, setBudgetNote] = useState("ปรับงบประมาณสำหรับการตรวจสอบเส้นทางอนุมัติ");
+  const budgetLogs = changeLogs.filter((log) => log.area === "Budget").slice(0, 12);
+  const draftBudgetSettings = budgetInputDraftToSettings(draftBudget, budgetSettings);
+  const localTotal = warehouses.reduce((sum, warehouse) => sum + (draftBudgetSettings.localBudgets[warehouse.id] ?? warehouse.localBudget), 0);
+  const regionalTotal = regionalBudgets.reduce((sum, budget) => sum + (draftBudgetSettings.regionalBudgets[budget.region] ?? budget.remaining), 0);
+
+  useEffect(() => {
+    setDraftBudget(budgetSettingsToInputDraft(budgetSettings));
+  }, [budgetSettings]);
+
+  const updateLocalBudget = (warehouseId: string, value: string) => {
+    setDraftBudget((current) => ({
+      ...current,
+      localBudgets: {
+        ...current.localBudgets,
+        [warehouseId]: value,
+      },
+    }));
+  };
+
+  const updateRegionalBudget = (region: BudgetRegion, value: string) => {
+    setDraftBudget((current) => ({
+      ...current,
+      regionalBudgets: {
+        ...current.regionalBudgets,
+        [region]: value,
+      },
+    }));
+  };
+
+  return (
+    <>
+      <PageTitle
+        eyebrow="ตั้งค่างบประมาณ"
+        title="งบประมาณคลัง เขต และส่วนกลาง"
+        subtitle="แก้ไขงบคงเหลือที่ใช้ตรวจ Budget Check และกำหนดเส้นทางอนุมัติของคำขอซื้อ"
+      />
+
+      <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-3">
+        <MetricCard
+          label="งบคลังพื้นที่รวม"
+          value={formatTHB(localTotal)}
+          helper={`${warehouses.length} คลัง`}
+          formula={`ผลรวม Local Budget ของทุกคลัง demo = ${formatTHB(localTotal)}`}
+          changes="แก้งบคลังพื้นที่ในหน้านี้"
+        />
+        <MetricCard
+          label="งบระดับเขตรวม"
+          value={formatTHB(regionalTotal)}
+          helper={`${regionalBudgets.length} เขต`}
+          tone="blue"
+          formula={`ผลรวม Regional Budget ทุกเขต = ${formatTHB(regionalTotal)}`}
+          changes="แก้งบระดับเขตในหน้านี้"
+        />
+        <MetricCard
+          label="งบส่วนกลาง"
+          value={formatTHB(draftBudgetSettings.centralBudgetRemaining)}
+          helper="Central National"
+          tone="green"
+          formula={`อ่านจาก Central Budget Remaining = ${formatTHB(draftBudgetSettings.centralBudgetRemaining)}`}
+          changes="แก้งบส่วนกลางในหน้านี้"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <div className="space-y-5">
+          <Card>
+            <SectionHeader
+              title="งบคลังพื้นที่ (Local Budget)"
+              subtitle="ใช้เทียบขั้นแรกของ Approval Routing: ถ้า Estimated Cost ไม่เกินงบคลัง ระบบจะแนะนำอนุมัติระดับคลัง"
+            />
+            <DataTable columns={["WH Id", "คลัง", "ภูมิภาค", "งบคงเหลือ", "คำอธิบาย"]}>
+              {warehouses.map((warehouse) => (
+                <tr key={warehouse.id}>
+                  <td className="px-4 py-3 font-semibold text-slate-900">{warehouse.id}</td>
+                  <td className="px-4 py-3">{warehouse.name}</td>
+                  <td className="px-4 py-3">{regionLabels[warehouse.region]}</td>
+                  <td className="min-w-52 px-4 py-3">
+                    <input
+                      className={inputClass}
+                      type="number"
+                      min={0}
+                      value={draftBudget.localBudgets[warehouse.id] ?? ""}
+                      onChange={(event) => updateLocalBudget(warehouse.id, event.target.value)}
+                    />
+                  </td>
+                  <td className="min-w-72 px-4 py-3 text-sm leading-6 text-slate-500">
+                    ค่านี้ใช้ใน Budget Check ระดับคลังของ {warehouse.id}; หลังบันทึกจะกระทบ Create Request / SKU Detail / Dashboard ทันที แต่ไม่แก้ snapshot เก่า
+                  </td>
+                </tr>
+              ))}
+            </DataTable>
+          </Card>
+
+          <Card>
+            <SectionHeader
+              title="งบระดับเขต (Regional Budget)"
+              subtitle="ใช้เมื่อคำขอมีมูลค่าเกินงบคลังพื้นที่ หากยังไม่เกินงบเขต ระบบจะแนะนำส่งอนุมัติระดับเขต"
+            />
+            <DataTable columns={["ภูมิภาค", "งบคงเหลือ", "คำอธิบาย"]}>
+              {regionalBudgets.map((budget) => (
+                <tr key={budget.region}>
+                  <td className="px-4 py-3 font-semibold text-slate-900">{regionLabels[budget.region]}</td>
+                  <td className="min-w-52 px-4 py-3">
+                    <input
+                      className={inputClass}
+                      type="number"
+                      min={0}
+                      value={draftBudget.regionalBudgets[budget.region] ?? ""}
+                      onChange={(event) => updateRegionalBudget(budget.region, event.target.value)}
+                    />
+                  </td>
+                  <td className="min-w-72 px-4 py-3 text-sm leading-6 text-slate-500">
+                    ใช้เทียบกับ Estimated Cost หลังงบคลังไม่พอ ถ้างบเขตไม่พอ ระบบจะส่งต่อส่วนกลาง
+                  </td>
+                </tr>
+              ))}
+            </DataTable>
+          </Card>
+
+          <Card className="p-5">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <Field
+                label="งบส่วนกลาง (Central National)"
+                hint="ใช้เมื่อ Estimated Cost เกินงบคลังและงบเขต ลบค่าว่างได้ระหว่างพิมพ์ และระบบจะแปลงค่าว่างเป็น 0 ตอนบันทึก"
+              >
+                <input
+                  className={inputClass}
+                  type="number"
+                  min={0}
+                  value={draftBudget.centralBudgetRemaining}
+                  onChange={(event) => setDraftBudget((current) => ({ ...current, centralBudgetRemaining: event.target.value }))}
+                />
+              </Field>
+              <Field label="อัปเดตล่าสุด" hint="ระบบบันทึกเวลาปัจจุบันเมื่อกดบันทึก">
+                <input className={`${inputClass} bg-slate-50 text-slate-600`} value={budgetSettings.updatedAt} readOnly />
+              </Field>
+              <div className="md:col-span-2">
+                <Field label="หมายเหตุการแก้งบ" hint="ใช้ใน Budget Change Log เพื่อบอกเหตุผลการปรับงบ">
+                  <textarea className={textareaClass} value={budgetNote} onChange={(event) => setBudgetNote(event.target.value)} />
+                </Field>
+              </div>
+            </div>
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button type="button" variant="secondary" onClick={() => setDraftBudget(budgetSettingsToInputDraft(defaultBudgetSettings))}>
+                รีเซ็ตเป็นค่า seed
+              </Button>
+              <Button type="button" onClick={() => onSave(budgetInputDraftToSettings(draftBudget, budgetSettings), budgetNote)}>
+                บันทึกงบประมาณ
+              </Button>
+            </div>
+          </Card>
+        </div>
+
+        <div className="space-y-5">
+          <Card className="p-5">
+            <h3 className="font-semibold text-slate-950">ผลกระทบของการแก้งบ</h3>
+            <div className="mt-4 space-y-3 text-sm leading-6 text-slate-600">
+              <InlineAlert tone="info">
+                งบที่บันทึกจะถูกใช้ทันทีในการคำนวณ Budget Check และ Recommended Approval Layer ของคำขอใหม่หรือ preview ใหม่
+              </InlineAlert>
+              <p><span className="font-semibold text-slate-800">Local:</span> ถ้า Estimated Cost ≤ งบคลัง → อนุมัติระดับคลัง</p>
+              <p><span className="font-semibold text-slate-800">Regional:</span> ถ้างบคลังไม่พอ แต่ Estimated Cost ≤ งบเขต → ส่งอนุมัติระดับเขต</p>
+              <p><span className="font-semibold text-slate-800">Central:</span> ถ้างบเขตไม่พอ → ส่งต่อส่วนกลาง</p>
+              <p className="text-xs text-slate-500">Request History และ Calculation Snapshot เดิมจะไม่เปลี่ยนย้อนหลัง เพราะ snapshot ต้องเก็บงบ ณ วันที่สร้างคำขอ</p>
+            </div>
+          </Card>
+
+          <Card>
+            <SectionHeader title="ประวัติการแก้งบประมาณ" subtitle="แสดง log ของ Local, Regional และ Central Budget" />
+            <DataTable columns={["วันที่", "เป้าหมาย", "ฟิลด์", "ค่าเดิม", "ค่าใหม่", "หมายเหตุ"]} empty={budgetLogs.length === 0}>
+              {budgetLogs.map((log) => (
+                <tr key={log.id}>
+                  <td className="px-4 py-3">{log.createdAt}</td>
+                  <td className="px-4 py-3 font-semibold text-slate-900">{log.target}</td>
+                  <td className="px-4 py-3">{getChangeLogFieldLabel(log.field)}</td>
+                  <td className="px-4 py-3">{log.oldValue}</td>
+                  <td className="px-4 py-3">{log.newValue}</td>
+                  <td className="px-4 py-3">{log.note}</td>
+                </tr>
+              ))}
+            </DataTable>
+          </Card>
+        </div>
+      </div>
+    </>
+  );
+}
+
 function SettingsPage({
   formulaPolicy,
   formulaVersions,
   changeLogs,
   onSaveFormulaPolicy,
+  onClearDemoHistory,
 }: {
   formulaPolicy: FormulaPolicyState;
   formulaVersions: FormulaVersionRecord[];
   changeLogs: ChangeLogEntry[];
   onSaveFormulaPolicy: (policy: FormulaPolicyState, note: string) => void;
+  onClearDemoHistory: () => void;
 }) {
   const [draftPolicy, setDraftPolicy] = useState(formulaPolicy);
   const [versionNote, setVersionNote] = useState("ปรับค่านโยบายสำหรับการวางแผนพัสดุคงคลัง");
@@ -3192,17 +4388,23 @@ function SettingsPage({
   // หน้าตั้งค่าแก้ค่านโยบายสูตรได้ใน local state ก่อน
   // เมื่อกดบันทึกเป็นเวอร์ชันใหม่ จึงบันทึกเป็นเวอร์ชันสูตรใหม่และสร้างประวัติการตรวจสอบ
   const updateDraftNumber = (field: keyof Omit<FormulaPolicyState, "formulaVersion">, value: number) => {
-    setDraftPolicy((current) => ({ ...current, [field]: value }));
+    setDraftPolicy((current) => applyAutoFormulaVersion(formulaPolicy, { ...current, [field]: value }));
   };
   const updateDraftServiceLevel = (value: number) => {
     // ให้ผู้ใช้ปรับระดับความมั่นใจอย่างเดียว แล้วคำนวณ Z-score จากความสัมพันธ์ทางสถิติ
     // ลดความสับสนและป้องกันระดับความมั่นใจกับ Z-score ไม่ตรงกัน
-    setDraftPolicy((current) => ({
-      ...current,
-      serviceLevel: value,
-      zScore: calculateZScoreFromServiceLevel(value),
-    }));
+    setDraftPolicy((current) =>
+      applyAutoFormulaVersion(formulaPolicy, {
+        ...current,
+        serviceLevel: value,
+        zScore: calculateZScoreFromServiceLevel(value),
+      }),
+    );
   };
+
+  useEffect(() => {
+    setDraftPolicy(formulaPolicy);
+  }, [formulaPolicy]);
 
   return (
     <>
@@ -3210,27 +4412,38 @@ function SettingsPage({
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
         <Card>
           <SectionHeader title={`เวอร์ชันสูตร ${draftPolicy.formulaVersion}`} subtitle="แก้ไขค่านโยบายแล้วบันทึกเป็นเวอร์ชันใหม่เพื่อใช้ตรวจสอบย้อนหลัง" />
+          <div className="border-b border-slate-200 p-5">
+            <InlineAlert tone="info">
+              <p>
+                การแก้ไขในหน้านี้จะมีผลหลังจากกดบันทึกเป็นเวอร์ชันสูตรใหม่ ค่าที่คำนวณใหม่ใน Dashboard, SKU Detail, Create Request และ VMI
+                จะใช้ policy ล่าสุด ส่วน Request History และ Calculation Snapshot เดิมจะไม่เปลี่ยนย้อนหลัง
+              </p>
+              <p>
+                ถ้าผู้ใช้บันทึก AI Feedback แล้ว error สูงกว่าเกณฑ์ส่วนต่างสูง ระบบจะปรับ Service Level และ Seasonal Factor ทีละน้อย พร้อมสร้างสูตรเวอร์ชันใหม่อัตโนมัติเพื่อใช้กับการคำนวณครั้งถัดไป
+              </p>
+            </InlineAlert>
+          </div>
           <div className="grid grid-cols-1 gap-4 p-5 md:grid-cols-2">
-            <Field label="เวอร์ชันสูตร">
-              <input className={inputClass} value={draftPolicy.formulaVersion} onChange={(event) => setDraftPolicy({ ...draftPolicy, formulaVersion: event.target.value })} />
+            <Field label="เวอร์ชันสูตร" hint={formulaSettingHelp.formulaVersion}>
+              <input className={`${inputClass} cursor-not-allowed bg-slate-50 text-slate-600`} value={draftPolicy.formulaVersion} readOnly />
             </Field>
-            <Field label="ระดับความมั่นใจ" hint="เช่น 0.95 = 95%">
-              <input className={inputClass} type="number" step="0.005" min="0.8" max="0.995" value={draftPolicy.serviceLevel} onChange={(event) => updateDraftServiceLevel(Number(event.target.value))} />
+            <Field label="ระดับความมั่นใจ" hint={formulaSettingHelp.serviceLevel}>
+              <EditableNumberInput step="0.005" min="0.8" max="0.995" value={draftPolicy.serviceLevel} onValueChange={updateDraftServiceLevel} />
             </Field>
-            <Field label="Z-score ที่ระบบคำนวณ" hint="คำนวณอัตโนมัติจากระดับความมั่นใจ">
+            <Field label="Z-score ที่ระบบคำนวณ" hint={formulaSettingHelp.zScore}>
               <input className={inputClass} type="number" value={draftPolicy.zScore} readOnly />
             </Field>
-            <Field label="ค่าตั้งต้นตัวคูณฤดูกาล">
-              <input className={inputClass} type="number" step="0.01" value={draftPolicy.seasonalFactor} onChange={(event) => updateDraftNumber("seasonalFactor", Number(event.target.value))} />
+            <Field label="ค่าตั้งต้นตัวคูณฤดูกาล" hint={formulaSettingHelp.seasonalFactor}>
+              <EditableNumberInput step="0.01" value={draftPolicy.seasonalFactor} onValueChange={(value) => updateDraftNumber("seasonalFactor", value)} />
             </Field>
-            <Field label="ค่าตั้งต้นตัวคูณงบประมาณ">
-              <input className={inputClass} type="number" step="0.01" value={draftPolicy.budgetFactor} onChange={(event) => updateDraftNumber("budgetFactor", Number(event.target.value))} />
+            <Field label="ค่าตั้งต้นตัวคูณงบประมาณ" hint={formulaSettingHelp.budgetFactor}>
+              <EditableNumberInput step="0.01" value={draftPolicy.budgetFactor} onValueChange={(value) => updateDraftNumber("budgetFactor", value)} />
             </Field>
-            <Field label="เกณฑ์ส่วนต่างสูง (%)">
-              <input className={inputClass} type="number" step="1" value={draftPolicy.highVarianceThreshold} onChange={(event) => updateDraftNumber("highVarianceThreshold", Number(event.target.value))} />
+            <Field label="เกณฑ์ส่วนต่างสูง (%)" hint={formulaSettingHelp.highVarianceThreshold}>
+              <EditableNumberInput step="1" value={draftPolicy.highVarianceThreshold} onValueChange={(value) => updateDraftNumber("highVarianceThreshold", value)} />
             </Field>
             <div className="md:col-span-2">
-              <Field label="หมายเหตุเวอร์ชัน">
+              <Field label="หมายเหตุเวอร์ชัน" hint={formulaSettingHelp.versionNote}>
                 <textarea className={textareaClass} value={versionNote} onChange={(event) => setVersionNote(event.target.value)} />
               </Field>
             </div>
@@ -3249,8 +4462,8 @@ function SettingsPage({
           <div className="border-t border-slate-200 p-5">
             <h3 className="font-semibold text-slate-950">ประวัติเวอร์ชันสูตร</h3>
             <DataTable columns={["วันที่", "เวอร์ชัน", "ระดับความมั่นใจ", "Z", "ฤดูกาล", "งบประมาณ", "หมายเหตุ"]} empty={formulaVersions.length === 0}>
-              {formulaVersions.map((version) => (
-                <tr key={`${version.formulaVersion}-${version.createdAt}`}>
+              {formulaVersions.map((version, index) => (
+                <tr key={`${version.formulaVersion}-${version.createdAt}-${index}`}>
                   <td className="px-4 py-3">{version.createdAt}</td>
                   <td className="px-4 py-3 font-semibold">{version.formulaVersion}</td>
                   <td className="px-4 py-3">{formatPercent(version.serviceLevel * 100).replace("+", "")}</td>
@@ -3271,6 +4484,9 @@ function SettingsPage({
               <p>มูลค่าประมาณการ &gt; งบคลังพื้นที่ และ ≤ งบเขต → อนุมัติระดับเขต</p>
               <p>มูลค่าประมาณการ &gt; งบเขต → เขตอนุมัติส่งต่อส่วนกลาง</p>
               <p>ส่วนกลางสามารถอนุมัติ ไม่อนุมัติ หรือขอข้อมูลเพิ่มเติมได้</p>
+              <p className="text-xs leading-5 text-slate-500">
+                เส้นทางอนุมัติจะถูกคำนวณใหม่ทุกครั้งที่สร้างคำขอหรือเปลี่ยน Requested Quantity / Supplier Price โดยดูจาก Estimated Cost และงบคงเหลือ ณ เวลานั้น
+              </p>
             </div>
           </Card>
           <Card className="p-5">
@@ -3279,6 +4495,33 @@ function SettingsPage({
               <p>ต้องระบุเหตุผลเมื่อจำนวนที่ขอต่างจากจำนวนที่ระบบแนะนำ</p>
               <p>เกณฑ์ส่วนต่างสูง = {draftPolicy.highVarianceThreshold}%</p>
               <p>แสดงคำเตือนเมื่อขอมากกว่าหรือน้อยกว่าคำแนะนำของระบบ</p>
+              <p className="text-xs leading-5 text-slate-500">
+                เมื่อบันทึก policy ใหม่ เกณฑ์นี้จะมีผลกับการสร้างหรือแก้ไขคำขอครั้งถัดไปทันที แต่ไม่แก้เหตุผลหรือสถานะของคำขอที่ส่งไปแล้ว
+              </p>
+            </div>
+          </Card>
+          <Card className="p-5">
+            <h3 className="font-semibold text-slate-950">กฎการเก็บข้อมูล</h3>
+            <div className="mt-4 space-y-3 text-sm leading-6 text-slate-600">
+              <p>ข้อมูล seed ใช้เฉพาะตอนเริ่มต้น หลังจากผู้ใช้แก้ไข ระบบจะเก็บเป็น JSON state ใน browser storage</p>
+              <p>Request, Approval, Supplier, SKU, Settings และ Calculation Snapshot ต้องถูกเก็บไว้หลัง refresh</p>
+              <p>ค่าคำนวณต้องคำนวณจากข้อมูลปัจจุบัน และ snapshot ต้องเก็บค่าตามเวลาที่สร้างคำขอ</p>
+            </div>
+          </Card>
+          <Card className="p-5">
+            <h3 className="font-semibold text-slate-950">ล้างประวัติทดสอบ</h3>
+            <div className="mt-4 space-y-3 text-sm leading-6 text-slate-600">
+              <p>ใช้เมื่อต้องการลด log ที่เกิดจากการทดสอบซ้ำ ๆ ระบบจะรีเซ็ต Request History, Approval Timeline, Contact History, Settings Change Log และ Formula Version History</p>
+              <p className="text-xs leading-5 text-slate-500">ไม่ลบ Supplier, SKU, Supported Items, ราคา, Lead Time, MOQ หรือค่าตั้งค่า policy ปัจจุบัน</p>
+              <Button variant="danger" className="w-full" onClick={onClearDemoHistory}>ล้างประวัติทดสอบ</Button>
+            </div>
+          </Card>
+          <Card className="p-5">
+            <h3 className="font-semibold text-slate-950">Google Sheet PO Feedback</h3>
+            <div className="mt-4 space-y-3 text-sm leading-6 text-slate-600">
+              <p>สถานะ endpoint: <span className="font-semibold text-slate-950">{isGooglePoFeedbackEnabled() ? "เปิดใช้งาน" : "ยังไม่ได้ตั้งค่า"}</span></p>
+              <p>ระบบจะส่งสำเนา event ตอนบันทึก/ส่งคำขอซื้อและตอนอนุมัติไปยัง Google endpoint ถ้าตั้งค่า `VITE_GOOGLE_PO_FEEDBACK_ENDPOINT`</p>
+              <p>endpoint นี้เป็นช่องทาง feedback เพิ่มเติม ระบบยังเก็บข้อมูลหลักไว้ใน JSON state เหมือนเดิม</p>
             </div>
           </Card>
           <Card>
@@ -3414,6 +4657,9 @@ function getChangeLogFieldLabel(field: string) {
     seasonalFactor: "ตัวคูณฤดูกาล",
     budgetFactor: "ตัวคูณงบประมาณ",
     highVarianceThreshold: "เกณฑ์ส่วนต่างสูง",
+    localBudget: "งบคลังพื้นที่",
+    regionalBudget: "งบระดับเขต",
+    centralBudget: "งบส่วนกลาง",
     savedConfirmation: "บันทึกยืนยัน",
     "รายการ SKU ที่รองรับ": "รายการ SKU ที่รองรับ",
     "ข้อมูลตั้งต้นการคำนวณ": "ข้อมูลตั้งต้นการคำนวณ",
@@ -3453,17 +4699,18 @@ function getDefaultOffer(skuId: string, offers: SupplierOffer[] = supplierOffers
   return offers.find((offer) => offer.skuId === skuId) ?? offers[0];
 }
 
-function getRegionalBudget(region: string) {
-  return regionalBudgets.find((budget) => budget.region === region)?.remaining ?? 0;
+function getRegionalBudget(region: string, budgetSettings: BudgetSettingsState = defaultBudgetSettings) {
+  if (region === "National") return budgetSettings.centralBudgetRemaining;
+  return budgetSettings.regionalBudgets[region as BudgetRegion] ?? regionalBudgets.find((budget) => budget.region === region)?.remaining ?? 0;
 }
 
-function getBudgetContextForInventory(inventory: InventoryRecord): BudgetContext {
+function getBudgetContextForInventory(inventory: InventoryRecord, budgetSettings: BudgetSettingsState = defaultBudgetSettings): BudgetContext {
   const warehouse = getWarehouse(inventory.warehouseId);
 
   return {
-    localBudgetRemaining: warehouse.localBudget,
-    regionalBudgetRemaining: getRegionalBudget(warehouse.region),
-    centralBudgetRemaining,
+    localBudgetRemaining: budgetSettings.localBudgets[warehouse.id] ?? warehouse.localBudget,
+    regionalBudgetRemaining: getRegionalBudget(warehouse.region, budgetSettings),
+    centralBudgetRemaining: budgetSettings.centralBudgetRemaining,
   };
 }
 
@@ -3494,6 +4741,81 @@ function getDefaultRecommendation(inventory: InventoryRecord, offers: SupplierOf
   const supplier = getSupplierSkuRecord(offer.supplierId, effectiveInventory.skuId, offers);
 
   return calculateInventoryRecommendation({ inventory: effectiveInventory, supplier, formulaVersion: policy?.formulaVersion ?? formulaVersion });
+}
+
+function getInventoryStatusFromRecommendation(
+  inventory: InventoryRecord,
+  recommendation: Pick<ReturnType<typeof calculateInventoryRecommendation>, "safetyStock" | "reorderPoint">,
+): StockStatus {
+  if (inventory.currentStock <= recommendation.safetyStock) return "Critical";
+  if (inventory.currentStock <= recommendation.reorderPoint) return "Near Reorder Point";
+  return "Normal";
+}
+
+function buildActualCalculationCards(
+  inventory: InventoryRecord,
+  recommendation: InventoryCalculationResult | PurchaseRequestCalculationSnapshot,
+  unit: string,
+) {
+  const reorderPointRaw = recommendation.demandDuringLeadTime + recommendation.safetyStock;
+  const rawSuggestedQuantity = recommendation.targetStockLevel - inventory.currentStock;
+  const requestedQuantity = "requestedQuantity" in recommendation ? recommendation.requestedQuantity : recommendation.suggestedQuantity;
+  const estimatedCost =
+    "estimatedCostForRequestedQuantity" in recommendation
+      ? recommendation.estimatedCostForRequestedQuantity
+      : requestedQuantity * recommendation.unitPrice;
+  const targetSource =
+    recommendation.targetStockLevelSource === "PolicyOverride"
+      ? "Policy/Min-Max target"
+      : "Forecast Demand + Safety Stock";
+
+  return [
+    {
+      title: "ค่าเฉลี่ยการใช้ต่อวัน",
+      calculation: `${formatNumber(recommendation.historicalUsageTotal)} ${unit} / ${recommendation.historicalUsageDays} วัน = ${formatNumber(recommendation.averageDailyDemand)} ${unit}/วัน`,
+      changes: "ข้อมูลการใช้ย้อนหลังหรือจำนวนวันย้อนหลังเปลี่ยน",
+    },
+    {
+      title: "ความผันผวนของการใช้",
+      calculation: `SD รายงวด ${formatNumber(recommendation.demandVariabilityPerPeriod)} ${unit}/งวด แปลงเป็น ${formatNumber(recommendation.demandVariabilityPerDay)} ${unit}/วัน`,
+      changes: "รูปแบบการใช้ย้อนหลังรายเดือน/รายงวดเปลี่ยน",
+    },
+    {
+      title: "ระยะเวลารอพัสดุที่ปรับแล้ว",
+      calculation: `${formatNumber(recommendation.supplierLeadTimeDays)} วัน × ${formatNumber(recommendation.seasonalFactor)} × ${formatNumber(recommendation.budgetFactor)} = ${formatNumber(recommendation.adjustedLeadTimeDays)} วัน`,
+      changes: "Lead Time ของซัพพลายเออร์, Seasonal Factor หรือ Budget Factor เปลี่ยน",
+    },
+    {
+      title: "ระดับพัสดุสำรองปลอดภัย",
+      calculation: `${formatNumber(recommendation.zScore)} × ${formatNumber(recommendation.demandVariabilityPerDay)} × √${formatNumber(recommendation.adjustedLeadTimeDays)} ≈ ${formatNumber(recommendation.safetyStock)} ${unit}`,
+      changes: "Service Level/Z-score, Demand Variability หรือ Adjusted Lead Time เปลี่ยน",
+    },
+    {
+      title: "ความต้องการใช้ระหว่างรอพัสดุ",
+      calculation: `${formatNumber(recommendation.averageDailyDemand)} ${unit}/วัน × ${formatNumber(recommendation.adjustedLeadTimeDays)} วัน = ${formatNumber(recommendation.demandDuringLeadTime)} ${unit}`,
+      changes: "Average Daily Demand หรือ Adjusted Lead Time เปลี่ยน",
+    },
+    {
+      title: "จุดสั่งซื้อใหม่",
+      calculation: `${formatNumber(recommendation.demandDuringLeadTime)} ${unit} + ${formatNumber(recommendation.safetyStock)} ${unit} = ${formatNumber(reorderPointRaw)} ${unit}; ปัดขึ้นเป็น ${formatNumber(recommendation.reorderPoint)} ${unit}`,
+      changes: "Demand During Lead Time หรือ Safety Stock เปลี่ยน",
+    },
+    {
+      title: "ระดับสต็อกเป้าหมาย",
+      calculation: `${formatNumber(recommendation.targetStockLevel)} ${unit} จาก ${targetSource}`,
+      changes: "Forecast Demand, Safety Stock หรือ Policy Override เปลี่ยน",
+    },
+    {
+      title: "จำนวนที่ระบบแนะนำ",
+      calculation: `${formatNumber(recommendation.targetStockLevel)} ${unit} - ${formatNumber(inventory.currentStock)} ${unit} = ${formatNumber(rawSuggestedQuantity)} ${unit}; ปัดตาม MOQ ${formatNumber(recommendation.moq)} เป็น ${formatNumber(recommendation.suggestedQuantity)} ${unit}`,
+      changes: "Target Stock, Current Stock หรือ MOQ เปลี่ยน",
+    },
+    {
+      title: "มูลค่าประมาณการ",
+      calculation: `${formatNumber(requestedQuantity)} ${unit} × ${formatCurrency(recommendation.unitPrice)} = ${formatCurrency(estimatedCost)}`,
+      changes: "Requested Quantity หรือ Unit Price ของซัพพลายเออร์เปลี่ยน",
+    },
+  ];
 }
 
 function applyFormulaPolicy(inventory: InventoryRecord, policy: FormulaPolicyState): InventoryRecord {
@@ -3587,7 +4909,9 @@ function addFormulaPolicyChangeLogs(
 ) {
   // Formula policy ถูกเก็บเป็น version ทุกครั้งที่กด Save
   // และ log ราย field เพื่อให้ตรวจสอบย้อนหลังได้ว่า version ใหม่ต่างจากเดิมตรงไหน
-  (Object.keys(newPolicy) as Array<keyof FormulaPolicyState>).forEach((field) => {
+  const changedFields = (Object.keys(newPolicy) as Array<keyof FormulaPolicyState>).filter((field) => oldPolicy[field] !== newPolicy[field]);
+
+  changedFields.forEach((field) => {
     if (oldPolicy[field] !== newPolicy[field]) {
       addLog({
         area: "Settings",
@@ -3599,6 +4923,66 @@ function addFormulaPolicyChangeLogs(
       });
     }
   });
+}
+
+function hasBudgetSettingsChange(oldSettings: BudgetSettingsState, newSettings: BudgetSettingsState) {
+  const localChanged = warehouses.some((warehouse) => oldSettings.localBudgets[warehouse.id] !== newSettings.localBudgets[warehouse.id]);
+  const regionalChanged = regionalBudgets.some((budget) => oldSettings.regionalBudgets[budget.region] !== newSettings.regionalBudgets[budget.region]);
+  const centralChanged = oldSettings.centralBudgetRemaining !== newSettings.centralBudgetRemaining;
+
+  return localChanged || regionalChanged || centralChanged;
+}
+
+function addBudgetChangeLogs(
+  oldSettings: BudgetSettingsState,
+  newSettings: BudgetSettingsState,
+  note: string,
+  addLog: (entry: Omit<ChangeLogEntry, "id" | "actor" | "createdAt">) => void,
+) {
+  // Budget log แยกจาก Settings เพราะงบประมาณมีผลต่อ Approval Routing โดยตรง
+  // แต่ไม่ใช่ formula version และไม่ควรแก้ Calculation Snapshot เดิมย้อนหลัง
+  warehouses.forEach((warehouse) => {
+    const oldValue = oldSettings.localBudgets[warehouse.id] ?? warehouse.localBudget;
+    const newValue = newSettings.localBudgets[warehouse.id] ?? warehouse.localBudget;
+
+    if (oldValue !== newValue) {
+      addLog({
+        area: "Budget",
+        target: warehouse.id,
+        field: "localBudget",
+        oldValue: formatCurrency(oldValue),
+        newValue: formatCurrency(newValue),
+        note,
+      });
+    }
+  });
+
+  regionalBudgets.forEach((budget) => {
+    const oldValue = oldSettings.regionalBudgets[budget.region] ?? budget.remaining;
+    const newValue = newSettings.regionalBudgets[budget.region] ?? budget.remaining;
+
+    if (oldValue !== newValue) {
+      addLog({
+        area: "Budget",
+        target: budget.region,
+        field: "regionalBudget",
+        oldValue: formatCurrency(oldValue),
+        newValue: formatCurrency(newValue),
+        note,
+      });
+    }
+  });
+
+  if (oldSettings.centralBudgetRemaining !== newSettings.centralBudgetRemaining) {
+    addLog({
+      area: "Budget",
+      target: "Central National",
+      field: "centralBudget",
+      oldValue: formatCurrency(oldSettings.centralBudgetRemaining),
+      newValue: formatCurrency(newSettings.centralBudgetRemaining),
+      note,
+    });
+  }
 }
 
 function buildVmiRow(metric: string, currentValue: number, vmiValue: number, unit: string) {

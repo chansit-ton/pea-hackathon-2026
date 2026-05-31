@@ -33,6 +33,383 @@
 - ...
 ```
 
+## 2026-05-31 - แก้ช่องกรอกงบประมาณให้ลบเลข 0 ได้
+
+### Summary
+- ปรับ Budget Settings ให้เก็บค่าระหว่างพิมพ์เป็น string ก่อน แล้วค่อยแปลงเป็น number ตอนบันทึก
+- แก้ปัญหา input ตัวเลขที่ลบ `0` ไม่ได้ เพราะ `Number("")` ถูกแปลงกลับเป็น `0` ทันที ทำให้พิมพ์แล้วเกิดค่าเช่น `016`
+- ค่า summary card ในหน้า Budget ยังแสดงผลเป็นตัวเลขจริงโดยแปลง draft string ชั่วคราวมาคำนวณ
+- เพิ่มกฎใน `DATA_POLICY.md` ว่า numeric budget input ต้องยอมให้ลบค่าว่างระหว่างพิมพ์ได้
+
+### Why
+- ผู้ใช้พบว่าเวลาพิมพ์งบประมาณใหม่ ไม่สามารถลบเลข 0 เดิมได้ ทำให้ค่าที่กรอกผิดรูปแบบ
+
+### Changed Files
+- `src/App.tsx`
+- `DATA_POLICY.md`
+- `PROJECT_UPDATES.md`
+
+### Verification
+- `npm.cmd run build` ผ่าน
+
+### Notes / Follow-up
+- ค่าว่างระหว่างพิมพ์จะถูกตีความเป็น 0 เฉพาะตอนคำนวณ summary และตอนบันทึกเท่านั้น
+
+## 2026-05-31 - เพิ่มหน้าตั้งค่างบประมาณ
+
+### Summary
+- เพิ่มหน้า `งบประมาณ` ใน sidebar สำหรับแก้ Local Budget, Regional Budget และ Central Budget
+- เพิ่ม persistent state `budgetSettings` เพื่อเก็บงบที่ผู้ใช้แก้ไว้หลัง refresh
+- เปลี่ยน Budget Check และ Approval Routing ของ SKU Detail, Calculation Detail และ Create Purchase Request ให้ใช้งบจาก budget settings ล่าสุด
+- ปรับ Dashboard Budget Overview ให้แสดงงบจาก budget settings ตามตัวกรองปัจจุบัน พร้อมคำอธิบาย `คำนวณจริงจาก` และ `เปลี่ยนเมื่อ`
+- เพิ่ม Budget Change Log แยกจาก Settings/Supplier log
+- อัปเดต `DATA_POLICY.md` และ `README.md` ให้ระบุว่าการแก้งบต้อง persist และไม่แก้ snapshot เก่าย้อนหลัง
+
+### Why
+- ผู้ใช้ต้องการหน้าสำหรับตั้งค่างบต่าง ๆ และงบที่แก้ต้องกระทบการตรวจงบ/เส้นทางอนุมัติจริง ไม่ใช่แสดงผลอย่างเดียว
+
+### Changed Files
+- `src/App.tsx`
+- `DATA_POLICY.md`
+- `README.md`
+- `PROJECT_UPDATES.md`
+
+### Verification
+- `npm.cmd run build` ผ่าน
+
+### Notes / Follow-up
+- งบที่แก้มีผลกับคำขอใหม่หรือ preview ใหม่เท่านั้น ส่วน Request History และ Calculation Snapshot เดิมยังคงค่าตามวันที่สร้างคำขอ
+
+## 2026-05-31 - รวม Source ตัวกรอง Dashboard และการใช้ SKU
+
+### Summary
+- เพิ่ม helper กลางสำหรับตัวเลือก `เขต`, `WH Id` และ `SKU` จาก `peaWarehouseMaster`, `peaSkuMaster` และ `peaMonthlyUsage`
+- ปรับ Dashboard ให้ใช้ตัวกรองชุดเดียวกับหน้า “การใช้ SKU” แทน select แบบ hardcoded
+- ปรับ metric บน Dashboard ให้คำนวณตามตัวกรองจาก usage/relationship data ชุดเดียวกัน
+- ปรับหน้า “การใช้ SKU” ให้เรียก helper กลางเดียวกัน เพื่อลดความเสี่ยงที่ตัวเลือกของแต่ละหน้าจะไม่ตรงกัน
+- อัปเดต `DATA_POLICY.md` และ `README.md` เป็นกฎว่าตัวกรองที่ใช้ซ้ำต้องอ่านจาก source/helper กลาง ห้าม hardcode option แยกหน้า
+
+### Why
+- ผู้ใช้พบว่า Dashboard กับหน้าการใช้ SKU มีตัวเลือก filter ไม่ตรงกัน เพราะใช้คนละ data source จึงรวมให้ใช้ master จาก Excel seed ชุดเดียวกัน
+
+### Changed Files
+- `src/App.tsx`
+- `DATA_POLICY.md`
+- `README.md`
+- `PROJECT_UPDATES.md`
+
+### Verification
+- `npm.cmd run build` ผ่าน
+
+### Notes / Follow-up
+- Flow demo C01 ยังใช้ alias map จาก SKU สั้นไป SKU ใน PEA model เพื่อให้หน้ารายละเอียดเดิมยังเปิดได้
+
+## 2026-05-30 - ย้ายรายละเอียดสูตรเข้าไปใน Metric Card
+
+### Summary
+- เพิ่ม props `formula` และ `changes` ให้ `MetricCard` เพื่อแสดงวิธีคำนวณและเงื่อนไขที่ทำให้ค่าเปลี่ยนภายในกรอบเดียวกัน
+- ย้ายคำอธิบายของการ์ด Dashboard, Relationship Summary, Usage Summary และ SKU Detail เข้าไปอยู่ในกรอบ metric card แต่ละใบ
+- ลบชุดคำอธิบายที่แยกอยู่ใต้ metric cards ในหน้าที่มี metric card แล้ว
+- เพิ่มสูตรในกรอบของ Relationship Insight และ Inventory formula cards เพื่อให้ทุก dashboard-style card ใช้ pattern เดียวกัน
+- เติมรายละเอียดสูตรในกรอบค่าเฉลี่ยตาม Season ให้แสดงเดือนที่นำมาหารและจำนวนเดือนที่ใช้คำนวณ
+- อัปเดต `DATA_POLICY.md` และ `README.md` ว่า dashboard metric ต้องใส่ `คำนวณจริงจาก` และ `เปลี่ยนเมื่อ` ในกรอบเดียวกับตัวเลขเสมอ
+
+### Why
+- ผู้ใช้ต้องการให้รายละเอียดวิธีคำนวณอยู่ในกรอบของตัวเลขนั้นเลย เพื่อไม่ต้องเทียบการ์ดกับข้อความอธิบายด้านล่างเอง
+
+### Changed Files
+- `src/components/common.tsx`
+- `src/App.tsx`
+- `DATA_POLICY.md`
+- `README.md`
+- `PROJECT_UPDATES.md`
+
+### Verification
+- `npm.cmd run build` ผ่าน
+
+### Notes / Follow-up
+- `MetricCard` ยังรองรับการใช้งานแบบเดิมได้ หากไม่ส่ง `formula` หรือ `changes` จะไม่แสดงรายละเอียดเพิ่ม
+
+## 2026-05-30 - แก้ Metric Card ไม่ให้ข้อความล้นกรอบ
+
+### Summary
+- ปรับ `MetricCard` กลางให้ label, value และ helper wrap อยู่ในกรอบเสมอ
+- เปลี่ยน layout จากการวางตัวเลขกับ helper ในบรรทัดเดียว เป็นเรียงลงมาเพื่อรองรับตัวเลขยาวและข้อความช่วยยาว
+- เพิ่ม `min-w-0`, `break-words` และ `overflow-wrap:anywhere` เพื่อกันข้อความทะลุออกจาก card
+
+### Why
+- หน้า Usage มี metric เช่น `1,916,456` และ helper `หน่วยตาม SKU` ที่เบียดกันจนอ่านเหมือนล้นกรอบ ต้องให้ทุก metric card อยู่ในกรอบและอ่านได้บนทุกขนาดจอ
+
+### Changed Files
+- `src/components/common.tsx`
+- `PROJECT_UPDATES.md`
+
+### Verification
+- `npm.cmd run build` ผ่าน
+
+### Notes / Follow-up
+- การแก้นี้กระทบทุกหน้าที่ใช้ `MetricCard` ให้ปลอดภัยขึ้นโดยไม่ต้องแก้ทีละหน้า
+
+## 2026-05-30 - บังคับให้คำอธิบายสูตรใช้ค่าจริงและแยกคำอธิบายราย Metric
+
+### Summary
+- ปรับหน้า Calculation Detail ให้การ์ดด้านบนแสดงการคำนวณจริงของ SKU/Request ปัจจุบันแทนการแสดงสูตร generic จาก `formulaList`
+- ปรับ `CalculationExplanationPanel` เปลี่ยนคำว่า `ตัวอย่างคำนวณ` เป็น `คำนวณจริงจากข้อมูลนี้` และระบุค่าก่อนปัด/หลังปัดของ Reorder Point
+- เพิ่มคำอธิบายแยกราย metric ใน Dashboard, Inventory, SKU Detail, Usage และ Relationship Summary แทนข้อความรวมยาวก้อนเดียว
+- อัปเดต `DATA_POLICY.md` และ `README.md` ให้เป็นกฎว่าห้ามใช้สูตรลอย ๆ ต้องใช้ค่าจริงของ record/request/snapshot และถ้าไม่เข้าใจต้องถามก่อน ห้ามเดา
+
+### Why
+- ผู้ใช้ต้องการให้ทุกสูตรอธิบายจากค่าจริงบนหน้าจอ เพื่อให้ไม่ต้องตีความเองและลดความเสี่ยงจากการอธิบายผิด
+- Dashboard ต้องช่วยให้ผู้ใช้เข้าใจแต่ละตัวเลขได้ทันที โดยแยกคำอธิบายว่าแต่ละค่าเกิดจากข้อมูลอะไรและเปลี่ยนเมื่อไร
+
+### Changed Files
+- `src/App.tsx`
+- `src/components/CalculationExplanationPanel.tsx`
+- `DATA_POLICY.md`
+- `README.md`
+- `PROJECT_UPDATES.md`
+
+### Verification
+- `npm.cmd run build` ผ่าน
+
+### Notes / Follow-up
+- กฎใหม่ระบุชัดว่าถ้าข้อมูลหรือสูตรไม่ชัด ต้องถามผู้ใช้ก่อน ห้ามเดาหรือสร้างข้อมูลสมมติ
+
+## 2026-05-29 - เพิ่มคำอธิบายตัวเลข Dashboard และ AI Feedback Auto-tune
+
+### Summary
+- เพิ่มคำอธิบายที่มา/สูตรและ trigger การเปลี่ยนแปลงของตัวเลขใน Dashboard, Inventory, Usage, Approval, History, VMI Candidate และ VMI Simulation
+- เพิ่ม AI Feedback loop ใน Request History เพื่อบันทึกค่าจริงเทียบกับ AI Suggested Quantity พร้อม error quantity และ error percent
+- ถ้า error สูงกว่าเกณฑ์ส่วนต่างสูงใน Settings ระบบจะ auto-tune สูตรแบบก้าวเล็ก โดยปรับ Service Level / Seasonal Factor และสร้าง formula version ใหม่
+- เพิ่มสรุป AI Accuracy Feedback บน Dashboard เพื่อแสดงจำนวน feedback, error เฉลี่ย และ bias ของระบบ
+- อัปเดต `DATA_POLICY.md` ให้เป็นกฎว่าหน้า dashboard/metric/AI Suggest ต้องอธิบายที่มาตัวเลข และ feedback ต้องไม่แก้ snapshot เดิมย้อนหลัง
+
+### Why
+- ผู้ใช้และ mentor ต้องเห็นว่าตัวเลขบน dashboard คำนวณจากอะไร เปลี่ยนเมื่อไร และหาก AI Suggest ไม่ตรงกับค่าจริง ระบบมีประวัติและ feedback loop สำหรับปรับปรุงสูตร
+
+### Changed Files
+- `src/App.tsx`
+- `DATA_POLICY.md`
+- `PROJECT_UPDATES.md`
+
+### Verification
+- `npm.cmd run build` ผ่าน
+
+### Notes / Follow-up
+- Auto-tune ใน PoC เป็นการปรับ policy แบบก้าวเล็กและสร้าง version ใหม่ ไม่ใช่ machine learning backend เต็มรูปแบบ
+- Calculation Snapshot เดิมใน Request History ยังถูกเก็บตามเวลาที่สร้างคำขอและไม่เปลี่ยนย้อนหลัง
+
+## 2026-05-29 - ทำให้ Save Settings แบบไม่มีการเปลี่ยนค่าไม่สร้าง Version Log
+
+### Summary
+- ปรับการกดบันทึกในหน้า Settings แบบไม่มีการเปลี่ยนค่า policy ให้เป็น no-op
+- ถ้าไม่มีค่า policy ที่เปลี่ยน ระบบจะแจ้งเตือนและไม่เพิ่ม Formula Version History
+- ไม่สร้าง Settings Change Log ประเภท `savedConfirmation` สำหรับการบันทึกเปล่า ๆ แล้ว
+- อัปเดต `DATA_POLICY.md` ให้เป็นกฎว่าการกดบันทึกโดยไม่มีการเปลี่ยนค่า policy ต้องไม่สร้าง version/log เพิ่ม
+
+### Why
+- ลด log ซ้ำและทำให้ Formula Version History สื่อความหมายว่ามีการเปลี่ยน policy จริงเท่านั้น
+
+### Changed Files
+- `src/App.tsx`
+- `DATA_POLICY.md`
+- `PROJECT_UPDATES.md`
+
+### Verification
+- `npm.cmd run build` ผ่าน
+
+### Notes / Follow-up
+- การ Save Supplier แบบไม่มีการเปลี่ยนค่ายังคงมี confirmation log แยกอยู่ เพราะเป็นการยืนยันข้อมูลติดต่อ ไม่ใช่ formula version
+
+## 2026-05-29 - เปลี่ยน Formula Version ให้อัปเดตอัตโนมัติ
+
+### Summary
+- เปลี่ยนช่อง Formula Version ในหน้า Settings เป็น read-only
+- เพิ่ม logic ให้ระบบเพิ่มเวอร์ชันอัตโนมัติเมื่อมีการแก้ policy ที่กระทบการคำนวณ เช่น `v1.0` เป็น `v1.1`
+- ถ้าแก้ค่าแล้วกลับมาเท่าค่า policy ปัจจุบัน ระบบจะคงเวอร์ชันเดิมก่อนบันทึก
+- ตอนกดบันทึก ระบบคำนวณเวอร์ชันซ้ำอีกชั้นเพื่อกันการส่งค่าผิดจาก UI
+- อัปเดต `DATA_POLICY.md` ให้เป็นกฎว่า Formula Version ต้อง auto update และไม่ให้ผู้ใช้กรอกเอง
+
+### Why
+- ลดความสับสนของผู้ใช้และทำให้ Audit Trail ของสูตรคำนวณมีมาตรฐานมากขึ้น
+
+### Changed Files
+- `src/App.tsx`
+- `DATA_POLICY.md`
+- `PROJECT_UPDATES.md`
+
+### Verification
+- `npm.cmd run build` ผ่าน
+
+### Notes / Follow-up
+- Auto version จะเพิ่มเลขชุดสุดท้ายของ string เช่น `v1.9` เป็น `v1.10`
+
+## 2026-05-29 - แก้ Clear History ให้ล้าง Formula Version History ครบ
+
+### Summary
+- แก้ปุ่ม `ล้างประวัติทดสอบ` ให้เขียนค่า reset ลง persistent JSON storage โดยตรงสำหรับ Request, Contact Log, Change Log และ Formula Version History
+- เพิ่ม helper สำหรับสร้าง baseline ของ Formula Version History จาก policy ปัจจุบันหลังล้างประวัติ
+- clone ค่า seed ของ Request และ Contact Log ก่อน setState เพื่อกันการอ้างอิง array เดิม
+- แก้ key ของแถว Formula Version History ให้ไม่ซ้ำ แม้มี version และ timestamp เท่ากัน
+
+### Why
+- หลังล้างประวัติยังเห็น Formula Version History เก่าค้างอยู่บางรายการ ต้องทำให้ reset ทั้ง state และ persistent storage ชัดเจน
+
+### Changed Files
+- `src/App.tsx`
+- `PROJECT_UPDATES.md`
+
+### Verification
+- `npm.cmd run build` ผ่าน
+
+### Notes / Follow-up
+- ปุ่มนี้ล้างเฉพาะข้อมูลใน browser persistent JSON state ไม่สามารถล้าง row ที่ส่งออกไป Google Sheet แล้วได้
+
+## 2026-05-29 - เพิ่มปุ่มล้างประวัติทดสอบ
+
+### Summary
+- เพิ่มปุ่ม `ล้างประวัติทดสอบ` ในหน้า Settings
+- ปุ่มนี้รีเซ็ต Request History, Approval Timeline, Contact History, Settings Change Log และ Formula Version History ให้เหลือ baseline สำหรับทดสอบต่อ
+- ไม่ลบ Supplier, SKU, Supported Items, ราคา, Lead Time, MOQ หรือค่า Formula Policy ปัจจุบัน
+- เพิ่ม confirmation ก่อนล้างข้อมูลเพื่อกันกดพลาด
+
+### Why
+- ผู้ใช้ต้องการล้าง log ที่เกิดจากการทดสอบซ้ำ ๆ เพื่อให้หน้า History/Log ไม่ยาวเกินไปตอน demo
+
+### Changed Files
+- `src/App.tsx`
+- `PROJECT_UPDATES.md`
+
+### Verification
+- `npm.cmd run build` ผ่าน
+
+### Notes / Follow-up
+- ข้อมูลที่ถูกล้างเป็น persistent JSON state ดังนั้นหลังล้างแล้ว refresh หน้าจะยังเห็นสถานะที่ถูกรีเซ็ตแล้ว
+
+## 2026-05-29 - เพิ่มคำอธิบายผลกระทบของ Settings และ Formula Policy
+
+### Summary
+- เพิ่มข้อความช่วยใต้ field ในหน้า Settings เพื่ออธิบายว่า Formula Version, Service Level, Z-score, Seasonal Factor, Budget Factor, High Variance Threshold และ Version Note ใช้ทำอะไร
+- เพิ่ม callout ในหน้า Settings ว่าการเปลี่ยน policy มีผลหลังบันทึกกับการคำนวณใหม่ใน Dashboard, SKU Detail, Create Request และ VMI แต่ไม่เปลี่ยน Request History / Calculation Snapshot เดิมย้อนหลัง
+- เพิ่มข้อความอธิบายในกฎนโยบายอนุมัติและนโยบายการขอแตกต่างจากค่าที่ระบบแนะนำว่าค่าใดถูกคำนวณใหม่เมื่อสร้างคำขอ
+- อัปเดต `DATA_POLICY.md` ให้เป็นกฎถาวรว่าทุกงานที่เกี่ยวกับสูตรหรือ Settings ต้องมีข้อความช่วยอธิบายผลกระทบและ snapshot behavior
+- เพิ่ม `.env.local` ใน `.gitignore` เพื่อกันไม่ให้ endpoint ส่วนตัวของ Google Web App ถูก commit
+
+### Why
+- ผู้ใช้ต้องการให้คนใช้งานเข้าใจว่าค่าตั้งค่าแต่ละตัวใช้คำนวณอะไร และเมื่อแก้ไขจะกระทบค่าหน้าอื่นทันทีหรือเฉพาะคำขอถัดไป
+
+### Changed Files
+- `src/App.tsx`
+- `DATA_POLICY.md`
+- `.gitignore`
+- `PROJECT_UPDATES.md`
+
+### Verification
+- `npm.cmd run build` ผ่าน
+
+### Notes / Follow-up
+- หากเพิ่ม field ตั้งค่าใหม่ในอนาคต ต้องเพิ่ม helper text และระบุผลกระทบต่อ calculation/snapshot เสมอ
+
+## 2026-05-29 - เพิ่ม Troubleshooting สำหรับ Google Sheet Endpoint
+
+### Summary
+- ตรวจ `.env.local` พบว่ามี `VITE_GOOGLE_PO_FEEDBACK_ENDPOINT` แล้ว และ URL เป็น Web App `/exec`
+- ทดสอบ POST ไป endpoint แล้วได้ `401 Unauthorized` จึงสรุปว่า endpoint ยังไม่เปิดสิทธิ์หรือยังไม่ได้ authorize ฝั่ง Google Apps Script
+- อัปเดต `GOOGLE_SHEET_ENDPOINT.md` เพิ่มขั้นตอนแก้ `401 Unauthorized`, การเลือก `Who has access: Anyone`, การใช้ New version และกรณีสร้าง Script จาก `script.google.com/home` ที่ต้องใช้ `SpreadsheetApp.openById`
+
+### Why
+- ผู้ใช้แจ้งว่า PO feedback ยังไม่เข้า Google Sheet จึงต้องแยกปัญหาว่าเกิดจาก React หรือ Google Apps Script deployment
+
+### Changed Files
+- `GOOGLE_SHEET_ENDPOINT.md`
+- `PROJECT_UPDATES.md`
+
+### Verification
+- ทดสอบ POST แล้วพบ `401 Unauthorized` จาก Google endpoint
+
+### Notes / Follow-up
+- หลังผู้ใช้แก้สิทธิ์ deployment และ restart dev server ให้ทดสอบ Submit/Approve อีกครั้ง
+
+## 2026-05-29 - เพิ่ม Optional Google Sheet PO Feedback Endpoint
+
+### Summary
+- เพิ่ม `src/utils/googlePoFeedback.ts` สำหรับส่งสำเนา PO feedback/event ไป Google Apps Script endpoint เมื่อมีการ Save Draft, Submit Request, Escalate, Approve, Reject หรือ Request More Info
+- เพิ่ม env `VITE_GOOGLE_PO_FEEDBACK_ENDPOINT` ผ่าน `.env.example` และ type ใน `src/vite-env.d.ts`
+- เพิ่ม `GOOGLE_SHEET_ENDPOINT.md` พร้อมตัวอย่าง Google Apps Script สำหรับรับ payload แล้ว append ลงชีท `PO Feedback`
+- เพิ่มสถานะ endpoint ในหน้า Settings เพื่อให้ผู้ใช้เห็นว่าเปิดใช้งาน Google feedback แล้วหรือยัง
+- ปรับ `README.md` และ `DATA_POLICY.md` ให้ชัดว่า Google Sheet เป็น optional feedback channel ไม่ใช่ source of truth
+
+### Why
+- ผู้ใช้ต้องการต่อ endpoint ของ Google เพื่อดู feedback ของ PO/approval ได้ใน Google Sheet ระหว่าง demo
+- ต้องเก็บข้อมูลหลักใน persistent JSON state และ Calculation Snapshot เหมือนเดิม เพื่อไม่ให้ external endpoint ทำให้ flow หลักล้ม
+
+### Changed Files
+- `src/App.tsx`
+- `src/utils/googlePoFeedback.ts`
+- `src/vite-env.d.ts`
+- `.env.example`
+- `GOOGLE_SHEET_ENDPOINT.md`
+- `README.md`
+- `DATA_POLICY.md`
+- `PROJECT_UPDATES.md`
+
+### Verification
+- `npm.cmd run build` ผ่าน
+
+### Notes / Follow-up
+- ใช้ `fetch` แบบ `no-cors` สำหรับ Apps Script Web App จึงส่งข้อมูลได้ง่ายใน PoC แต่ frontend จะอ่าน response จริงไม่ได้ หากต้องการ error handling เต็มรูปแบบควรมี backend proxy
+
+## 2026-05-29 - เปลี่ยนจาก Mock-only เป็น Persistent JSON State
+
+### Summary
+- เพิ่ม `src/utils/persistentJsonStore.ts` สำหรับโหลด/บันทึกข้อมูลเป็น JSON state ใน browser `localStorage`
+- ปรับ App state ให้โหลดจาก persistent JSON ก่อน หากไม่มีจึงใช้ seed data จาก `mockData.ts`
+- Persist ข้อมูลสำคัญ ได้แก่ Supplier, SKU, Inventory input, Supplier Offer, Purchase Request, Contact Log, Formula Policy, Formula Version และ Change Log
+- เพิ่ม `DATA_POLICY.md` เพื่อกำหนดกฎว่า seed data ใช้เป็นค่าเริ่มต้นเท่านั้น ทุก action ต้อง persist และค่าคำนวณต้องมาจาก data ปัจจุบัน
+- อัปเดต `README.md` ให้ระบุ rule ใหม่ และลบแนวคิดว่า workflow เป็น mock-only/in-memory
+- เพิ่มข้อความในหน้า Settings เพื่อบอกว่าข้อมูลผู้ใช้ถูกเก็บเป็น JSON state และ snapshot ต้องเก็บตามเวลาที่สร้างคำขอ
+
+### Why
+- ผู้ใช้ต้องการให้ระบบไม่ใช่ mock data ชั่วคราว แต่ต้องเก็บข้อมูลที่แก้ไข/เพิ่ม/submit ได้จริงหลัง refresh
+- เตรียมโครงสร้างให้เปลี่ยนจาก frontend JSON storage ไปเป็น backend/database ได้ในอนาคตโดยไม่เปลี่ยน business flow
+
+### Changed Files
+- `src/App.tsx`
+- `src/utils/persistentJsonStore.ts`
+- `DATA_POLICY.md`
+- `README.md`
+- `PROJECT_UPDATES.md`
+
+### Verification
+- `npm.cmd run build` ผ่าน
+
+### Notes / Follow-up
+- Frontend-only app ไม่สามารถเขียนกลับไฟล์ `.json` ใน repo ได้โดยตรง จึงใช้ browser localStorage เป็น persistent JSON storage จนกว่าจะมี backend
+
+## 2026-05-29 - แก้เวลา Log และตรวจ Snapshot/Approval Storage
+
+### Summary
+- แก้ log ที่เกิดจากการกดบันทึกใน Settings ให้ใช้เวลาปัจจุบันโซน `Asia/Bangkok` แทนวันที่ hardcode `2026-05-05`
+- แก้ Formula Version History ให้บันทึก `createdAt` จากเวลาปัจจุบันเมื่อผู้ใช้กดบันทึกสูตรใหม่
+- แก้ Supplier Contact Log, Purchase Request, Calculation Snapshot และ Approval Timeline ที่ผู้ใช้สร้างใหม่ให้ใช้เวลาปัจจุบัน
+- แก้ Request ID ใหม่ให้หาเลข `REQ-xxx` ที่ว่างถัดไปแทนการใช้ `REQ-001` ซ้ำจนข้อมูลเดิมถูกแทนที่
+- แก้ Approval action ให้บันทึก `approvedQuantity` กลับเข้า Calculation Snapshot เมื่ออนุมัติ เพื่อให้ History/Audit Trail แสดงค่าที่อนุมัติจริง
+- เพิ่ม log ยืนยันใน Settings กรณีกดบันทึกโดยไม่มี field เปลี่ยน เพื่อให้ผู้ใช้เห็นว่าปุ่มบันทึกทำงานแล้ว
+
+### Why
+- ป้องกัน audit log แสดงวันที่เก่าซ้ำ ๆ และไม่ตรงกับวันที่ใช้งานจริง
+- ทำให้ข้อมูลที่ผู้ใช้สร้างใหม่ไม่ทับกัน และทำให้ Request History ใช้ snapshot ที่ครบขึ้นหลัง approval
+
+### Changed Files
+- `src/App.tsx`
+- `PROJECT_UPDATES.md`
+
+### Verification
+- `npm.cmd run build` ผ่าน
+
+### Notes / Follow-up
+- วันที่ใน `src/data/mockData.ts` ยังเป็นวันที่จำลองสำหรับข้อมูลตัวอย่างเริ่มต้น ไม่ใช่ข้อมูลที่ผู้ใช้สร้างใหม่
+
 ## 2026-05-24 - เพิ่ม Relationship Analysis, Lead Time Signal และ % เพิ่มลดรายเดือน
 
 ### Summary
@@ -109,7 +486,7 @@
 ## 2026-05-24 - เติมคำอธิบายสูตรคำนวณภาษาไทย
 
 ### Summary
-- ปรับ `CalculationExplanationPanel` ให้รายละเอียดสูตรคำนวณทุกขั้นเป็นภาษาไทยนำหน้า พร้อมแยก `สูตร`, `ตัวอย่างคำนวณ`, และ `ความหมาย`
+- ปรับ `CalculationExplanationPanel` ให้รายละเอียดสูตรคำนวณทุกขั้นเป็นภาษาไทยนำหน้า พร้อมแยก `สูตร`, `ค่าที่ใช้คำนวณจริง`, และ `ความหมาย`
 - ปรับข้อความประกอบในหน้า SKU Detail, Inventory, VMI, Settings และ Snapshot ให้ใช้คำไทยที่สอดคล้องกัน เช่น ระดับพัสดุสำรองปลอดภัย, จุดสั่งซื้อใหม่, ระยะเวลารอพัสดุ, จำนวนสั่งซื้อขั้นต่ำ
 - ปรับ `formulaList` ใน mock data ให้ครอบคลุมสูตรความผันผวนของการใช้ และใช้คำไทยสำหรับสูตรหลัก
 - ปรับคอมเมนต์ใน `inventoryCalculations.ts` ให้ไทยนำหน้า เพื่อให้ผู้พัฒนาอ่านที่มาของสูตรได้ง่ายขึ้น
@@ -313,3 +690,25 @@
 
 ### Notes / Follow-up
 - รอบถัดไปที่แก้ code หรือ mock data ให้เพิ่ม entry ใหม่ด้านบนหรือด้านล่างตามลำดับวันที่
+
+## 2026-05-31 - แก้ช่องกรอกตัวเลขทุกหน้าที่แก้ไขได้
+
+### Summary
+- เพิ่ม `EditableNumberInput` เป็น component กลางสำหรับช่องกรอกตัวเลขที่ผู้ใช้แก้ไขได้
+- แก้ฟอร์มสร้างคำขอซื้อ, ฟอร์มเพิ่ม SKU ที่รองรับ, แถวแก้ไขข้อเสนอซัพพลายเออร์, AI Feedback และ Settings ให้ลบค่าเดิมจนช่องว่างระหว่างพิมพ์ได้
+- ลบ pattern `Number(event.target.value)` ออกจาก controlled number input ที่แก้ไขได้ เพื่อไม่ให้เกิดค่าเช่น `012` หรือ `016`
+- เพิ่มกฎใน `DATA_POLICY.md` ว่าทุก numeric input ต้องรองรับค่าว่างระหว่างพิมพ์และห้ามแปลง `Number("")` เป็น `0` ทันที
+
+### Why
+- ผู้ใช้พบว่าหน้าอื่นนอกจาก Budget ยังพิมพ์ตัวเลขแล้วมี `0` ติดหน้า เช่น `012` เพราะ controlled input แปลงค่าว่างเป็น 0 ระหว่างพิมพ์
+
+### Changed Files
+- `src/App.tsx`
+- `DATA_POLICY.md`
+- `PROJECT_UPDATES.md`
+
+### Verification
+- `npm.cmd run build` ผ่าน
+
+### Notes / Follow-up
+- ช่อง read-only ที่แสดงค่าตัวเลขไม่จำเป็นต้องใช้ component นี้ เพราะผู้ใช้ไม่ได้พิมพ์แก้ไข

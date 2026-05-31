@@ -77,11 +77,15 @@ export function MetricCard({
   label,
   value,
   helper,
+  formula,
+  changes,
   tone = "slate",
 }: {
   label: string;
   value: string;
   helper: string;
+  formula?: string;
+  changes?: string;
   tone?: "slate" | "red" | "blue" | "purple" | "green" | "yellow";
 }) {
   const tones = {
@@ -93,12 +97,26 @@ export function MetricCard({
     yellow: "border-amber-200 bg-amber-50 text-amber-800",
   };
   return (
-    <div className={`rounded-lg border p-4 shadow-sm ${tones[tone]}`}>
-      <p className="text-sm font-medium text-slate-500">{label}</p>
-      <div className="mt-3 flex items-end justify-between">
-        <p className="text-3xl font-semibold tracking-normal">{value}</p>
-        <span className="text-xs font-medium text-slate-500">{helper}</span>
+    <div className={`min-w-0 rounded-lg border p-4 shadow-sm ${tones[tone]}`}>
+      <p className="min-w-0 break-words text-sm font-medium leading-5 text-slate-500">{label}</p>
+      <div className="mt-3 min-w-0 space-y-1">
+        <p className="min-w-0 break-words text-2xl font-semibold leading-tight tracking-normal [overflow-wrap:anywhere]">{value}</p>
+        <span className="block min-w-0 break-words text-xs font-medium leading-5 text-slate-500">{helper}</span>
       </div>
+      {formula || changes ? (
+        <div className="mt-3 space-y-2 border-t border-current/10 pt-3 text-xs leading-5 text-slate-600">
+          {formula ? (
+            <p className="min-w-0 break-words [overflow-wrap:anywhere]">
+              <span className="font-semibold text-slate-800">คำนวณจริงจาก:</span> {formula}
+            </p>
+          ) : null}
+          {changes ? (
+            <p className="min-w-0 break-words [overflow-wrap:anywhere]">
+              <span className="font-semibold text-slate-800">เปลี่ยนเมื่อ:</span> {changes}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

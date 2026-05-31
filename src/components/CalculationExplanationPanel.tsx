@@ -40,6 +40,7 @@ export function CalculationExplanationPanel({
     snapshot?.estimatedCostForRequestedQuantity ??
     recommendation.estimatedCostForSuggestedQuantity;
   const rawSuggestedQuantity = recommendation.targetStockLevel - inventory.currentStock;
+  const reorderPointRaw = recommendation.demandDuringLeadTime + recommendation.safetyStock;
   const targetSource =
     recommendation.targetStockLevelSource === "PolicyOverride"
       ? "เกณฑ์เป้าหมายกลาง / Min-Max ของ PoC"
@@ -113,7 +114,7 @@ export function CalculationExplanationPanel({
 
         <Accordion title="3. รายละเอียดสูตรคำนวณ">
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-            {/* แยกสูตร ตัวอย่าง และความหมาย เพื่อให้ผู้ใช้ตรวจที่มาของตัวเลขได้ทีละขั้น */}
+            {/* แยกวิธีคิด ค่าที่ใช้จริง และความหมาย เพื่อให้ผู้ใช้ตรวจที่มาของตัวเลขได้ทีละขั้น */}
             <FormulaBox
               title="ขั้นที่ 1: ค่าเฉลี่ยการใช้ต่อวัน (Average Daily Demand)"
               formula="ค่าเฉลี่ยการใช้ต่อวัน = ปริมาณการใช้ย้อนหลังรวม / จำนวนวันย้อนหลัง"
@@ -147,7 +148,7 @@ export function CalculationExplanationPanel({
             <FormulaBox
               title="ขั้นที่ 6: จุดสั่งซื้อใหม่ (Reorder Point)"
               formula="จุดสั่งซื้อใหม่ = ความต้องการใช้ระหว่างรอพัสดุ + ระดับพัสดุสำรองปลอดภัย"
-              calculation={`${formatNumber(recommendation.demandDuringLeadTime)} + ${formatNumber(recommendation.safetyStock)} ≈ ${formatNumber(recommendation.reorderPoint)} ${unit}`}
+              calculation={`${formatNumber(recommendation.demandDuringLeadTime)} ${unit} + ${formatNumber(recommendation.safetyStock)} ${unit} = ${formatNumber(reorderPointRaw)} ${unit}; ปัดขึ้นเป็น ${formatNumber(recommendation.reorderPoint)} ${unit}`}
               meaning="ถ้าสต็อกต่ำกว่าค่านี้ ระบบควรเตือนให้เริ่มกระบวนการจัดซื้อหรือเติมพัสดุ"
             />
             <FormulaBox
@@ -269,7 +270,7 @@ function FormulaBox({
           <span className="font-semibold text-slate-800">สูตร:</span> {formula}
         </p>
         <p>
-          <span className="font-semibold text-slate-800">ตัวอย่างคำนวณ:</span> {calculation}
+          <span className="font-semibold text-slate-800">คำนวณจริงจากข้อมูลนี้:</span> {calculation}
         </p>
         <p>
           <span className="font-semibold text-slate-800">ความหมาย:</span> {meaning}
