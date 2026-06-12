@@ -12,77 +12,49 @@
 
 ## ตัวอย่าง Apps Script
 
-สร้าง Google Sheet แล้วไปที่ Extensions → Apps Script จากนั้นวางโค้ดนี้:
+สร้าง Google Sheet แล้วไปที่ Extensions → Apps Script จากนั้นวางโค้ดนี้
+(เวอร์ชันนี้แยกความเห็น/feedback ไปชีต `Feedback` และ PO event ไปชีต `PO Feedback` โดยจัดคอลัมน์ตรงเสมอ):
 
 ```js
-const SHEET_NAME = "PO Feedback";
-
 function doPost(e) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(SHEET_NAME) || ss.insertSheet(SHEET_NAME);
   const payload = JSON.parse((e && e.postData && e.postData.contents) || "{}");
 
-  const headers = [
-    "received_at",
-    "event_type",
-    "action",
-    "action_at",
-    "actor",
-    "request_id",
-    "status",
-    "sku_id",
-    "warehouse_id",
-    "supplier_id",
-    "ai_suggested_quantity",
-    "requested_quantity",
-    "approved_quantity",
-    "unit",
-    "unit_price",
-    "estimated_cost",
-    "recommended_layer",
-    "variance_percent",
-    "formula_version",
-    "override_reason_category",
-    "override_reason_text",
-    "approval_note",
-    "snapshot_created_at",
-  ];
-
-  if (sheet.getLastRow() === 0) {
-    sheet.appendRow(headers);
+  if (payload.event_type === "feedback_comment") {
+    writeRow(ss, "Feedback",
+      ["received_at", "action_at", "actor", "author_username", "context_page", "feedback_text"],
+      {
+        received_at: new Date(),
+        action_at: payload.action_at,
+        actor: payload.actor,
+        author_username: payload.author_username,
+        context_page: payload.context_page,
+        feedback_text: payload.feedback_text,
+      });
+  } else {
+    writeRow(ss, "PO Feedback",
+      ["received_at", "event_type", "action", "action_at", "actor", "request_id", "status",
+       "sku_id", "warehouse_id", "supplier_id", "ai_suggested_quantity", "requested_quantity",
+       "approved_quantity", "unit", "unit_price", "estimated_cost", "recommended_layer",
+       "variance_percent", "formula_version", "override_reason_category", "override_reason_text",
+       "approval_note", "snapshot_created_at"],
+      Object.assign({ received_at: new Date() }, payload));
   }
-
-  sheet.appendRow([
-    new Date(),
-    payload.event_type || "",
-    payload.action || "",
-    payload.action_at || "",
-    payload.actor || "",
-    payload.request_id || "",
-    payload.status || "",
-    payload.sku_id || "",
-    payload.warehouse_id || "",
-    payload.supplier_id || "",
-    payload.ai_suggested_quantity || "",
-    payload.requested_quantity || "",
-    payload.approved_quantity || "",
-    payload.unit || "",
-    payload.unit_price || "",
-    payload.estimated_cost || "",
-    payload.recommended_layer || "",
-    payload.variance_percent || "",
-    payload.formula_version || "",
-    payload.override_reason_category || "",
-    payload.override_reason_text || "",
-    payload.approval_note || "",
-    payload.snapshot_created_at || "",
-  ]);
 
   return ContentService
     .createTextOutput(JSON.stringify({ ok: true }))
     .setMimeType(ContentService.MimeType.JSON);
 }
+
+// เขียนแถวโดยจับคู่ค่ากับ header ตามชื่อคีย์ — คอลัมน์ตรงเสมอแม้ payload มีคีย์ไม่ครบ
+function writeRow(ss, sheetName, headers, data) {
+  const sheet = ss.getSheetByName(sheetName) || ss.insertSheet(sheetName);
+  if (sheet.getLastRow() === 0) sheet.appendRow(headers);
+  sheet.appendRow(headers.map(function (key) { return data[key] != null ? data[key] : ""; }));
+}
 ```
+
+> สำคัญมาก: หลังแก้โค้ด ต้อง **Deploy → Manage deployments → ดินสอแก้ deployment เดิม → Version: New version → Deploy** เสมอ ไม่งั้น Web App ยังรันโค้ดเก่า ความเห็นจะลงผิดคอลัมน์เหมือนเดิม
 
 ## Deploy
 

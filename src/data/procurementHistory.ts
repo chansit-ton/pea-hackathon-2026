@@ -62,21 +62,21 @@ export const budgetRequestHistory: BudgetRequestRecord[] = [
   { id: "BR-K030-67-P01", fiscalYear: "2567", warehouseId: "K030", regionLabel: "เขต K", skuId: "P01", skuName: "เสาไฟคอนกรีต 12 เมตร", category: "เสาไฟ", unit: "ต้น", requestedQty: 400, unitCost: 4_500, note: "ตั้งงบประจำปีตามค่าเฉลี่ยเดิม" },
   { id: "BR-K030-68-P01", fiscalYear: "2568", warehouseId: "K030", regionLabel: "เขต K", skuId: "P01", skuName: "เสาไฟคอนกรีต 12 เมตร", category: "เสาไฟ", unit: "ต้น", requestedQty: 380, unitCost: 4_500, note: "ของเดิมยังเหลือ แต่ตั้งงบใกล้เคียงเดิม" },
   { id: "BR-K030-69-P01", fiscalYear: "2569", warehouseId: "K030", regionLabel: "เขต K", skuId: "P01", skuName: "เสาไฟคอนกรีต 12 เมตร", category: "เสาไฟ", unit: "ต้น", requestedQty: 400, unitCost: 4_500, note: "ของบเท่าเดิมเพื่อสั่งเสาไฟอีกรอบ" },
-  { id: "BR-K030-67-C01", fiscalYear: "2567", warehouseId: "K030", regionLabel: "เขต K", skuId: "C01", skuName: "สายไฟแรงต่ำ", category: "สายไฟ", unit: "เมตร", requestedQty: 8_000, unitCost: 320 },
-  { id: "BR-K030-68-C01", fiscalYear: "2568", warehouseId: "K030", regionLabel: "เขต K", skuId: "C01", skuName: "สายไฟแรงต่ำ", category: "สายไฟ", unit: "เมตร", requestedQty: 9_500, unitCost: 320 },
-  { id: "BR-K030-69-B05", fiscalYear: "2569", warehouseId: "K030", regionLabel: "เขต K", skuId: "B05", skuName: "เบรกเกอร์ 3P 50A", category: "เบรกเกอร์", unit: "pcs", requestedQty: 250, unitCost: 1_900, note: "ปิดงบปลายปีให้ใช้หมด" },
+  { id: "BR-K030-67-C01", fiscalYear: "2567", warehouseId: "K030", regionLabel: "เขต K", skuId: "C01", skuName: "สายไฟแรงต่ำ", category: "สายไฟ", unit: "เมตร", requestedQty: 300, unitCost: 2_000 },
+  { id: "BR-K030-68-C01", fiscalYear: "2568", warehouseId: "K030", regionLabel: "เขต K", skuId: "C01", skuName: "สายไฟแรงต่ำ", category: "สายไฟ", unit: "เมตร", requestedQty: 350, unitCost: 2_000 },
+  { id: "BR-K030-69-B05", fiscalYear: "2569", warehouseId: "K030", regionLabel: "เขต K", skuId: "B05", skuName: "เบรกเกอร์ 3P 50A", category: "เบรกเกอร์", unit: "pcs", requestedQty: 250, unitCost: 1_800, note: "ปิดงบปลายปีให้ใช้หมด" },
 
   // เขต K — คลัง K010 (คลังที่บริหารงบสมเหตุผลกว่า ใช้เทียบ peer)
   { id: "BR-K010-67-P01", fiscalYear: "2567", warehouseId: "K010", regionLabel: "เขต K", skuId: "P01", skuName: "เสาไฟคอนกรีต 12 เมตร", category: "เสาไฟ", unit: "ต้น", requestedQty: 180, unitCost: 4_500 },
   { id: "BR-K010-68-P01", fiscalYear: "2568", warehouseId: "K010", regionLabel: "เขต K", skuId: "P01", skuName: "เสาไฟคอนกรีต 12 เมตร", category: "เสาไฟ", unit: "ต้น", requestedQty: 150, unitCost: 4_500 },
   { id: "BR-K010-69-P01", fiscalYear: "2569", warehouseId: "K010", regionLabel: "เขต K", skuId: "P01", skuName: "เสาไฟคอนกรีต 12 เมตร", category: "เสาไฟ", unit: "ต้น", requestedQty: 200, unitCost: 4_500, note: "เพิ่มตาม demand จริงที่โต" },
-  { id: "BR-K010-69-C01", fiscalYear: "2569", warehouseId: "K010", regionLabel: "เขต K", skuId: "C01", skuName: "สายไฟแรงต่ำ", category: "สายไฟ", unit: "เมตร", requestedQty: 12_000, unitCost: 320 },
+  { id: "BR-K010-69-C01", fiscalYear: "2569", warehouseId: "K010", regionLabel: "เขต K", skuId: "C01", skuName: "สายไฟแรงต่ำ", category: "สายไฟ", unit: "เมตร", requestedQty: 400, unitCost: 2_000 },
 
   // เขต I — คลัง I010, I020
-  { id: "BR-I010-68-C01", fiscalYear: "2568", warehouseId: "I010", regionLabel: "เขต I", skuId: "C01", skuName: "สายไฟแรงต่ำ", category: "สายไฟ", unit: "เมตร", requestedQty: 15_000, unitCost: 320 },
-  { id: "BR-I010-69-C01", fiscalYear: "2569", warehouseId: "I010", regionLabel: "เขต I", skuId: "C01", skuName: "สายไฟแรงต่ำ", category: "สายไฟ", unit: "เมตร", requestedQty: 16_500, unitCost: 320 },
-  { id: "BR-I020-68-T01", fiscalYear: "2568", warehouseId: "I020", regionLabel: "เขต I", skuId: "T01", skuName: "หม้อแปลง 100 kVA", category: "หม้อแปลง", unit: "ลูก", requestedQty: 14, unitCost: 95_000 },
-  { id: "BR-I020-69-T01", fiscalYear: "2569", warehouseId: "I020", regionLabel: "เขต I", skuId: "T01", skuName: "หม้อแปลง 100 kVA", category: "หม้อแปลง", unit: "ลูก", requestedQty: 18, unitCost: 95_000, note: "เผื่อโครงการขยายเขต" },
+  { id: "BR-I010-68-C01", fiscalYear: "2568", warehouseId: "I010", regionLabel: "เขต I", skuId: "C01", skuName: "สายไฟแรงต่ำ", category: "สายไฟ", unit: "เมตร", requestedQty: 500, unitCost: 2_000 },
+  { id: "BR-I010-69-C01", fiscalYear: "2569", warehouseId: "I010", regionLabel: "เขต I", skuId: "C01", skuName: "สายไฟแรงต่ำ", category: "สายไฟ", unit: "เมตร", requestedQty: 550, unitCost: 2_000 },
+  { id: "BR-I020-68-T01", fiscalYear: "2568", warehouseId: "I020", regionLabel: "เขต I", skuId: "T01", skuName: "หม้อแปลง 100 kVA", category: "หม้อแปลง", unit: "ลูก", requestedQty: 8, unitCost: 150_000 },
+  { id: "BR-I020-69-T01", fiscalYear: "2569", warehouseId: "I020", regionLabel: "เขต I", skuId: "T01", skuName: "หม้อแปลง 100 kVA", category: "หม้อแปลง", unit: "ลูก", requestedQty: 12, unitCost: 150_000, note: "เผื่อโครงการขยายเขต" },
 ];
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -84,9 +84,9 @@ export const budgetRequestHistory: BudgetRequestRecord[] = [
 // ───────────────────────────────────────────────────────────────────────────
 export const warehouseBudgetByYear: WarehouseBudgetYear[] = [
   // K030 — ใช้งบเกือบเต็มทุกปี และของจมพอกขึ้นเรื่อย ๆ (spend-to-keep)
-  { fiscalYear: "2567", warehouseId: "K030", regionLabel: "เขต K", budgetAllocated: 2_000_000, budgetUsed: 1_980_000, deadStockValueEndOfYear: 540_000 },
-  { fiscalYear: "2568", warehouseId: "K030", regionLabel: "เขต K", budgetAllocated: 2_000_000, budgetUsed: 1_988_000, deadStockValueEndOfYear: 945_000 },
-  { fiscalYear: "2569", warehouseId: "K030", regionLabel: "เขต K", budgetAllocated: 2_000_000, budgetUsed: 1_975_000, deadStockValueEndOfYear: 1_440_000 },
+  { fiscalYear: "2567", warehouseId: "K030", regionLabel: "เขต K", budgetAllocated: 2_000_000, budgetUsed: 1_980_000, deadStockValueEndOfYear: 600_000 },
+  { fiscalYear: "2568", warehouseId: "K030", regionLabel: "เขต K", budgetAllocated: 2_000_000, budgetUsed: 1_988_000, deadStockValueEndOfYear: 1_200_000 },
+  { fiscalYear: "2569", warehouseId: "K030", regionLabel: "เขต K", budgetAllocated: 2_000_000, budgetUsed: 1_975_000, deadStockValueEndOfYear: 2_040_000 },
   // K010 — ใช้งบตาม demand จริง ของจมต่ำและทรงตัว
   { fiscalYear: "2567", warehouseId: "K010", regionLabel: "เขต K", budgetAllocated: 1_500_000, budgetUsed: 980_000, deadStockValueEndOfYear: 120_000 },
   { fiscalYear: "2568", warehouseId: "K010", regionLabel: "เขต K", budgetAllocated: 1_400_000, budgetUsed: 910_000, deadStockValueEndOfYear: 95_000 },
@@ -95,8 +95,8 @@ export const warehouseBudgetByYear: WarehouseBudgetYear[] = [
   { fiscalYear: "2568", warehouseId: "I010", regionLabel: "เขต I", budgetAllocated: 1_800_000, budgetUsed: 1_450_000, deadStockValueEndOfYear: 210_000 },
   { fiscalYear: "2569", warehouseId: "I010", regionLabel: "เขต I", budgetAllocated: 1_800_000, budgetUsed: 1_520_000, deadStockValueEndOfYear: 180_000 },
   // I020
-  { fiscalYear: "2568", warehouseId: "I020", regionLabel: "เขต I", budgetAllocated: 2_200_000, budgetUsed: 1_330_000, deadStockValueEndOfYear: 310_000 },
-  { fiscalYear: "2569", warehouseId: "I020", regionLabel: "เขต I", budgetAllocated: 2_400_000, budgetUsed: 1_710_000, deadStockValueEndOfYear: 285_000 },
+  { fiscalYear: "2568", warehouseId: "I020", regionLabel: "เขต I", budgetAllocated: 2_200_000, budgetUsed: 1_330_000, deadStockValueEndOfYear: 380_000 },
+  { fiscalYear: "2569", warehouseId: "I020", regionLabel: "เขต I", budgetAllocated: 2_400_000, budgetUsed: 1_800_000, deadStockValueEndOfYear: 450_000 },
 ];
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -125,13 +125,13 @@ export const deadStockListings: DeadStockListing[] = [
     category: "สายไฟ",
     warehouseId: "K030",
     regionLabel: "เขต K",
-    qty: 6_200,
+    qty: 300,
     unit: "เมตร",
-    unitCost: 320,
+    unitCost: 2_000,
     monthsIdle: 6,
     lastMovement: "ธ.ค. 68",
     matchWarehouseId: "I010",
-    matchShortageQty: 1_500,
+    matchShortageQty: 120,
   },
   {
     id: "DS-K020-B05",
@@ -142,7 +142,7 @@ export const deadStockListings: DeadStockListing[] = [
     regionLabel: "เขต K",
     qty: 1_150,
     unit: "pcs",
-    unitCost: 1_900,
+    unitCost: 1_800,
     monthsIdle: 11,
     lastMovement: "ก.ค. 68",
   },
@@ -155,7 +155,7 @@ export const deadStockListings: DeadStockListing[] = [
     regionLabel: "เขต I",
     qty: 3,
     unit: "ลูก",
-    unitCost: 95_000,
+    unitCost: 150_000,
     monthsIdle: 8,
     lastMovement: "ต.ค. 68",
     matchWarehouseId: "I010",

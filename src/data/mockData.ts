@@ -84,8 +84,8 @@ export const supplierOffers: SupplierOffer[] = [
   { supplierId: "S002", skuId: "C01", unitPrice: 2_150, currency: "THB", leadTimeDays: 18, moq: 20, unit: "เมตร", reliabilityScore: 92 },
   { supplierId: "S003", skuId: "C01", unitPrice: 1_950, currency: "THB", leadTimeDays: 40, moq: 30, unit: "เมตร", reliabilityScore: 85 },
   { supplierId: "S002", skuId: "C02", unitPrice: 3_500, currency: "THB", leadTimeDays: 30, moq: 10, unit: "เมตร", reliabilityScore: 92 },
-  { supplierId: "S003", skuId: "T01", unitPrice: 1_200_000, currency: "THB", leadTimeDays: 60, moq: 1, unit: "ลูก", reliabilityScore: 85 },
-  { supplierId: "S001", skuId: "P01", unitPrice: 12_000, currency: "THB", leadTimeDays: 20, moq: 10, unit: "ต้น", reliabilityScore: 88 },
+  { supplierId: "S003", skuId: "T01", unitPrice: 150_000, currency: "THB", leadTimeDays: 60, moq: 1, unit: "ลูก", reliabilityScore: 85 },
+  { supplierId: "S001", skuId: "P01", unitPrice: 4_500, currency: "THB", leadTimeDays: 20, moq: 10, unit: "ต้น", reliabilityScore: 88 },
   { supplierId: "S002", skuId: "B05", unitPrice: 1_800, currency: "THB", leadTimeDays: 20, moq: 5, unit: "pcs", reliabilityScore: 90 },
   { supplierId: "S003", skuId: "D12", unitPrice: 150, currency: "THB", leadTimeDays: 14, moq: 50, unit: "m", reliabilityScore: 87 },
 ];

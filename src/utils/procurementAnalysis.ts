@@ -90,6 +90,13 @@ export type SkuWarehouseHolding = {
   deadValue: number | null;
 };
 
+// แปลงหน่วยดิบจาก BATCH ให้อ่านง่ายเป็นไทย (M = เมตร, EA = หน่วย)
+function normalizeStockUnit(unit: string): string {
+  if (unit === "M") return "เมตร";
+  if (unit === "EA") return "หน่วย";
+  return unit;
+}
+
 export function getSkuHoldingsByWarehouse(shortSkuId: string): SkuWarehouseHolding[] {
   const peaSkuId = resolvePeaSkuId(shortSkuId);
 
@@ -104,7 +111,7 @@ export function getSkuHoldingsByWarehouse(shortSkuId: string): SkuWarehouseHoldi
         warehouseId: row.factoryId,
         regionLabel: `เขต ${row.factoryId.charAt(0)}`,
         stockQty: row.stockQty,
-        unit: row.unit,
+        unit: normalizeStockUnit(row.unit),
         avgMonthlyUsage: coverage?.avgPeriodUsage ?? null,
         stockCoverPeriods: cover,
         monthsIdle: dead?.monthsIdle ?? null,

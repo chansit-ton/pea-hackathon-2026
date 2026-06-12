@@ -59,6 +59,34 @@ function buildPoFeedbackRow(payload: GooglePoFeedbackPayload) {
  * โดยไม่ต้องใส่ secret/API key ใน client code และไม่ทำให้ workflow หลักล้มถ้า endpoint ใช้งานไม่ได้
  */
 export async function sendGooglePoFeedback(payload: GooglePoFeedbackPayload) {
+  await postRow(buildPoFeedbackRow(payload));
+}
+
+type FeedbackCommentPayload = {
+  authorName: string;
+  authorUsername: string;
+  context: string;
+  text: string;
+  createdAt: string;
+};
+
+/**
+ * ส่งความเห็น/feedback ของผู้ใช้ไป Google Sheet เพื่อเก็บรวมศูนย์ (ใครให้ feedback หน้าไหน เมื่อไร)
+ * ข้อมูลหลักยังเก็บใน localStorage; ส่วนนี้เป็นสำเนาไปชีต ไม่ทำให้ flow หลักล้มถ้า endpoint ล่ม
+ */
+export async function sendGoogleFeedbackComment(payload: FeedbackCommentPayload) {
+  await postRow({
+    event_type: "feedback_comment",
+    action: "feedback",
+    action_at: payload.createdAt,
+    actor: payload.authorName,
+    author_username: payload.authorUsername,
+    context_page: payload.context,
+    feedback_text: payload.text,
+  });
+}
+
+async function postRow(row: Record<string, unknown>) {
   if (!endpoint) return;
 
   try {
@@ -69,9 +97,9 @@ export async function sendGooglePoFeedback(payload: GooglePoFeedbackPayload) {
       headers: {
         "Content-Type": "text/plain;charset=UTF-8",
       },
-      body: JSON.stringify(buildPoFeedbackRow(payload)),
+      body: JSON.stringify(row),
     });
   } catch (error) {
-    console.warn("Cannot send Google PO feedback", error);
+    console.warn("Cannot send Google feedback", error);
   }
 }

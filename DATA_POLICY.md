@@ -116,6 +116,9 @@
 - Receiving/Delay log ต้องเก็บวันที่คาดว่าจะได้รับ, วันที่รับจริง, delay days, สาเหตุ delay, note และ impact demand
 - Impact Demand จาก Delay ใช้สูตร `Average Daily Demand × Delay Days` และใช้เป็น feedback สำหรับปรับ lead time / seasonal shortage risk ในการคำนวณครั้งถัดไป
 - ห้ามแก้ Calculation Snapshot เดิมย้อนหลังจาก Transfer, Receiving หรือ Delay log ใหม่ ให้ใช้ log ใหม่กับ preview หรือคำขอใหม่เท่านั้น
+- คำขอยืม (Borrow) ต้องเก็บกำหนดคืน (`dueDate`) และวันคืนจริง (`returnedDate`); สถานะการคืน (คืนแล้ว/เกินกำหนด/ยืมอยู่) ต้องคำนวณจากวันที่ปัจจุบันเทียบ dueDate ไม่ hardcode · การแลก (Swap) ต้องเก็บ SKU ที่แลกกลับ
+- หน้าวิเคราะห์ยืม-โอน-แลก (ใครยืมบ่อย/ค้างคืน/ขาดบ่อย/แลกอะไรบ่อย) ต้องคำนวณจาก transfer history ปัจจุบัน ไม่ hardcode อันดับ
+- ราคา/หน่วยพัสดุใน seed ต้องสมจริงและสอดคล้องกันทุก dataset (mockData, peaDataModel, procurementHistory) — ห้ามให้ SKU เดียวกันมีราคาต่างกันคนละไฟล์; ถ้าต้องคงค่าเพื่อ demo (เช่น C01 = 2,000/ม.) ให้คงค่าเดียวกันทุกที่
 
 ## กฎเพิ่มเติม: Dead Stock Exchange และ Procurement Audit
 
@@ -125,4 +128,8 @@
 - การ์ดดักก่อนสร้างคำขอซื้อต้องเทียบค่าจริง: จำนวน/มูลค่าที่กำลังจะซื้อ เทียบกับของจม SKU เดียวกันที่คลังอื่น และต้องให้ผู้ใช้เลือกยืมแทนหรือซื้อต่อได้ (decision support ไม่บังคับ)
 - flag "จุดที่ควรทบทวน" ในหน้า Procurement Audit ต้องอธิบายเกณฑ์ที่ใช้ใกล้ตาราง (และใช้ถ้อยคำสุภาพเป็นทางการในทุกหน้า ไม่ใช้คำกระแทกแดกดัน เช่น ตบหน้า/กวนทีน/ประจาน ใน UI) เช่น ใช้งบ ≥ 95% + ของจมเพิ่ม, ของบ SKU ที่ยังมีของจมค้าง, งบ category สูงกว่าค่าเฉลี่ยคลังอื่น ≥ 1.5 เท่า โดยเกณฑ์รวมไว้ที่ `procurementThresholds`
 - หน้า Procurement Audit ต้องมีตัวกรอง (ปีงบ/เขต/หมวด/เฉพาะที่ติด flag) และต้องกดเข้าไปดูรายละเอียด "ใบของบ" แต่ละใบได้ โดยรายละเอียดต้องใช้ค่าจริงของใบนั้น (เหตุผล flag, ประวัติของบ SKU เดียวกันย้อนหลัง, ของจม SKU นั้น, เทียบ peer) ไม่ใช่แค่ลิงก์ออกไปหน้า SKU ลอย ๆ
-- ความเห็น PO ใช้โมเดล hybrid: เพิ่มได้จากทุกหน้าผ่านปุ่มลอย (auto-tag หน้าปัจจุบันด้วย `viewLabels`) และรวมแสดงที่หน้า `ศูนย์ความเห็น PO` ทุกความเห็นต้อง persist เป็น JSON state (`procurementNotes`) พร้อม field `context` และใช้เวลาปัจจุบัน ห้าม hardcode วันที่
+- ความเห็น/Feedback ใช้โมเดล hybrid: เพิ่มได้จากทุกหน้าผ่านปุ่มลอย (auto-tag หน้าปัจจุบันด้วย `viewLabels`) และรวมแสดงที่หน้า `ศูนย์ความเห็น (Feedback)` ทุกความเห็นต้อง persist เป็น JSON state (`procurementNotes`) พร้อม field `context`, `authorName`, `authorUsername` และใช้เวลาปัจจุบัน ห้าม hardcode วันที่หรือชื่อผู้เขียน (เช่น ห้าม fix เป็น "PO")
+- การให้ความเห็นต้องเข้าสู่ระบบก่อน เพื่อเก็บว่าใครเป็นผู้ให้ feedback; การลบความเห็นต้องเป็น role `admin` และใส่รหัสยืนยัน `99999` เท่านั้น
+- ระบบ login รองรับ Google Sign-In (OAuth) ผ่าน `VITE_GOOGLE_CLIENT_ID` (เก็บ identity จริงชื่อ/อีเมล) และ login/register/ลืมรหัสผ่าน แบบ local (localStorage: `authUsers`, `currentUser`) เป็น fallback — local ยังไม่ใช่ auth จริง ห้ามใส่ credential จริง
+- Google Client ID / endpoint ต้องอ่านจาก env (`VITE_*`) เท่านั้น ห้าม hardcode ในโค้ด; ปุ่ม Google ต้อง env-gated (ไม่ตั้ง = ซ่อน ใช้ local fallback)
+- ถ้าต้องเก็บ feedback/user รวมศูนย์จากผู้เข้าชมหลายคนบน Vercel ต้องต่อ datastore (Firestore) หรือส่งผ่าน Google Sheet endpoint — localStorage เก็บแยกตามเครื่องเท่านั้น

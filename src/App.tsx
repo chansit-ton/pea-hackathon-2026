@@ -1,4 +1,4 @@
-﻿import { useState, type ReactNode } from "react";
+﻿import { useState, useRef, type ReactNode } from "react";
 import { useEffect, type InputHTMLAttributes } from "react";
 import {
   ArrowLeft,
@@ -32,6 +32,8 @@ import {
   ShieldCheck,
   Sparkles,
   Truck,
+  User,
+  LogOut,
   Workflow,
   X,
 } from "lucide-react";
@@ -110,7 +112,8 @@ import {
   getVmiRecommendation,
 } from "./utils/inventoryCalculations";
 import { formatCurrency, formatPercent } from "./utils/formatters";
-import { isGooglePoFeedbackEnabled, sendGooglePoFeedback, type GooglePoFeedbackAction } from "./utils/googlePoFeedback";
+import { isGooglePoFeedbackEnabled, sendGoogleFeedbackComment, sendGooglePoFeedback, type GooglePoFeedbackAction } from "./utils/googlePoFeedback";
+import { getGoogleClientId, isAdminEmail, isGoogleAuthEnabled, loadGoogleIdentityScript, parseGoogleCredential, type GoogleProfile } from "./utils/googleAuth";
 import { loadPersistentJson, savePersistentJson } from "./utils/persistentJsonStore";
 import type {
   ApprovalTimelineItem,
@@ -137,6 +140,7 @@ type View =
   | "stock-intelligence"
   | "procurement-audit"
   | "feedback"
+  | "auth"
   | "sku-detail"
   | "calculation"
   | "supplier"
@@ -159,7 +163,8 @@ const viewLabels: Record<View, string> = {
   transfer: "โอน/ยืมพัสดุ",
   "stock-intelligence": "วิเคราะห์สต็อก",
   "procurement-audit": "ตรวจซื้อซ้ำ-ของจม",
-  feedback: "ศูนย์ความเห็น PO",
+  feedback: "ศูนย์ความเห็น (Feedback)",
+  auth: "บัญชีผู้ใช้",
   "sku-detail": "รายละเอียด SKU",
   calculation: "รายละเอียดการคำนวณ",
   supplier: "ซัพพลายเออร์",
@@ -240,7 +245,7 @@ type AiFeedbackStats = {
   latest?: AiSuggestionFeedback;
 };
 
-type TransferType = "Transfer" | "Borrow";
+type TransferType = "Transfer" | "Borrow" | "Swap";
 
 type TransferStatus = "Requested" | "Approved" | "Completed" | "Rejected";
 
@@ -269,6 +274,9 @@ type TransferRequest = {
   status: TransferStatus;
   createdAt: string;
   timeline: TransferTimelineItem[];
+  dueDate?: string; // กำหนดคืน (สำหรับ Borrow)
+  returnedDate?: string; // วันที่คืนจริง (Borrow) — ถ้ายังไม่คืน = undefined
+  counterpartSkuName?: string; // ของที่แลกกลับ (สำหรับ Swap)
 };
 
 type TransferSuggestion = {
@@ -380,10 +388,29 @@ const delayReasonOptions = [
 type ProcurementNote = {
   id: string;
   text: string;
-  author: string;
+  authorName: string;
+  authorUsername: string;
   context: string;
   createdAt: string;
 };
+
+// ระบบ login/register แบบ PoC (เก็บใน localStorage ต่อเครื่อง ยังไม่ใช่ backend จริง)
+type UserRole = "user" | "admin";
+type AuthUser = {
+  name: string;
+  username: string;
+  password: string;
+  role: UserRole;
+};
+type SessionUser = {
+  name: string;
+  username: string;
+  role: UserRole;
+};
+
+// บัญชี admin ในตัวสำหรับสิทธิ์ลบ (admin/admin) — รหัสยืนยันการลบ
+const BUILT_IN_ADMIN = { username: "admin", password: "admin" };
+const DELETE_GUARD_CODE = "99999";
 
 const persistentKeys = {
   suppliers: "suppliers",
@@ -400,6 +427,8 @@ const persistentKeys = {
   transferRequests: "transferRequests",
   receiptDelayLogs: "receiptDelayLogs",
   procurementNotes: "procurementNotes",
+  authUsers: "authUsers",
+  currentUser: "currentUser",
 };
 
 const defaultFormulaPolicy: FormulaPolicyState = {
@@ -670,6 +699,34 @@ function getNextTransferRequestId(requests: TransferRequest[]) {
   return `TRF-${String(nextNumber).padStart(3, "0")}`;
 }
 
+// seed ประวัติการยืม/โอน/แลก สมจริง เพื่อให้หน้าวิเคราะห์มีข้อมูลตั้งต้น (วันนี้อ้างอิง 2026-06-12)
+// K030 = คลังที่ยืมบ่อย คืนช้า และขาดบ่อย (สอดคล้องกับเคสของจม-ของบในหน้า Audit)
+function seedTransfer(p: Partial<TransferRequest> & { id: string; type: TransferType; skuId: string; skuName: string; unit: string; sourceWarehouseId: string; destinationWarehouseId: string; quantity: number; status: TransferStatus; createdAt: string }): TransferRequest {
+  return {
+    sourceStockBefore: 0,
+    destinationStockBefore: 0,
+    destinationShortage: p.quantity,
+    decisionBasis: "",
+    seasonImpact: "-",
+    timeline: [{ role: "ระบบ", action: "สร้างรายการ", actor: "Demo", date: p.createdAt }],
+    ...p,
+  };
+}
+
+const initialTransferRequests: TransferRequest[] = [
+  seedTransfer({ id: "TRF-101", type: "Borrow", skuId: "C01", skuName: "สายไฟแรงต่ำ", unit: "เมตร", sourceWarehouseId: "I020", destinationWarehouseId: "I010", quantity: 120, status: "Completed", createdAt: "2026-02-18 09:20:00", dueDate: "2026-03-15", returnedDate: "2026-03-10", decisionBasis: "I010 ต่ำกว่า ROP ช่วงปลายฤดูหนาว ยืมจาก I020 ที่มี stock เหลือ" }),
+  seedTransfer({ id: "TRF-102", type: "Borrow", skuId: "P01", skuName: "เสาไฟคอนกรีต 12 เมตร", unit: "ต้น", sourceWarehouseId: "K010", destinationWarehouseId: "K030", quantity: 40, status: "Approved", createdAt: "2026-04-22 13:05:00", dueDate: "2026-05-20", decisionBasis: "K030 ขาดเสาไฟงานขยายเขต ยืมจาก K010" }),
+  seedTransfer({ id: "TRF-103", type: "Borrow", skuId: "B05", skuName: "เบรกเกอร์ 3P 50A", unit: "pcs", sourceWarehouseId: "I010", destinationWarehouseId: "I020", quantity: 30, status: "Approved", createdAt: "2026-05-30 10:40:00", dueDate: "2026-06-30", decisionBasis: "I020 รองาน MOQ ซื้อไม่ทัน ยืมก่อน" }),
+  seedTransfer({ id: "TRF-104", type: "Borrow", skuId: "C01", skuName: "สายไฟแรงต่ำ", unit: "เมตร", sourceWarehouseId: "K010", destinationWarehouseId: "K030", quantity: 80, status: "Approved", createdAt: "2026-03-28 15:10:00", dueDate: "2026-04-30", decisionBasis: "K030 สายไฟไม่พอ ยืมจาก K010" }),
+  seedTransfer({ id: "TRF-105", type: "Borrow", skuId: "T01", skuName: "หม้อแปลง 100 kVA", unit: "ลูก", sourceWarehouseId: "I010", destinationWarehouseId: "I020", quantity: 2, status: "Completed", createdAt: "2026-01-20 11:00:00", dueDate: "2026-02-28", returnedDate: "2026-02-24", decisionBasis: "งานเร่งด่วน I020 ยืมหม้อแปลงจาก I010" }),
+  seedTransfer({ id: "TRF-106", type: "Borrow", skuId: "C01", skuName: "สายไฟแรงต่ำ", unit: "เมตร", sourceWarehouseId: "I020", destinationWarehouseId: "K030", quantity: 100, status: "Requested", createdAt: "2026-06-09 09:15:00", dueDate: "2026-07-10", decisionBasis: "K030 ขอยืมสายไฟอีกรอบก่อนตั้งงบซื้อ" }),
+  seedTransfer({ id: "TRF-201", type: "Transfer", skuId: "P01", skuName: "เสาไฟคอนกรีต 12 เมตร", unit: "ต้น", sourceWarehouseId: "K030", destinationWarehouseId: "K010", quantity: 60, status: "Completed", createdAt: "2026-05-12 14:30:00", decisionBasis: "ย้ายเสาไฟที่จมที่ K030 ไปเติม K010 ที่กำลังขาด" }),
+  seedTransfer({ id: "TRF-202", type: "Transfer", skuId: "C01", skuName: "สายไฟแรงต่ำ", unit: "เมตร", sourceWarehouseId: "K030", destinationWarehouseId: "I010", quantity: 120, status: "Approved", createdAt: "2026-06-05 16:00:00", decisionBasis: "เคลียร์สายไฟจมที่ K030 ส่งให้ I010 ที่ต่ำกว่า ROP" }),
+  seedTransfer({ id: "TRF-301", type: "Swap", skuId: "C01", skuName: "สายไฟแรงต่ำ", unit: "เมตร", sourceWarehouseId: "I010", destinationWarehouseId: "I020", quantity: 50, status: "Completed", createdAt: "2026-03-05 10:10:00", counterpartSkuName: "สายไฟแรงสูง C02", decisionBasis: "แลกสายไฟแรงต่ำกับแรงสูงระหว่างคลังให้ตรงงาน" }),
+  seedTransfer({ id: "TRF-302", type: "Swap", skuId: "B05", skuName: "เบรกเกอร์ 3P 50A", unit: "pcs", sourceWarehouseId: "K010", destinationWarehouseId: "K030", quantity: 20, status: "Completed", createdAt: "2026-04-15 11:45:00", counterpartSkuName: "ท่อ PVC D12", decisionBasis: "แลกเบรกเกอร์กับท่อ PVC ให้ตรงงานซ่อม" }),
+  seedTransfer({ id: "TRF-303", type: "Swap", skuId: "C01", skuName: "สายไฟแรงต่ำ", unit: "เมตร", sourceWarehouseId: "I020", destinationWarehouseId: "I010", quantity: 40, status: "Completed", createdAt: "2026-05-25 13:20:00", counterpartSkuName: "สายไฟแรงสูง C02", decisionBasis: "แลกสายไฟให้ตรง spec งานติดตั้ง" }),
+];
+
 function App() {
   const [masterDataVersion, setMasterDataVersion] = useState(() => {
     hydratePersistentSeedData();
@@ -702,9 +759,11 @@ function App() {
     loadPersistentJson(persistentKeys.contactLogs, initialContactLogs),
   );
   const [aiFeedbackLogs, setAiFeedbackLogs] = useState<AiSuggestionFeedback[]>(() => loadPersistentJson(persistentKeys.aiFeedbackLogs, []));
-  const [transferRequests, setTransferRequests] = useState<TransferRequest[]>(() => loadPersistentJson(persistentKeys.transferRequests, []));
+  const [transferRequests, setTransferRequests] = useState<TransferRequest[]>(() => loadPersistentJson(persistentKeys.transferRequests, initialTransferRequests));
   const [receiptDelayLogs, setReceiptDelayLogs] = useState<ReceiptDelayLog[]>(() => loadPersistentJson(persistentKeys.receiptDelayLogs, []));
   const [procurementNotes, setProcurementNotes] = useState<ProcurementNote[]>(() => loadPersistentJson(persistentKeys.procurementNotes, []));
+  const [authUsers, setAuthUsers] = useState<AuthUser[]>(() => loadPersistentJson(persistentKeys.authUsers, []));
+  const [currentUser, setCurrentUser] = useState<SessionUser | null>(() => loadPersistentJson(persistentKeys.currentUser, null));
   const [submittedConfirmation, setSubmittedConfirmation] = useState<PurchaseRequest | null>(null);
 
   useEffect(() => {
@@ -724,6 +783,8 @@ function App() {
   useEffect(() => savePersistentJson(persistentKeys.transferRequests, transferRequests), [transferRequests]);
   useEffect(() => savePersistentJson(persistentKeys.receiptDelayLogs, receiptDelayLogs), [receiptDelayLogs]);
   useEffect(() => savePersistentJson(persistentKeys.procurementNotes, procurementNotes), [procurementNotes]);
+  useEffect(() => savePersistentJson(persistentKeys.authUsers, authUsers), [authUsers]);
+  useEffect(() => savePersistentJson(persistentKeys.currentUser, currentUser), [currentUser]);
 
   const markMasterDataChanged = () => setMasterDataVersion((version) => version + 1);
 
@@ -732,17 +793,99 @@ function App() {
     window.setTimeout(() => setToast(""), 2600);
   };
 
-  // ความเห็น PO แบบ hybrid: เพิ่มได้จากทุกหน้า (auto-tag context) เก็บรวมที่ศูนย์ความเห็น
+  // ความเห็น/Feedback แบบ hybrid: เพิ่มได้จากทุกหน้า (auto-tag context) เก็บชื่อผู้ให้ความเห็นจาก session
   const addPoNote = (text: string, context: string) => {
     const trimmed = text.trim();
     if (!trimmed) return;
+    if (!currentUser) {
+      notify("กรุณาเข้าสู่ระบบก่อนให้ความเห็น");
+      return;
+    }
+    const createdAt = getCurrentDateTimeLabel();
     setProcurementNotes((current) => [
-      { id: `NOTE-${Date.now()}`, text: trimmed, author: "PO", context, createdAt: getCurrentDateTimeLabel() },
+      { id: `NOTE-${Date.now()}`, text: trimmed, authorName: currentUser.name, authorUsername: currentUser.username, context, createdAt },
       ...current,
     ]);
-    notify("บันทึกความเห็น PO แล้ว");
+    // ส่งสำเนาความเห็นไป Google Sheet (ถ้าตั้ง endpoint) เพื่อเก็บรวมศูนย์
+    void sendGoogleFeedbackComment({ authorName: currentUser.name, authorUsername: currentUser.username, context, text: trimmed, createdAt });
+    notify(isGooglePoFeedbackEnabled() ? "บันทึกความเห็นแล้ว (ส่งเข้าชีตด้วย)" : "บันทึกความเห็นแล้ว");
   };
-  const deletePoNote = (id: string) => setProcurementNotes((current) => current.filter((note) => note.id !== id));
+  // ลบได้เฉพาะ admin และต้องใส่รหัสยืนยัน 99999 เพื่อกันการลบโดยไม่ตั้งใจ
+  const deletePoNote = (id: string, code: string) => {
+    if (currentUser?.role !== "admin") {
+      notify("เฉพาะผู้ดูแลระบบ (admin) เท่านั้นที่ลบได้");
+      return;
+    }
+    if (code !== DELETE_GUARD_CODE) {
+      notify("รหัสยืนยันการลบไม่ถูกต้อง");
+      return;
+    }
+    setProcurementNotes((current) => current.filter((note) => note.id !== id));
+    notify("ลบความเห็นแล้ว");
+  };
+
+  // ── Auth (PoC localStorage) ────────────────────────────────────────────────
+  const registerUser = (name: string, username: string, password: string): boolean => {
+    const cleanName = name.trim();
+    const cleanUsername = username.trim().toLowerCase();
+    if (!cleanName || !cleanUsername || !password) {
+      notify("กรอกชื่อ, username และรหัสผ่านให้ครบ");
+      return false;
+    }
+    if (cleanUsername === BUILT_IN_ADMIN.username || authUsers.some((user) => user.username === cleanUsername)) {
+      notify("username นี้ถูกใช้แล้ว");
+      return false;
+    }
+    const newUser: AuthUser = { name: cleanName, username: cleanUsername, password, role: "user" };
+    setAuthUsers((current) => [...current, newUser]);
+    setCurrentUser({ name: cleanName, username: cleanUsername, role: "user" });
+    notify(`สมัครและเข้าสู่ระบบเป็น ${cleanName} แล้ว`);
+    return true;
+  };
+  // เข้าสู่ระบบด้วย Google (OAuth) — ได้ identity จริง ชื่อ/อีเมล สิทธิ์ admin ถ้าอีเมลตรง VITE_ADMIN_EMAIL
+  const loginWithGoogle = (profile: GoogleProfile) => {
+    setCurrentUser({ name: profile.name, username: profile.email, role: isAdminEmail(profile.email) ? "admin" : "user" });
+    notify(`เข้าสู่ระบบด้วย Google เป็น ${profile.name}`);
+  };
+  const loginUser = (username: string, password: string): boolean => {
+    const cleanUsername = username.trim().toLowerCase();
+    if (cleanUsername === BUILT_IN_ADMIN.username && password === BUILT_IN_ADMIN.password) {
+      setCurrentUser({ name: "ผู้ดูแลระบบ", username: "admin", role: "admin" });
+      notify("เข้าสู่ระบบเป็น admin แล้ว");
+      return true;
+    }
+    const found = authUsers.find((user) => user.username === cleanUsername && user.password === password);
+    if (!found) {
+      notify("username หรือรหัสผ่านไม่ถูกต้อง");
+      return false;
+    }
+    setCurrentUser({ name: found.name, username: found.username, role: found.role });
+    notify(`เข้าสู่ระบบเป็น ${found.name} แล้ว`);
+    return true;
+  };
+  const logoutUser = () => {
+    setCurrentUser(null);
+    notify("ออกจากระบบแล้ว");
+  };
+  // PoC: รีเซ็ตรหัสผ่านด้วย username (ไม่มีอีเมลจริง) — ของจริงควรใช้ Firebase/Supabase ที่ส่งลิงก์รีเซ็ตทางอีเมล
+  const resetPassword = (username: string, newPassword: string): boolean => {
+    const cleanUsername = username.trim().toLowerCase();
+    if (cleanUsername === BUILT_IN_ADMIN.username) {
+      notify("บัญชี admin ในตัวรีเซ็ตไม่ได้");
+      return false;
+    }
+    if (!authUsers.some((user) => user.username === cleanUsername)) {
+      notify("ไม่พบบัญชีผู้ใช้นี้");
+      return false;
+    }
+    if (!newPassword) {
+      notify("กรอกรหัสผ่านใหม่");
+      return false;
+    }
+    setAuthUsers((current) => current.map((user) => (user.username === cleanUsername ? { ...user, password: newPassword } : user)));
+    notify("ตั้งรหัสผ่านใหม่แล้ว เข้าสู่ระบบได้เลย");
+    return true;
+  };
 
   // เก็บ audit log ของการแก้ไขค่าตั้งต้นใน prototype
   // ถ้าต่อ API จริง จุดนี้สามารถเปลี่ยนเป็น service call เพื่อบันทึกลงฐานข้อมูลได้
@@ -1060,6 +1203,8 @@ function App() {
           ? {
               ...request,
               status,
+              // ปิดงานคำขอยืม = บันทึกการคืนของ เพื่อให้สถานะการคืนอัปเดตเป็น "คืนแล้ว"
+              returnedDate: request.type === "Borrow" && status === "Completed" ? getDateInputValue() : request.returnedDate,
               timeline: [
                 ...request.timeline,
                 {
@@ -1273,7 +1418,24 @@ function App() {
         );
       case "feedback":
         return (
-          <FeedbackCenterPage notes={procurementNotes} onDeleteNote={deletePoNote} onOpenView={(target) => setView(target)} />
+          <FeedbackCenterPage
+            notes={procurementNotes}
+            currentUser={currentUser}
+            onDeleteNote={deletePoNote}
+            onOpenView={(target) => setView(target)}
+          />
+        );
+      case "auth":
+        return (
+          <AuthPage
+            currentUser={currentUser}
+            onLogin={loginUser}
+            onRegister={registerUser}
+            onResetPassword={resetPassword}
+            onGoogleLogin={loginWithGoogle}
+            onLogout={logoutUser}
+            onOpenFeedback={() => setView("feedback")}
+          />
         );
       case "sku-detail":
         return (
@@ -1434,7 +1596,7 @@ function App() {
   })();
 
   return (
-    <AppLayout view={view} formulaPolicy={formulaPolicy} onNavigate={setView} noteCount={procurementNotes.length} onAddNote={addPoNote}>
+    <AppLayout view={view} formulaPolicy={formulaPolicy} onNavigate={setView} noteCount={procurementNotes.length} onAddNote={addPoNote} currentUser={currentUser}>
       {toast ? (
         <div className="fixed right-6 top-5 z-30 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 shadow-soft">
           {toast}
@@ -1524,6 +1686,7 @@ function AppLayout({
   onNavigate,
   noteCount,
   onAddNote,
+  currentUser,
   children,
 }: {
   view: View;
@@ -1531,6 +1694,7 @@ function AppLayout({
   onNavigate: (view: View) => void;
   noteCount: number;
   onAddNote: (text: string, context: string) => void;
+  currentUser: SessionUser | null;
   children: ReactNode;
 }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -1549,7 +1713,8 @@ function AppLayout({
     { id: "vmi", label: "VMI", icon: Workflow },
     { id: "receiving-delay", label: "รับของ/Delay", icon: PackageCheck },
     { id: "budget-settings", label: "งบประมาณ", icon: Landmark },
-    { id: "feedback", label: "ศูนย์ความเห็น PO", icon: MessageSquare },
+    { id: "feedback", label: "ศูนย์ความเห็น (Feedback)", icon: MessageSquare },
+    { id: "auth", label: "บัญชีผู้ใช้", icon: User },
     { id: "settings", label: "ตั้งค่า", icon: Settings },
   ] as const;
 
@@ -1666,30 +1831,55 @@ function AppLayout({
                 <h1 className="mt-1 text-lg font-semibold text-slate-950 sm:text-xl">แพลตฟอร์มวางแผนพัสดุคงคลังและจัดซื้อด้วย AI</h1>
               </div>
             </div>
-            <div className="flex w-full items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600 sm:w-auto">
-              <ShieldCheck className="h-4 w-4 text-emerald-600" />
-              <span className="truncate">สูตร {formulaPolicy.formulaVersion} · ระดับความมั่นใจ {formatPercent(formulaPolicy.serviceLevel * 100).replace("+", "")}</span>
+            <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto">
+              <div className="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600">
+                <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                <span className="truncate">สูตร {formulaPolicy.formulaVersion} · ระดับความมั่นใจ {formatPercent(formulaPolicy.serviceLevel * 100).replace("+", "")}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => onNavigate("auth")}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+              >
+                <User className="h-4 w-4 text-slate-500" />
+                {currentUser ? (
+                  <span className="truncate">{currentUser.name}{currentUser.role === "admin" ? " (admin)" : ""}</span>
+                ) : (
+                  <span>เข้าสู่ระบบ</span>
+                )}
+              </button>
             </div>
           </div>
         </header>
         <div className="p-4 md:p-7">{children}</div>
       </main>
-      <FeedbackQuickAdd contextLabel={viewLabels[view]} noteCount={noteCount} onAddNote={onAddNote} onOpenCenter={() => onNavigate("feedback")} />
+      <FeedbackQuickAdd
+        contextLabel={viewLabels[view]}
+        noteCount={noteCount}
+        currentUser={currentUser}
+        onAddNote={onAddNote}
+        onOpenCenter={() => onNavigate("feedback")}
+        onOpenAuth={() => onNavigate("auth")}
+      />
     </div>
   );
 }
 
-// ปุ่มลอย "+ ความเห็น PO" บนทุกหน้า — เพิ่มความเห็นโดย auto-tag หน้าปัจจุบัน แล้วรวมที่ศูนย์ความเห็น
+// ปุ่มลอย "+ ความเห็น" บนทุกหน้า — ต้องเข้าสู่ระบบก่อน เพื่อเก็บชื่อผู้ให้ความเห็น auto-tag หน้าปัจจุบัน
 function FeedbackQuickAdd({
   contextLabel,
   noteCount,
+  currentUser,
   onAddNote,
   onOpenCenter,
+  onOpenAuth,
 }: {
   contextLabel: string;
   noteCount: number;
+  currentUser: SessionUser | null;
   onAddNote: (text: string, context: string) => void;
   onOpenCenter: () => void;
+  onOpenAuth: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
@@ -1699,26 +1889,33 @@ function FeedbackQuickAdd({
       {open ? (
         <div className="w-80 rounded-xl border border-slate-200 bg-white shadow-2xl">
           <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-            <p className="text-sm font-semibold text-slate-900">ความเห็น PO</p>
+            <p className="text-sm font-semibold text-slate-900">ความเห็น / Feedback</p>
             <button type="button" className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" onClick={() => setOpen(false)} aria-label="ปิด"><X className="h-4 w-4" /></button>
           </div>
-          <div className="space-y-2 p-4">
-            <p className="text-xs text-slate-500">หน้านี้: <span className="font-medium text-slate-700">{contextLabel}</span></p>
-            <textarea className={textareaClass} placeholder="พิมพ์ความเห็น/feedback ของ PO ที่หน้านี้..." value={draft} onChange={(event) => setDraft(event.target.value)} />
-            <div className="flex items-center justify-between">
-              <button type="button" className="text-xs text-blue-700 hover:underline" onClick={onOpenCenter}>ดูทั้งหมด ({noteCount})</button>
-              <Button
-                disabled={!draft.trim()}
-                onClick={() => {
-                  onAddNote(draft, contextLabel);
-                  setDraft("");
-                  setOpen(false);
-                }}
-              >
-                <Plus className="h-4 w-4" /> บันทึก
-              </Button>
+          {currentUser ? (
+            <div className="space-y-2 p-4">
+              <p className="text-xs text-slate-500">โดย <span className="font-medium text-slate-700">{currentUser.name}</span> · หน้านี้: <span className="font-medium text-slate-700">{contextLabel}</span></p>
+              <textarea className={textareaClass} placeholder="พิมพ์ความเห็น/feedback ที่หน้านี้..." value={draft} onChange={(event) => setDraft(event.target.value)} />
+              <div className="flex items-center justify-between">
+                <button type="button" className="text-xs text-blue-700 hover:underline" onClick={onOpenCenter}>ดูทั้งหมด ({noteCount})</button>
+                <Button
+                  disabled={!draft.trim()}
+                  onClick={() => {
+                    onAddNote(draft, contextLabel);
+                    setDraft("");
+                    setOpen(false);
+                  }}
+                >
+                  <Plus className="h-4 w-4" /> บันทึก
+                </Button>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="space-y-3 p-4">
+              <p className="text-sm text-slate-600">เข้าสู่ระบบก่อนเพื่อให้ความเห็น ระบบจะเก็บชื่อผู้ให้ feedback ไว้</p>
+              <Button onClick={() => { setOpen(false); onOpenAuth(); }}><User className="h-4 w-4" /> เข้าสู่ระบบ / สมัคร</Button>
+            </div>
+          )}
         </div>
       ) : null}
       <button
@@ -1726,7 +1923,7 @@ function FeedbackQuickAdd({
         onClick={() => setOpen((current) => !current)}
         className="inline-flex h-12 items-center gap-2 rounded-full bg-blue-700 px-5 text-sm font-semibold text-white shadow-lg transition hover:bg-blue-800"
       >
-        <MessageSquare className="h-5 w-5" /> ความเห็น PO
+        <MessageSquare className="h-5 w-5" /> ความเห็น
         {noteCount > 0 ? <span className="ml-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-white px-1.5 text-xs font-bold text-blue-700">{noteCount}</span> : null}
       </button>
     </div>
@@ -2607,6 +2804,8 @@ function TransferCenterPage({
   const openTransfers = transferRequests.filter((request) => request.status === "Requested" || request.status === "Approved");
   const transferQuantityTotal = transferRequests.reduce((sum, request) => sum + request.quantity, 0);
   const topSuggestion = suggestions[0];
+  const today = getDateInputValue();
+  const analytics = analyzeTransfers(transferRequests, today);
 
   return (
     <>
@@ -2707,16 +2906,66 @@ function TransferCenterPage({
       </Card>
 
       <Card className="mt-5">
-        <SectionHeader title="ประวัติคำขอโอน/ยืม" subtitle="ทุกคำขอถูกเก็บเป็น persistent JSON state เพื่อใช้ตรวจสอบย้อนหลังใน PoC" />
-        <DataTable columns={["Request", "ประเภท", "SKU", "เส้นทาง", "จำนวน", "สถานะ", "เหตุผล", "Timeline", "Action"]} empty={transferRequests.length === 0}>
+        <SectionHeader
+          title="วิเคราะห์พฤติกรรมการยืม-โอน-แลก"
+          subtitle="ดูจากประวัติว่าใครยืมบ่อย ใครคืนช้า/เกินกำหนด ใครของขาดบ่อย และแลกอะไรบ่อย เพื่อวางแผนกระจายพัสดุให้ดีขึ้น"
+        />
+        <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 xl:grid-cols-4">
+          <MetricCard
+            label="ยืมที่ยังไม่คืน"
+            value={String(analytics.outstandingCount)}
+            helper={`เกินกำหนด ${analytics.overdueCount} รายการ`}
+            tone={analytics.overdueCount > 0 ? "red" : "yellow"}
+            formula={`นับคำขอยืมที่อนุมัติแล้วและยังไม่มีวันคืน = ${analytics.outstandingCount} (เกินกำหนด = วันนี้เลย dueDate แล้ว = ${analytics.overdueCount})`}
+            changes="มีการยืมใหม่ คืนของ หรือเลยกำหนดคืน"
+          />
+          <MetricCard
+            label="คืนแล้ว"
+            value={String(analytics.returnedCount)}
+            helper="คำขอยืมที่บันทึกวันคืน"
+            tone="green"
+            formula={`นับคำขอยืมที่มี returnedDate = ${analytics.returnedCount}`}
+            changes="บันทึกการคืนของที่ยืม"
+          />
+          <MetricCard
+            label="แลกเปลี่ยนทั้งหมด"
+            value={String(analytics.swapCount)}
+            helper="ครั้งที่แลกพัสดุข้ามคลัง"
+            tone="purple"
+            formula={`นับรายการประเภทแลกเปลี่ยน = ${analytics.swapCount}`}
+            changes="สร้างรายการแลกเปลี่ยนใหม่"
+          />
+          <MetricCard
+            label="แลกอะไรบ่อยสุด"
+            value={analytics.topSwapName ?? "-"}
+            helper={analytics.topSwapName ? `${analytics.topSwapCount} ครั้ง` : "ยังไม่มีการแลก"}
+            tone="blue"
+            formula={analytics.topSwapName ? `SKU ที่ถูกแลกบ่อยสุด = ${analytics.topSwapName} (${analytics.topSwapCount} ครั้ง)` : "ยังไม่มีข้อมูลการแลก"}
+            changes="มีการแลกเปลี่ยน SKU ใหม่"
+          />
+        </div>
+        <div className="grid grid-cols-1 gap-4 border-t border-slate-100 p-4 lg:grid-cols-3">
+          <TransferLeaderList title="คลังที่ยืมบ่อยสุด" unit="ครั้งที่ยืม" rows={analytics.borrowLeaders} tone="amber" emptyText="ยังไม่มีการยืม" />
+          <TransferLeaderList title="คลังที่ค้างคืน/เกินกำหนด" unit="รายการเกินกำหนด" rows={analytics.overdueLeaders} tone="red" emptyText="ไม่มีรายการเกินกำหนด" />
+          <TransferLeaderList title="คลังที่ของขาดบ่อย" unit="ครั้งที่ต้องยืม/รับโอน" rows={analytics.shortageLeaders} tone="blue" emptyText="ยังไม่มีข้อมูล" />
+        </div>
+      </Card>
+
+      <Card className="mt-5">
+        <SectionHeader title="ประวัติคำขอโอน/ยืม/แลก" subtitle="ทุกคำขอถูกเก็บเป็น persistent JSON state เพื่อใช้ตรวจสอบย้อนหลังใน PoC พร้อมสถานะการคืนสำหรับการยืม" />
+        <DataTable columns={["Request", "ประเภท", "SKU", "เส้นทาง", "จำนวน", "สถานะ", "การคืน", "เหตุผล", "Timeline", "Action"]} empty={transferRequests.length === 0}>
           {transferRequests.map((request) => (
             <tr key={request.id} className="hover:bg-slate-50">
               <td className="px-4 py-3 font-semibold text-slate-900">{request.id}<br /><span className="text-xs font-normal text-slate-500">{request.createdAt}</span></td>
               <td className="px-4 py-3">{getTransferTypeLabel(request.type)}</td>
-              <td className="px-4 py-3">{request.skuId}<br /><span className="text-xs text-slate-500">{request.skuName}</span></td>
+              <td className="px-4 py-3">{request.skuId}<br /><span className="text-xs text-slate-500">{request.skuName}{request.type === "Swap" && request.counterpartSkuName ? ` ⇄ ${request.counterpartSkuName}` : ""}</span></td>
               <td className="px-4 py-3">{request.sourceWarehouseId} → {request.destinationWarehouseId}</td>
               <td className="px-4 py-3">{formatNumber(request.quantity)} {request.unit}</td>
               <td className="px-4 py-3"><TransferStatusBadge status={request.status} /></td>
+              <td className="px-4 py-3">
+                <BorrowReturnBadge state={getBorrowReturnState(request, today)} />
+                {request.type === "Borrow" && request.dueDate ? <div className="mt-1 text-xs text-slate-400">{request.returnedDate ? `คืน ${request.returnedDate}` : `กำหนด ${request.dueDate}`}</div> : null}
+              </td>
               <td className="min-w-72 px-4 py-3 text-sm leading-6 text-slate-600">{request.decisionBasis}</td>
               <td className="min-w-72 px-4 py-3 text-xs leading-5 text-slate-500">
                 {request.timeline.map((item) => `${item.date}: ${item.action}`).join(" / ")}
@@ -3267,14 +3516,19 @@ function ProcurementAuditPage({
 
 function FeedbackCenterPage({
   notes,
+  currentUser,
   onDeleteNote,
   onOpenView,
 }: {
   notes: ProcurementNote[];
-  onDeleteNote: (id: string) => void;
+  currentUser: SessionUser | null;
+  onDeleteNote: (id: string, code: string) => void;
   onOpenView: (view: View) => void;
 }) {
   const [contextFilter, setContextFilter] = useState("all");
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [deleteCode, setDeleteCode] = useState("");
+  const isAdmin = currentUser?.role === "admin";
   const contextOptions = Array.from(new Set(notes.map((note) => note.context)));
   const filtered = notes.filter((note) => contextFilter === "all" || note.context === contextFilter);
   const labelToView = Object.fromEntries(Object.entries(viewLabels).map(([view, label]) => [label, view])) as Record<string, View>;
@@ -3282,8 +3536,8 @@ function FeedbackCenterPage({
   return (
     <>
       <SectionHeader
-        title="ศูนย์ความเห็น PO · Feedback Center"
-        subtitle="รวมความเห็นจากเจ้าของโจทย์/PO ทุกหน้าไว้ที่เดียว แต่ละความเห็น tag ว่ามาจากหน้าไหน · เพิ่มความเห็นได้จากปุ่มลอยทุกหน้า"
+        title="ศูนย์ความเห็น · Feedback Center"
+        subtitle="รวมความเห็น/feedback จากทุกหน้าไว้ที่เดียว เก็บชื่อผู้ให้ความเห็นและหน้าที่เขียน · เพิ่มได้จากปุ่มลอยทุกหน้า (ต้องเข้าสู่ระบบ) · ลบได้เฉพาะ admin พร้อมรหัสยืนยัน"
       />
       <Card>
         <div className="flex flex-wrap items-end gap-3 border-b border-slate-200 px-4 py-3">
@@ -3293,13 +3547,13 @@ function FeedbackCenterPage({
               {contextOptions.map((context) => <option key={context} value={context}>{context}</option>)}
             </select>
           </Field>
-          <span className="ml-auto text-sm text-slate-500">{filtered.length} ความเห็น</span>
+          <span className="ml-auto text-sm text-slate-500">{filtered.length} ความเห็น{isAdmin ? " · สิทธิ์ admin (ลบได้)" : ""}</span>
         </div>
         <div className="p-4">
           {filtered.length === 0 ? (
             <div className="rounded-lg border border-dashed border-slate-300 px-4 py-10 text-center">
               <MessageSquare className="mx-auto h-8 w-8 text-slate-300" />
-              <p className="mt-2 text-sm text-slate-500">ยังไม่มีความเห็น — กดปุ่ม "ความเห็น PO" มุมขวาล่างเพื่อเพิ่มจากหน้าใดก็ได้</p>
+              <p className="mt-2 text-sm text-slate-500">ยังไม่มีความเห็น — กดปุ่ม "ความเห็น" มุมขวาล่างเพื่อเพิ่มจากหน้าใดก็ได้</p>
             </div>
           ) : (
             <ul className="space-y-3">
@@ -3309,7 +3563,7 @@ function FeedbackCenterPage({
                     <div className="min-w-0">
                       <p className="text-sm text-slate-800">{note.text}</p>
                       <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                        <span className="font-medium text-slate-700">{note.author}</span>
+                        <span className="inline-flex items-center gap-1 font-medium text-slate-700"><User className="h-3.5 w-3.5" />{note.authorName ?? "ไม่ระบุ"}{note.authorUsername ? ` (@${note.authorUsername})` : ""}</span>
                         <span>·</span>
                         <button
                           type="button"
@@ -3322,10 +3576,20 @@ function FeedbackCenterPage({
                         <span>{note.createdAt}</span>
                       </div>
                     </div>
-                    <button type="button" className="shrink-0 text-slate-400 hover:text-red-600" onClick={() => onDeleteNote(note.id)} aria-label="ลบความเห็น">
-                      <X className="h-4 w-4" />
-                    </button>
+                    {isAdmin ? (
+                      <button type="button" className="shrink-0 text-slate-400 hover:text-red-600" onClick={() => { setPendingDeleteId(note.id); setDeleteCode(""); }} aria-label="ลบความเห็น">
+                        <X className="h-4 w-4" />
+                      </button>
+                    ) : null}
                   </div>
+                  {isAdmin && pendingDeleteId === note.id ? (
+                    <div className="mt-3 flex flex-wrap items-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2">
+                      <span className="text-xs text-red-700">ใส่รหัสยืนยันการลบ ({DELETE_GUARD_CODE}):</span>
+                      <input className="h-8 w-28 rounded-md border border-slate-300 px-2 text-sm" value={deleteCode} onChange={(event) => setDeleteCode(event.target.value)} placeholder="รหัส" />
+                      <Button variant="danger" onClick={() => { onDeleteNote(note.id, deleteCode); setPendingDeleteId(null); setDeleteCode(""); }}>ยืนยันลบ</Button>
+                      <Button variant="ghost" onClick={() => { setPendingDeleteId(null); setDeleteCode(""); }}>ยกเลิก</Button>
+                    </div>
+                  ) : null}
                 </li>
               ))}
             </ul>
@@ -3333,6 +3597,222 @@ function FeedbackCenterPage({
         </div>
       </Card>
     </>
+  );
+}
+
+// ปุ่ม "Sign in with Google" — โหลด Google Identity Services แล้ว render ปุ่มทางการของ Google
+function GoogleSignInButton({ onProfile }: { onProfile: (profile: GoogleProfile) => void }) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+
+  useEffect(() => {
+    let cancelled = false;
+    const clientId = getGoogleClientId();
+    if (!clientId) return;
+
+    loadGoogleIdentityScript()
+      .then(() => {
+        if (cancelled || !containerRef.current) return;
+        const google = (window as unknown as { google?: any }).google;
+        if (!google?.accounts?.id) {
+          setStatus("error");
+          return;
+        }
+        google.accounts.id.initialize({
+          client_id: clientId,
+          callback: (response: { credential?: string }) => {
+            const profile = response.credential ? parseGoogleCredential(response.credential) : null;
+            if (profile) onProfile(profile);
+          },
+        });
+        google.accounts.id.renderButton(containerRef.current, { theme: "outline", size: "large", width: 320, text: "signin_with", shape: "rectangular" });
+        setStatus("ready");
+      })
+      .catch(() => {
+        if (!cancelled) setStatus("error");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [onProfile]);
+
+  return (
+    <div className="flex flex-col items-center">
+      <div ref={containerRef} />
+      {status === "loading" ? <p className="text-xs text-slate-400">กำลังโหลด Google Sign-In...</p> : null}
+      {status === "error" ? <p className="text-xs text-red-500">โหลด Google Sign-In ไม่สำเร็จ — ตรวจ Client ID / authorized origin</p> : null}
+    </div>
+  );
+}
+
+type AuthMode = "login" | "register" | "forgot";
+
+function AuthPage({
+  currentUser,
+  onLogin,
+  onRegister,
+  onResetPassword,
+  onGoogleLogin,
+  onLogout,
+  onOpenFeedback,
+}: {
+  currentUser: SessionUser | null;
+  onLogin: (username: string, password: string) => boolean;
+  onRegister: (name: string, username: string, password: string) => boolean;
+  onResetPassword: (username: string, newPassword: string) => boolean;
+  onGoogleLogin: (profile: GoogleProfile) => void;
+  onLogout: () => void;
+  onOpenFeedback: () => void;
+}) {
+  const [mode, setMode] = useState<AuthMode>("login");
+  const [name, setName] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState("");
+
+  const reset = () => { setName(""); setUsername(""); setPassword(""); setConfirmPassword(""); setError(""); };
+  const switchMode = (next: AuthMode) => { reset(); setMode(next); };
+
+  if (currentUser) {
+    return (
+      <>
+        <SectionHeader title="บัญชีผู้ใช้" subtitle="ข้อมูลผู้ใช้ที่เข้าสู่ระบบ ใช้สำหรับเก็บชื่อผู้ให้ความเห็น/feedback" />
+        <Card className="max-w-lg">
+          <div className="space-y-4 p-5">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-100 text-blue-700"><User className="h-6 w-6" /></div>
+              <div>
+                <p className="text-base font-semibold text-slate-900">{currentUser.name}</p>
+                <p className="text-sm text-slate-500">@{currentUser.username} · {currentUser.role === "admin" ? "ผู้ดูแลระบบ (ลบความเห็นได้)" : "ผู้ใช้ทั่วไป"}</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={onOpenFeedback}><MessageSquare className="h-4 w-4" /> ไปศูนย์ความเห็น</Button>
+              <Button variant="secondary" onClick={onLogout}><LogOut className="h-4 w-4" /> ออกจากระบบ</Button>
+            </div>
+          </div>
+        </Card>
+      </>
+    );
+  }
+
+  const title = mode === "login" ? "เข้าสู่ระบบ" : mode === "register" ? "สมัครสมาชิก" : "ลืมรหัสผ่าน";
+  const subtitle =
+    mode === "login"
+      ? "เข้าสู่ระบบเพื่อให้ความเห็น ระบบจะเก็บว่าใครเป็นผู้ให้ feedback"
+      : mode === "register"
+        ? "สร้างบัญชีใหม่เพื่อเริ่มให้ความเห็น"
+        : "ตั้งรหัสผ่านใหม่ด้วย username ของคุณ";
+
+  const submit = () => {
+    setError("");
+    if (mode === "login") {
+      if (!onLogin(username, password)) setError("username หรือรหัสผ่านไม่ถูกต้อง");
+      else reset();
+      return;
+    }
+    if (mode === "register") {
+      if (password !== confirmPassword) { setError("รหัสผ่านยืนยันไม่ตรงกัน"); return; }
+      if (onRegister(name, username, password)) reset();
+      else setError("สมัครไม่สำเร็จ — username อาจถูกใช้แล้ว หรือกรอกไม่ครบ");
+      return;
+    }
+    // forgot
+    if (password !== confirmPassword) { setError("รหัสผ่านยืนยันไม่ตรงกัน"); return; }
+    if (onResetPassword(username, password)) { switchMode("login"); }
+    else setError("รีเซ็ตไม่สำเร็จ — ไม่พบ username นี้");
+  };
+
+  const canSubmit =
+    mode === "login"
+      ? Boolean(username.trim() && password)
+      : mode === "register"
+        ? Boolean(name.trim() && username.trim() && password && confirmPassword)
+        : Boolean(username.trim() && password && confirmPassword);
+
+  return (
+    <div className="mx-auto flex max-w-md flex-col items-center pt-4">
+      <div className="mb-5 flex flex-col items-center text-center">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600 text-white"><Sparkles className="h-7 w-7" /></div>
+        <h1 className="mt-3 text-xl font-bold text-slate-900">PEA AI Inventory</h1>
+        <p className="text-sm text-slate-500">{subtitle}</p>
+      </div>
+
+      {isGoogleAuthEnabled() ? (
+        <Card className="mb-4 w-full">
+          <div className="flex flex-col items-center gap-3 p-5">
+            <GoogleSignInButton onProfile={onGoogleLogin} />
+            <div className="flex w-full items-center gap-3">
+              <span className="h-px flex-1 bg-slate-200" />
+              <span className="text-xs text-slate-400">หรือใช้บัญชีในระบบ</span>
+              <span className="h-px flex-1 bg-slate-200" />
+            </div>
+          </div>
+        </Card>
+      ) : null}
+
+      <Card className="w-full">
+        <div className="grid grid-cols-2 border-b border-slate-200">
+          <button
+            type="button"
+            className={`py-3 text-sm font-semibold transition ${mode !== "register" ? "border-b-2 border-blue-600 text-blue-700" : "text-slate-500 hover:text-slate-700"}`}
+            onClick={() => switchMode("login")}
+          >
+            เข้าสู่ระบบ
+          </button>
+          <button
+            type="button"
+            className={`py-3 text-sm font-semibold transition ${mode === "register" ? "border-b-2 border-blue-600 text-blue-700" : "text-slate-500 hover:text-slate-700"}`}
+            onClick={() => switchMode("register")}
+          >
+            สมัครสมาชิก
+          </button>
+        </div>
+
+        <div className="space-y-3 p-5">
+          <p className="text-base font-semibold text-slate-900">{title}</p>
+
+          {mode === "register" ? (
+            <Field label="ชื่อ-นามสกุล"><input className={inputClass} value={name} onChange={(event) => setName(event.target.value)} placeholder="เช่น คุณสมชาย ใจดี" /></Field>
+          ) : null}
+
+          <Field label="Username"><input className={inputClass} value={username} onChange={(event) => setUsername(event.target.value)} placeholder={mode === "login" ? "username หรือ admin" : "username"} /></Field>
+
+          <Field label={mode === "forgot" ? "รหัสผ่านใหม่" : "รหัสผ่าน"}>
+            <input type="password" className={inputClass} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="รหัสผ่าน" />
+          </Field>
+
+          {mode !== "login" ? (
+            <Field label="ยืนยันรหัสผ่าน"><input type="password" className={inputClass} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="พิมพ์รหัสผ่านอีกครั้ง" /></Field>
+          ) : null}
+
+          {error ? <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
+
+          <Button className="w-full justify-center" disabled={!canSubmit} onClick={submit}>
+            {mode === "login" ? <><User className="h-4 w-4" /> เข้าสู่ระบบ</> : mode === "register" ? <><Plus className="h-4 w-4" /> สมัครและเข้าสู่ระบบ</> : <><ShieldCheck className="h-4 w-4" /> ตั้งรหัสผ่านใหม่</>}
+          </Button>
+
+          <div className="flex items-center justify-between pt-1 text-xs">
+            {mode === "login" ? (
+              <>
+                <button type="button" className="text-blue-700 hover:underline" onClick={() => switchMode("forgot")}>ลืมรหัสผ่าน?</button>
+                <button type="button" className="text-slate-500 hover:text-slate-700 hover:underline" onClick={() => switchMode("register")}>ยังไม่มีบัญชี? สมัคร</button>
+              </>
+            ) : (
+              <button type="button" className="text-blue-700 hover:underline" onClick={() => switchMode("login")}>← กลับไปเข้าสู่ระบบ</button>
+            )}
+          </div>
+
+          {mode === "login" ? <p className="text-center text-xs text-slate-400">ผู้ดูแลระบบทดสอบ: admin / admin</p> : null}
+        </div>
+      </Card>
+
+      <p className="mt-4 max-w-md text-center text-xs text-slate-400">
+        หมายเหตุ: ระบบ login นี้เป็น PoC เก็บใน browser ต่อเครื่อง (ยังไม่ใช่ auth จริง) อย่าใช้รหัสผ่านจริง · เวอร์ชันใช้งานจริงควรต่อ Firebase/Google เพื่อรองรับรีเซ็ตรหัสผ่านทางอีเมลและเก็บข้อมูลรวมศูนย์
+      </p>
+    </div>
   );
 }
 
@@ -3722,6 +4202,96 @@ function getShortSkuIdFromPeaSku(peaSkuId: string) {
   return skus.find((sku) => resolvePeaSkuId(sku.id) === peaSkuId)?.id ?? peaSkuId;
 }
 
+type BorrowReturnState = "returned" | "overdue" | "borrowing" | "pending" | "na";
+
+function getBorrowReturnState(request: TransferRequest, today: string): BorrowReturnState {
+  if (request.type !== "Borrow") return "na";
+  if (request.returnedDate) return "returned";
+  if (request.status === "Requested") return "pending";
+  if (request.status === "Rejected") return "na";
+  if (request.dueDate && request.dueDate < today) return "overdue";
+  return "borrowing";
+}
+
+const borrowReturnLabel: Record<BorrowReturnState, string> = {
+  returned: "คืนแล้ว",
+  overdue: "เกินกำหนดคืน",
+  borrowing: "ยืมอยู่",
+  pending: "รออนุมัติ",
+  na: "-",
+};
+
+type LeaderRow = { warehouseId: string; count: number };
+
+function rankByWarehouse(items: TransferRequest[], pick: (request: TransferRequest) => string): LeaderRow[] {
+  const counts = new Map<string, number>();
+  items.forEach((request) => {
+    const key = pick(request);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  });
+  return Array.from(counts.entries())
+    .map(([warehouseId, count]) => ({ warehouseId, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
+function analyzeTransfers(requests: TransferRequest[], today: string) {
+  const borrows = requests.filter((request) => request.type === "Borrow");
+  const swaps = requests.filter((request) => request.type === "Swap");
+  const needWarehouseEvents = requests.filter((request) => request.type === "Borrow" || request.type === "Transfer");
+  const overdue = borrows.filter((request) => getBorrowReturnState(request, today) === "overdue");
+
+  const swapSkuCounts = rankByWarehouse(swaps, (request) => request.skuName);
+  const topSwap = swapSkuCounts[0] ?? null;
+
+  return {
+    borrowLeaders: rankByWarehouse(borrows, (request) => request.destinationWarehouseId),
+    overdueLeaders: rankByWarehouse(overdue, (request) => request.destinationWarehouseId),
+    shortageLeaders: rankByWarehouse(needWarehouseEvents, (request) => request.destinationWarehouseId),
+    swapCount: swaps.length,
+    topSwapName: topSwap ? topSwap.warehouseId : null,
+    topSwapCount: topSwap ? topSwap.count : 0,
+    returnedCount: borrows.filter((request) => request.returnedDate).length,
+    outstandingCount: borrows.filter((request) => getBorrowReturnState(request, today) === "borrowing" || getBorrowReturnState(request, today) === "overdue").length,
+    overdueCount: overdue.length,
+  };
+}
+
+function BorrowReturnBadge({ state }: { state: BorrowReturnState }) {
+  if (state === "na") return <span className="text-xs text-slate-400">-</span>;
+  const className: Record<Exclude<BorrowReturnState, "na">, string> = {
+    returned: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+    overdue: "bg-red-50 text-red-700 ring-red-200",
+    borrowing: "bg-amber-50 text-amber-700 ring-amber-200",
+    pending: "bg-blue-50 text-blue-700 ring-blue-200",
+  };
+  return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${className[state as Exclude<BorrowReturnState, "na">]}`}>{borrowReturnLabel[state]}</span>;
+}
+
+function TransferLeaderList({ title, unit, rows, tone, emptyText }: { title: string; unit: string; rows: LeaderRow[]; tone: "amber" | "red" | "blue"; emptyText: string }) {
+  const toneClass: Record<"amber" | "red" | "blue", string> = { amber: "text-amber-700", red: "text-red-700", blue: "text-blue-700" };
+  const top = rows.slice(0, 5);
+  return (
+    <div className="rounded-lg border border-slate-200 p-4">
+      <p className="text-sm font-semibold text-slate-800">{title}</p>
+      {top.length === 0 ? (
+        <p className="mt-3 text-sm text-slate-400">{emptyText}</p>
+      ) : (
+        <ul className="mt-3 space-y-2">
+          {top.map((row, index) => (
+            <li key={row.warehouseId} className="flex items-center justify-between gap-2">
+              <span className="flex items-center gap-2 text-sm text-slate-700">
+                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-500">{index + 1}</span>
+                คลัง {row.warehouseId}
+              </span>
+              <span className={`text-sm font-semibold ${toneClass[tone]}`}>{row.count} <span className="text-xs font-normal text-slate-400">{unit}</span></span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function TransferStatusBadge({ status }: { status: TransferStatus }) {
   const className: Record<TransferStatus, string> = {
     Requested: "bg-blue-50 text-blue-700 ring-blue-200",
@@ -3757,7 +4327,7 @@ function StockIntelligenceStatusBadge({ status }: { status: StockIntelligenceRow
 }
 
 function getTransferTypeLabel(type: TransferType) {
-  return type === "Borrow" ? "ยืมชั่วคราว" : "โอนย้าย";
+  return type === "Borrow" ? "ยืมชั่วคราว" : type === "Swap" ? "แลกเปลี่ยน" : "โอนย้าย";
 }
 
 function calculateDateDiffDays(startDate: string, endDate: string) {

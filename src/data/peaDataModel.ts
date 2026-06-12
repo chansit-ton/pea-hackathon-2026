@@ -666,8 +666,8 @@ export const peaSupplierSkuPrice: PeaSupplierSkuPrice[] = [
   { supplierId: "S001", skuId: "1CC0CG0002", unitPrice: 2_000, currency: "THB", unit: "M", moq: 10, standardLeadTimeDays: 25, reliabilityScore: 96, priceSource: "mock_supplier_quote", status: "active" },
   { supplierId: "S002", skuId: "1CC0CG0002", unitPrice: 2_150, currency: "THB", unit: "M", moq: 20, standardLeadTimeDays: 18, reliabilityScore: 92, priceSource: "mock_supplier_quote", status: "active" },
   { supplierId: "S002", skuId: "1CC0CG0004", unitPrice: 3_500, currency: "THB", unit: "M", moq: 10, standardLeadTimeDays: 30, reliabilityScore: 92, priceSource: "mock_supplier_quote", status: "active" },
-  { supplierId: "S001", skuId: "1CC0CE0004", unitPrice: 12_000, currency: "THB", unit: "M", moq: 10, standardLeadTimeDays: 20, reliabilityScore: 88, priceSource: "mock_supplier_quote", status: "active" },
-  { supplierId: "S003", skuId: "1DD0DC0000", unitPrice: 1_200_000, currency: "THB", unit: "EA", moq: 1, standardLeadTimeDays: 60, reliabilityScore: 85, priceSource: "mock_supplier_quote", status: "active" },
+  { supplierId: "S001", skuId: "1CC0CE0004", unitPrice: 4_500, currency: "THB", unit: "M", moq: 10, standardLeadTimeDays: 20, reliabilityScore: 88, priceSource: "mock_supplier_quote", status: "active" },
+  { supplierId: "S003", skuId: "1DD0DC0000", unitPrice: 150_000, currency: "THB", unit: "EA", moq: 1, standardLeadTimeDays: 60, reliabilityScore: 85, priceSource: "mock_supplier_quote", status: "active" },
   { supplierId: "S003", skuId: "1CC0CH0501", unitPrice: 150, currency: "THB", unit: "M", moq: 50, standardLeadTimeDays: 14, reliabilityScore: 87, priceSource: "mock_supplier_quote", status: "active" },
 ];
 

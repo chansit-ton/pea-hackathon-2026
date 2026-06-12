@@ -102,10 +102,11 @@ AI Suggest ใช้เป็นตัวช่วยตัดสินใจ �
 | อนุมัติ | Regional และ Central approval queue |
 | ประวัติ | Request History, Audit Trail และ Calculation Snapshot |
 | VMI | วิเคราะห์ candidate และจำลองผลลัพธ์ VMI |
-| โอน/ยืมพัสดุ | ตรวจทางเลือก transfer หรือ borrow ก่อนซื้อใหม่ |
+| โอน/ยืมพัสดุ | ตรวจทางเลือก transfer/borrow/swap ก่อนซื้อใหม่ + track การคืน + วิเคราะห์ใครยืมบ่อย/ค้างคืน/ขาดบ่อย/แลกอะไรบ่อย |
 | วิเคราะห์สต็อก | เทียบ stock รายคลัง, Dead/Slow Stock, Stockout Forecast และ forecast error |
 | ตรวจซื้อซ้ำ-ของจม | เทียบประวัติการของบ 3 ปีงบ รายคลัง, filter, drill-down ใบของบ, flag ซื้อซ้ำของจม/เร่งใช้งบ และมูลค่าทุนจม |
-| ศูนย์ความเห็น PO | รวมความเห็น PO ทุกหน้า (tag ตามหน้า) เพิ่มได้จากปุ่มลอยทุกหน้า |
+| ศูนย์ความเห็น (Feedback) | รวมความเห็นทุกหน้า (tag ตามหน้า + ชื่อผู้เขียน) เพิ่มจากปุ่มลอยทุกหน้า · ลบเฉพาะ admin + รหัส 99999 |
+| บัญชีผู้ใช้ | login/register (PoC) เก็บว่าใครให้ feedback · admin/admin มีสิทธิ์ลบ |
 | รับของ/Delay | บันทึกรับของเข้าคลัง, delay reason และ impact demand |
 | งบประมาณ | ตั้งค่า Local, Regional และ Central Budget |
 | ตั้งค่า | ตั้งค่า Formula Policy และ version |

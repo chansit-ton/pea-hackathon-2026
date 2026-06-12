@@ -1,3 +1,125 @@
+## 2026-06-12 - ส่งความเห็น/feedback เข้า Google Sheet (รวมศูนย์)
+
+### Summary
+- เพิ่ม `sendGoogleFeedbackComment` ใน `googlePoFeedback.ts` (refactor ใช้ `postRow` ร่วมกับ PO feedback) ส่ง payload `event_type: feedback_comment` พร้อม `actor`, `author_username`, `context_page`, `feedback_text`
+- ต่อ `addPoNote` ให้ส่งสำเนาความเห็นเข้า Google Sheet endpoint ทุกครั้งที่บันทึก (ข้อมูลหลักยังอยู่ใน localStorage) และปรับ toast บอกว่าส่งเข้าชีตด้วยเมื่อ endpoint เปิดอยู่
+- อัปเดต `GOOGLE_SHEET_ENDPOINT.md` ให้ Apps Script แยกความเห็นไปชีต `Feedback` (คอลัมน์ received_at/action_at/actor/author_username/context_page/feedback_text) และ PO event ไปชีต `PO Feedback` โดย map ค่าตาม header เสมอ
+
+### Why
+- ผู้ใช้ตั้ง Google Sign-In + feedback endpoint แล้ว แต่ความเห็นไม่เข้าชีต เพราะ (1) `addPoNote` ยังไม่ได้ส่ง และ (2) Apps Script เดิม map เฉพาะคอลัมน์ PO ทำให้ข้อความ/หน้าตกหาย — แก้ทั้งสองจุด ผู้ใช้ยืนยันว่าได้แล้ว
+
+### Changed Files
+- `src/App.tsx`
+- `src/utils/googlePoFeedback.ts`
+- `GOOGLE_SHEET_ENDPOINT.md`
+- `PROJECT_UPDATES.md`
+
+### Verification
+- `npm.cmd run build` ผ่าน
+- ผู้ใช้ยืนยันบนชีตจริง: ความเห็นเข้าชีต `Feedback` พร้อมชื่อ Google (actor), อีเมล, หน้าที่เขียน และข้อความครบ หลังอัปเดต Apps Script + Deploy New version
+
+### Notes / Follow-up
+- ต้อง Deploy New version ของ Apps Script ทุกครั้งที่แก้โค้ด ไม่งั้น Web App รันโค้ดเก่า
+- `no-cors` ทำให้ frontend อ่าน response ไม่ได้ จึงไม่ confirm สำเร็จฝั่ง client; การอ่าน feedback กลับมาแสดงรวมในแอปยังต้องทำ GET endpoint เพิ่มถ้าต้องการ
+
+## 2026-06-12 - เพิ่ม Google Sign-In (OAuth) เป็นทางเลือก login
+
+### Summary
+- เพิ่ม `src/utils/googleAuth.ts` โหลด Google Identity Services, decode id_token เป็นชื่อ/อีเมล (env-gated ด้วย `VITE_GOOGLE_CLIENT_ID`)
+- เพิ่มปุ่ม "Sign in with Google" ในหน้า `บัญชีผู้ใช้` (ขึ้นเฉพาะเมื่อตั้ง Client ID) พร้อม fallback เป็น login แบบ local ถ้าไม่ตั้งค่า
+- เข้าสู่ระบบด้วย Google → เก็บ identity จริง (ชื่อ+อีเมล) ติดกับความเห็น; ได้สิทธิ์ admin ถ้าอีเมลตรง `VITE_ADMIN_EMAIL`
+- เพิ่ม env `VITE_GOOGLE_CLIENT_ID`, `VITE_ADMIN_EMAIL` (ใน `.env.example`, `vite-env.d.ts`) และเอกสาร `GOOGLE_AUTH_SETUP.md`
+
+### Why
+- ผู้ใช้เลือกใช้ Google Sign-In (OAuth) เพื่อให้ระบุตัวตนผู้ให้ feedback ได้จริงโดยไม่ต้องจัดการรหัสผ่านเอง และรันบน Vercel ได้โดยไม่ต้องมี backend
+
+### Changed Files
+- `src/App.tsx`, `src/utils/googleAuth.ts` (ใหม่), `src/vite-env.d.ts`, `.env.example`
+- `GOOGLE_AUTH_SETUP.md` (ใหม่), `DATA_POLICY.md` / `README.md` / `PROJECT_UPDATES.md`
+
+### Verification
+- `npm.cmd run build` ผ่าน
+- ตรวจผ่าน DOM (ยังไม่ตั้ง Client ID): หน้า auth แสดงฟอร์ม local ปกติ, ปุ่ม Google ถูกซ่อน (graceful fallback), ไม่มี console error
+
+### Notes / Follow-up
+- ยังไม่ได้ทดสอบ popup Google จริงเพราะต้องใช้ Client ID + authorized origin ของผู้ใช้ (มีขั้นตอนใน `GOOGLE_AUTH_SETUP.md`)
+- PoC decode id_token ฝั่ง client ไม่ verify ที่ server; feedback ยังเก็บ localStorage ต่อเครื่อง — ถ้าต้องรวมศูนย์ค่อยต่อ Firestore หรือส่งเข้า Google Sheet endpoint
+
+## 2026-06-12 - ปรับหน้า login ให้จริงจัง (Login/Register/ลืมรหัสผ่าน)
+
+### Summary
+- รื้อหน้า `บัญชีผู้ใช้` เป็น card เดียวมี tab เข้าสู่ระบบ/สมัครสมาชิก + โหมดลืมรหัสผ่าน, มี logo, ยืนยันรหัสผ่าน, ข้อความ error inline
+- เพิ่ม handler `resetPassword(username, newPassword)` (PoC: รีเซ็ตด้วย username เพราะยังไม่มีอีเมลจริง) และลิงก์ "ลืมรหัสผ่าน?" / "ยังไม่มีบัญชี? สมัคร" / "กลับไปเข้าสู่ระบบ"
+- เพิ่ม microcopy ว่าเวอร์ชันจริงควรต่อ Firebase/Google เพื่อรองรับรีเซ็ตรหัสผ่านทางอีเมลและเก็บข้อมูลรวมศูนย์
+
+### Why
+- ผู้ใช้ต้องการหน้า login ที่จริงจังขึ้น มีปุ่ม Register และ Forgot password
+
+### Changed Files
+- `src/App.tsx`
+- `PROJECT_UPDATES.md`
+
+### Verification
+- `npm.cmd run build` ผ่าน
+- ตรวจผ่าน DOM: หน้า auth มี tab login/register, ลิงก์ลืมรหัสผ่าน, โหมด forgot แสดงช่องรหัสผ่านใหม่+ยืนยัน+ปุ่มกลับ
+
+### Notes / Follow-up
+- รีเซ็ตรหัสผ่านแบบ username-only ไม่ปลอดภัยจริง เป็น stand-in รอ backend; การเลือก backend (Firebase/Google Sheets/Google Sign-In) รอผู้ใช้ตัดสินใจ
+
+## 2026-06-12 - ระบบ login/register + ความเห็นเก็บชื่อจริง + ลบต้องเป็น admin + รหัส 99999
+
+### Summary
+- เปลี่ยนชื่อจาก "ความเห็น PO" เป็นกลาง ๆ "ความเห็น / Feedback" ทุกจุด (ปุ่มลอย, ศูนย์ความเห็น, microcopy)
+- เพิ่มระบบ login/register แบบ PoC (เก็บใน localStorage): หน้า `บัญชีผู้ใช้`, สมัคร (ชื่อ/username/password), เข้าสู่ระบบ, ออกจากระบบ + chip ผู้ใช้บน header
+- บัญชี admin ในตัว `admin/admin` (role admin) สำหรับสิทธิ์ลบ; ผู้สมัครทั่วไปเป็น role user
+- ความเห็นเก็บ `authorName`/`authorUsername` จากผู้ที่เข้าสู่ระบบ (ไม่ fix เป็น "PO"); ปุ่มลอยต้องเข้าสู่ระบบก่อนจึงให้ความเห็นได้
+- ลบความเห็นได้เฉพาะ admin และต้องใส่รหัสยืนยัน `99999` (กันการลบโดยไม่ตั้งใจ) — ผู้ใช้ทั่วไปไม่เห็นปุ่มลบ
+- เพิ่ม persistent keys `authUsers`, `currentUser`
+
+### Why
+- ผู้ใช้ต้องการให้ระบบเก็บว่าใครเป็นผู้ให้ feedback (มี deploy บน Vercel), ไม่อยากให้ชื่อเป็น "PO" ตายตัว และต้องการกันการลบด้วยรหัส/สิทธิ์ admin
+
+### Changed Files
+- `src/App.tsx`
+- `DATA_POLICY.md` / `README.md` / `Design.md` / `PROJECT_UPDATES.md`
+
+### Verification
+- `npm.cmd run build` ผ่าน
+- ตรวจผ่าน DOM: login admin/admin → currentUser role admin persist, ปุ่มลอยจับชื่อ "ผู้ดูแลระบบ" อัตโนมัติ, บันทึกความเห็นมี authorName/username/context, ศูนย์ความเห็นแสดงผู้เขียน @admin, ลบด้วยรหัสผิดถูกปฏิเสธ (ความเห็นยังอยู่) ลบด้วย 99999 สำเร็จ
+
+### Notes / Follow-up
+- ข้อจำกัดสำคัญ: ไม่มี backend → localStorage แยกตามเครื่อง/เบราว์เซอร์ ดังนั้นบน Vercel feedback ของแต่ละผู้เข้าชม "ไม่รวมศูนย์" ถ้าต้องการเก็บรวมจริงต้องต่อ backend/DB หรือส่งผ่าน `googlePoFeedback.ts` (Google Sheet) เพิ่ม
+- รหัสผ่านเก็บ plaintext ใน localStorage เป็น PoC เท่านั้น ไม่ใช่ระบบ auth ปลอดภัยจริง (มี microcopy เตือนในหน้า register)
+
+## 2026-06-12 - เพิ่มวิเคราะห์ยืม-โอน-แลก + reconcile ราคา mock data ให้สมจริง
+
+### Summary
+- เพิ่มประเภท `Swap` (แลกเปลี่ยน) และ field `dueDate`/`returnedDate`/`counterpartSkuName` ใน `TransferRequest` เพื่อ track การคืนและการแลก
+- เพิ่ม seed `initialTransferRequests` (ยืม/โอน/แลก สมจริง 11 รายการ) โหลดเป็นค่าตั้งต้นของ transfer state — K030 เป็นคลังที่ยืมบ่อย คืนช้า และขาดบ่อย (สอดคล้องเคสของจม-ของบ)
+- เพิ่มหมวด "วิเคราะห์พฤติกรรมการยืม-โอน-แลก" ในหน้าโอน/ยืม: metric (ยืมค้างคืน/เกินกำหนด, คืนแล้ว, แลกทั้งหมด, แลกอะไรบ่อย) + leaderboard 3 ชุด (คลังยืมบ่อย / ค้างคืน-เกินกำหนด / ของขาดบ่อย)
+- เพิ่มคอลัมน์ "การคืน" ในตารางประวัติ (คืนแล้ว/เกินกำหนดคืน/ยืมอยู่/รออนุมัติ + วันกำหนด/วันคืน) และแสดง SKU ที่แลกกลับ; ปุ่ม "ปิดงาน" คำขอยืมบันทึก `returnedDate` อัตโนมัติ
+- Review & reconcile ราคา mock data ให้สมจริงและสอดคล้องทุก dataset: หม้อแปลง 100kVA 1,200,000→150,000/ลูก, เสาไฟ 12,000→4,500/ต้น, แก้ราคา/จำนวน C01·T01·B05 ใน procurementHistory/deadStock ให้ตรงกับ supplierOffers (C01 คง 2,000/ม. ไว้เพื่อ demo) และปรับ trend ของจมรายปีให้ coherent
+- แก้หน่วยในตารางการถือครอง SKU ให้ normalize จาก BATCH (M→เมตร, EA→หน่วย) แทนการบังคับหน่วย demo ที่ทำให้ตัวเลขเพี้ยน
+
+### Why
+- ผู้ใช้ต้องการหน้าประวัติยืม-แลกที่เห็นพฤติกรรม (ใครยืมบ่อย/ไม่คืน/ขาดบ่อย/แลกอะไร) และต้องการให้ mock data สมจริงกว่าเดิม โดยเฉพาะราคาที่ขัดกันระหว่าง seed ใหม่กับของเดิม
+
+### Changed Files
+- `src/App.tsx`
+- `src/data/mockData.ts`
+- `src/data/peaDataModel.ts`
+- `src/data/procurementHistory.ts`
+- `src/utils/procurementAnalysis.ts`
+- `DATA_POLICY.md` / `README.md` / `Design.md` / `PROJECT_UPDATES.md`
+
+### Verification
+- `npm.cmd run build` ผ่าน
+- ตรวจผ่าน DOM: หน้าโอน/ยืม แสดง leaderboard K030 ยืมบ่อยสุด 3 ครั้ง / เกินกำหนด 2 / ขาดบ่อย 3, แลกสายไฟบ่อยสุด 2 ครั้ง, มี return badge; หน้า Audit มูลค่าของจมรวม ฿4,560,000 ตรงกับราคาที่ reconcile (P01 4,500 + C01 2,000 + B05 1,800 + T01 150,000)
+
+### Notes / Follow-up
+- ผู้ใช้เดิมที่เคย persist transfer state ว่าง [] ไว้แล้วจะไม่เห็น seed ใหม่ (seed เป็น first-run) — ล้างผ่านปุ่ม "ล้างประวัติทดสอบ" หรือ clear localStorage ถ้าต้องการ
+- P01 ยังมี semantic mismatch เล็กน้อย (demo เรียก "เสาไฟ/ต้น" แต่ map ไป PEA SKU ที่เป็นเมตร) — ตารางถือครองจึงโชว์ stock เป็น "เมตร" ตามข้อมูลจริง ส่วน dead listing เป็น "ต้น"; ถ้าจะให้ตรงสนิทต้อง remap demo SKU
+
 ## 2026-06-12 - ปรับถ้อยคำให้สุภาพ + เพิ่มการถือครอง SKU รายคลังในหน้า SKU
 
 ### Summary
