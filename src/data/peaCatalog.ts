@@ -46,6 +46,8 @@ export const peaCatalog: CatalogSku[] = [
   { skuId: "1CC0IN0022", skuName: "ลูกถ้วยแขวน พอร์ซเลน 22kV", category: "ลูกถ้วย/ฉนวน", unit: "ลูก", criticality: "Medium", basePrice: 320, demandTier: "mid", season: "steady", leadDays: 18, suppliers: ["S001", "S002"] },
   { skuId: "1CC0DF0100", skuName: "ดรอพเอาท์ฟิวส์คัตเอาท์ 22kV 100A", category: "อุปกรณ์ป้องกัน", unit: "ชุด", criticality: "Medium", basePrice: 1850, demandTier: "mid", season: "steady", leadDays: 22, suppliers: ["S002"] },
   { skuId: "1CC0BK0050", skuName: "เบรกเกอร์ 3 เฟส 50 แอมป์", category: "เบรกเกอร์/สวิตช์", unit: "ชุด", criticality: "Medium", basePrice: 1800, demandTier: "mid", season: "steady", leadDays: 20, suppliers: ["S002"] },
+  { skuId: "1CC0CA1200", skuName: "คาปาซิเตอร์แบงค์ 22kV 1200 kVAR", category: "อุปกรณ์ปรับปรุงแรงดัน", unit: "ชุด", criticality: "High", basePrice: 85000, demandTier: "low", season: "steady", leadDays: 50, suppliers: ["S003"] },
+  { skuId: "1DD0VR0100", skuName: "โวลเตจเรกูเลเตอร์ 1 เฟส 100A 22kV", category: "อุปกรณ์ปรับปรุงแรงดัน", unit: "เครื่อง", criticality: "Critical", basePrice: 120000, demandTier: "low", season: "steady", leadDays: 55, suppliers: ["S003"] },
 ];
 
 export type ActiveWarehouse = {

@@ -3,6 +3,7 @@ import { useEffect, type InputHTMLAttributes } from "react";
 import {
   ArrowLeft,
   ArrowDown,
+  ArrowRight,
   ArrowUp,
   ArrowRightLeft,
   Archive,
@@ -65,6 +66,7 @@ import {
 } from "./data/peaDataModel";
 import type { PeaDataCoverage, PeaLeadTimeSkuSummary, PeaRiskCoverageRecord } from "./data/peaDataModel";
 import { fiscalYears } from "./data/procurementHistory";
+import { getCatalogSku } from "./data/peaCatalog";
 import {
   analyzeBudgetRequests,
   findDeadStockForSkuElsewhere,
@@ -114,7 +116,7 @@ import {
 import { formatCurrency, formatPercent } from "./utils/formatters";
 import { isGooglePoFeedbackEnabled, sendGoogleFeedbackComment, sendGooglePoFeedback, type GooglePoFeedbackAction } from "./utils/googlePoFeedback";
 import { getGoogleClientId, isAdminEmail, isGoogleAuthEnabled, loadGoogleIdentityScript, parseGoogleCredential, type GoogleProfile } from "./utils/googleAuth";
-import { loadPersistentJson, savePersistentJson } from "./utils/persistentJsonStore";
+import { loadPersistentJson, savePersistentJson, ensureSeedVersion } from "./utils/persistentJsonStore";
 import type {
   ApprovalTimelineItem,
   BudgetContext,
@@ -326,7 +328,20 @@ type ReceiptDelayLog = {
   note: string;
   impactDemand: number;
   createdAt: string;
+  inspection?: boolean[]; // ผลตรวจรับ 7 ขั้น (true=ผ่าน)
+  inspectionResult?: "ผ่าน" | "ไม่ผ่าน";
 };
+
+// 7 ขั้นตรวจรับตามระเบียบ พ.ร.บ. จัดซื้อจัดจ้างฯ 2560 (คณะกรรมการตรวจรับ)
+const inspectionSteps = [
+  "ตรวจเอกสาร (ใบส่งของ/ใบกำกับภาษี/PO/Packing List)",
+  "ตรวจนับจำนวน (ทั้งหมด/สุ่มตามเกณฑ์)",
+  "ตรวจหีบห่อ & สภาพภายนอก",
+  "ตรวจคุณลักษณะเฉพาะ (ชื่อ/รุ่น/ยี่ห้อ/สเปก)",
+  "ตรวจผลทดสอบ/ใบรับรอง (มอก./Type Test/PPA)",
+  "จัดทำใบตรวจรับ + รายงานผล",
+  "ยืนยันรับเข้าคลัง → เบิกจ่าย",
+];
 
 type SupplierCatalogInput = {
   supplier: Supplier;
@@ -623,7 +638,17 @@ function applyAutoFormulaVersion(basePolicy: FormulaPolicyState, nextPolicy: For
   };
 }
 
+// bump เมื่อชุดข้อมูลตั้งต้น (SKU/inventory/supplier) เปลี่ยน เพื่อล้าง cache เก่าใน localStorage
+const SEED_DATA_VERSION = 2;
+
 function hydratePersistentSeedData() {
+  // ล้าง cache ของ seed/master เก่าก่อน ถ้า seed version เปลี่ยน (กันข้อมูลใหม่ถูก overwrite ด้วยของเก่า)
+  ensureSeedVersion(SEED_DATA_VERSION, [
+    persistentKeys.suppliers,
+    persistentKeys.skus,
+    persistentKeys.inventoryRecords,
+    persistentKeys.supplierOffers,
+  ]);
   // Seed data ใช้เฉพาะตอนเปิดระบบครั้งแรก หลังจากนั้นข้อมูล master ที่ผู้ใช้แก้จะถูกโหลดจาก JSON storage
   replaceArrayContents(suppliers, loadPersistentJson(persistentKeys.suppliers, suppliers));
   replaceArrayContents(skus, loadPersistentJson(persistentKeys.skus, skus));
@@ -733,6 +758,7 @@ function App() {
     return 0;
   });
   const [view, setView] = useState<View>("dashboard");
+  const [showLanding, setShowLanding] = useState(true);
   const [selectedSkuId, setSelectedSkuId] = useState("1CC0CG0002");
   const [selectedSupplierId, setSelectedSupplierId] = useState("S001");
   const [selectedRequestId, setSelectedRequestId] = useState("REQ-002");
@@ -1600,6 +1626,19 @@ function App() {
     }
   })();
 
+  if (showLanding) {
+    return (
+      <LandingPage
+        currentUser={currentUser}
+        onEnter={() => setShowLanding(false)}
+        onLogin={() => {
+          setShowLanding(false);
+          setView("auth");
+        }}
+      />
+    );
+  }
+
   return (
     <AppLayout view={view} formulaPolicy={formulaPolicy} onNavigate={setView} noteCount={procurementNotes.length} onAddNote={addPoNote} currentUser={currentUser}>
       {toast ? (
@@ -1685,6 +1724,126 @@ function SubmitConfirmationModal({
   );
 }
 
+function LandingPage({ currentUser, onEnter, onLogin }: { currentUser: SessionUser | null; onEnter: () => void; onLogin: () => void }) {
+  const features = [
+    { icon: Calculator, title: "AI แนะนำ + อธิบายได้", desc: "ทุกตัวเลขบอก ‘คำนวณจริงจาก’ และ ‘เปลี่ยนเมื่อ’ ตรวจสอบย้อนหลังได้ ไม่ใช่ตัวเลขลอย ๆ" },
+    { icon: Megaphone, title: "ตลาดนัดเคลียร์ของจม", desc: "ประกาศของจมที่ยืม/แลกได้ พร้อมมูลค่าทุนจมและ aging — ลด overstock" },
+    { icon: Scale, title: "ตรวจซื้อซ้ำ-ของจม", desc: "จับเคสของบซื้อทั้งที่ของยังจม และเร่งใช้งบให้หมดปลายปี" },
+    { icon: ArrowRightLeft, title: "โอน/ยืม/แลกก่อนซื้อ", desc: "เติมคลังที่ขาดจากคลังที่เหลือ มีเกณฑ์กันคลังต้นทางขาดเอง" },
+    { icon: ShieldCheck, title: "อนุมัติงบ 3 ชั้น", desc: "คลัง → เขต → ส่วนกลาง พร้อม Budget Check และ Calculation Snapshot" },
+    { icon: PackageCheck, title: "ตรวจรับ + Feedback loop", desc: "บันทึก delay/ค่าจริง → ปรับสูตรเวอร์ชันใหม่ให้แม่นขึ้นรอบถัดไป" },
+  ];
+  const problems = [
+    { p: "Forecast ไม่แม่น โดยเฉพาะงานซ่อมฉุกเฉิน", s: "AI Suggest + Demand Forecast + บันทึก damage history" },
+    { p: "จัดซื้อช้า / ตรวจรับช้า", s: "ตรวจรับ 7 ขั้น + Delay log + คะแนน reliability ของ supplier" },
+    { p: "ไม่มีเกณฑ์ยืมพัสดุข้ามคลัง", s: "Transfer/Borrow พร้อม buffer กันคลังต้นทางขาด" },
+  ];
+
+  return (
+    <div className="min-h-screen bg-white text-slate-900">
+      <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-3">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600 text-white"><Sparkles className="h-5 w-5" /></span>
+            <div className="leading-tight">
+              <p className="text-sm font-bold">PEA AI Inventory</p>
+              <p className="text-[11px] text-slate-500">แพลตฟอร์มวางแผนพัสดุ & จัดซื้อด้วย AI</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" onClick={onLogin}><User className="h-4 w-4" /> {currentUser ? currentUser.name : "เข้าสู่ระบบ"}</Button>
+            <Button onClick={onEnter}>เริ่มใช้งาน <ArrowRight className="h-4 w-4" /></Button>
+          </div>
+        </div>
+      </header>
+
+      {/* Hero */}
+      <section className="relative overflow-hidden border-b border-slate-200 bg-gradient-to-b from-blue-50 to-white">
+        <div className="mx-auto max-w-6xl px-5 py-16 text-center sm:py-20">
+          <span className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white px-3 py-1 text-xs font-semibold text-blue-700">
+            <Sparkles className="h-3.5 w-3.5" /> AI-assisted decision support สำหรับการไฟฟ้า (PEA)
+          </span>
+          <h1 className="mx-auto mt-5 max-w-3xl text-3xl font-bold leading-tight text-slate-950 sm:text-4xl">
+            วางแผนพัสดุคงคลังและจัดซื้อ<span className="text-blue-700">ด้วย AI</span><br />ที่อธิบายได้ ตรวจสอบย้อนหลังได้
+          </h1>
+          <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-slate-600">
+            AI แนะนำจำนวนที่ควรซื้อจากข้อมูลจริง ผ่านอนุมัติงบ 3 ชั้น เก็บ snapshot ทุกครั้ง
+            ลดทั้งของขาดและของจม — “สต็อกพอดี ใช้งานทัน ลดทุนจม”
+          </p>
+          <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
+            <Button onClick={onEnter} className="h-11 px-6 text-base">เข้าใช้งานระบบ (เดโม) <ArrowRight className="h-4 w-4" /></Button>
+            <Button variant="secondary" onClick={onLogin} className="h-11 px-6 text-base"><User className="h-4 w-4" /> เข้าสู่ระบบ</Button>
+          </div>
+          <div className="mx-auto mt-10 grid max-w-2xl grid-cols-2 gap-4 sm:grid-cols-4">
+            {[["12", "SKU พัสดุไฟฟ้า"], ["8", "คลัง · 3 เขต"], ["3 ชั้น", "อนุมัติงบ"], ["100%", "Snapshot ตรวจย้อนหลัง"]].map(([v, l]) => (
+              <div key={l} className="rounded-lg border border-slate-200 bg-white p-3">
+                <p className="text-xl font-bold text-blue-700">{v}</p>
+                <p className="mt-0.5 text-xs text-slate-500">{l}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Features */}
+      <section className="mx-auto max-w-6xl px-5 py-14">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-slate-950">ความสามารถหลัก</h2>
+          <p className="mt-2 text-sm text-slate-500">ครบตั้งแต่วางแผน → จัดซื้อ → ตรวจรับ → ลดของจม</p>
+        </div>
+        <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {features.map((f) => {
+            const Icon = f.icon;
+            return (
+              <div key={f.title} className="rounded-xl border border-slate-200 bg-white p-5 transition hover:border-blue-300 hover:shadow-sm">
+                <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-blue-700"><Icon className="h-5 w-5" /></span>
+                <h3 className="mt-3 font-semibold text-slate-950">{f.title}</h3>
+                <p className="mt-1.5 text-sm leading-6 text-slate-600">{f.desc}</p>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* Problem → Solution */}
+      <section className="border-y border-slate-200 bg-slate-50">
+        <div className="mx-auto max-w-6xl px-5 py-14">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold text-slate-950">ปัญหาจริงของ PEA → ระบบนี้แก้ตรงจุด</h2>
+            <p className="mt-2 text-sm text-slate-500">อ้างอิงงานวิจัยการจัดการโลจิสติกส์ PEA (ม.ธรรมศาสตร์ 2561)</p>
+          </div>
+          <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-3">
+            {problems.map((row, index) => (
+              <div key={index} className="rounded-xl border border-slate-200 bg-white p-5">
+                <p className="inline-flex rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">ปัญหา {index + 1}</p>
+                <p className="mt-2 font-semibold text-slate-900">{row.p}</p>
+                <div className="mt-3 flex items-start gap-2 border-t border-slate-100 pt-3">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                  <p className="text-sm leading-6 text-slate-600">{row.s}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* CTA + credibility */}
+      <section className="mx-auto max-w-6xl px-5 py-16 text-center">
+        <h2 className="text-2xl font-bold text-slate-950">พร้อมลองใช้งานแล้ว</h2>
+        <p className="mx-auto mt-2 max-w-xl text-sm text-slate-500">
+          เริ่มจาก Demo Flow: แดชบอร์ด → SKU Detail → คำขอซื้อ → อนุมัติ → ประวัติ
+        </p>
+        <div className="mt-6">
+          <Button onClick={onEnter} className="h-11 px-7 text-base">เข้าใช้งานระบบ <ArrowRight className="h-4 w-4" /></Button>
+        </div>
+        <p className="mt-8 text-xs text-slate-400">
+          อ้างอิงระเบียบ พ.ร.บ. การจัดซื้อจัดจ้างฯ พ.ศ. 2560 · ต้นแบบจำลอง ไม่มีการเชื่อมต่อ API จริง
+        </p>
+      </section>
+    </div>
+  );
+}
+
 function AppLayout({
   view,
   formulaPolicy,
@@ -1722,7 +1881,7 @@ function AppLayout({
         { id: "request", label: "คำขอซื้อ", icon: FileText },
         { id: "approval", label: "อนุมัติ", icon: ClipboardCheck },
         { id: "transfer", label: "โอน/ยืม/แลก", icon: ArrowRightLeft },
-        { id: "receiving-delay", label: "รับของ/Delay", icon: PackageCheck },
+        { id: "receiving-delay", label: "รับของ/ตรวจรับ", icon: PackageCheck },
       ],
     },
     {
@@ -3929,6 +4088,8 @@ function ReceivingDelayPage({
   const [actualReceiveDate, setActualReceiveDate] = useState(getDateInputValue());
   const [reasonCategory, setReasonCategory] = useState(delayReasonOptions[0]);
   const [note, setNote] = useState("บันทึกผลรับของเข้าคลังและสาเหตุ Delay เพื่อปรับการคำนวณรอบถัดไป");
+  const [inspection, setInspection] = useState<boolean[]>(() => inspectionSteps.map(() => true));
+  const inspectionResult: "ผ่าน" | "ไม่ผ่าน" = inspection.every(Boolean) ? "ผ่าน" : "ไม่ผ่าน";
   const delayDays = calculateDateDiffDays(plannedReceiveDate, actualReceiveDate);
   const impactDemand = calculateDelayImpactDemand(skuId, supplierId, supplierOfferData, Math.max(delayDays, 0));
   const delayedLogs = receiptDelayLogs.filter((log) => log.delayDays > 0);
@@ -3955,15 +4116,17 @@ function ReceivingDelayPage({
       note,
       impactDemand,
       createdAt: getCurrentDateTimeLabel(),
+      inspection,
+      inspectionResult,
     });
   };
 
   return (
     <>
       <PageTitle
-        eyebrow="รับของ / Delay"
-        title="Receiving & Delay Log"
-        subtitle="บันทึกรับของเข้าคลังและสาเหตุ Delay เพื่อใช้ประเมิน shortage impact, supplier lead time และ seasonal risk ในรอบถัดไป"
+        eyebrow="รับของ / ตรวจรับ"
+        title="รับของ & ตรวจรับพัสดุ"
+        subtitle="บันทึกรับของเข้าคลัง + ผลตรวจรับ 7 ขั้น (คณะกรรมการ) + สาเหตุ Delay เพื่อประเมิน shortage impact และ supplier lead time รอบถัดไป"
       />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
@@ -4060,8 +4223,31 @@ function ReceivingDelayPage({
       </Card>
 
       <Card className="mt-5">
+        <SectionHeader title="ตรวจรับพัสดุ (7 ขั้น โดยคณะกรรมการตรวจรับ)" subtitle="ตามระเบียบ พ.ร.บ. การจัดซื้อจัดจ้างฯ พ.ศ. 2560 — กดผ่าน/ไม่ผ่านแต่ละขั้น (ไม่ผ่าน 1 ขั้น = ต้องแจ้งคู่สัญญา)" />
+        <div className="space-y-2 p-5">
+          {inspectionSteps.map((step, i) => (
+            <div key={i} className="flex flex-col gap-2 rounded-md border border-slate-200 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+              <span className="flex items-center gap-2 text-sm text-slate-700">
+                <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-500">{i + 1}</span>
+                {step}
+              </span>
+              <div className="flex shrink-0 gap-1">
+                <button type="button" onClick={() => setInspection((prev) => prev.map((v, idx) => (idx === i ? true : v)))} className={`rounded-md px-3 py-1 text-xs font-semibold transition ${inspection[i] ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>ผ่าน</button>
+                <button type="button" onClick={() => setInspection((prev) => prev.map((v, idx) => (idx === i ? false : v)))} className={`rounded-md px-3 py-1 text-xs font-semibold transition ${!inspection[i] ? "bg-red-600 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>ไม่ผ่าน</button>
+              </div>
+            </div>
+          ))}
+          <div className={`mt-1 flex flex-col gap-1 rounded-md px-3 py-2 text-sm font-semibold sm:flex-row sm:items-center sm:justify-between ${inspectionResult === "ผ่าน" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>
+            <span>ผลตรวจรับ: {inspectionResult}</span>
+            <span className="text-xs font-normal">{inspectionResult === "ผ่าน" ? "→ รับเข้าคลัง + เบิกจ่าย" : "→ ออกหนังสือแจ้งคู่สัญญาให้แก้ไข/ส่งใหม่"}</span>
+          </div>
+          <p className="text-xs text-slate-500">ผลตรวจรับนี้จะถูกบันทึกพร้อมข้อมูลรับของด้านบนเมื่อกด “บันทึกรับของ / Delay”</p>
+        </div>
+      </Card>
+
+      <Card className="mt-5">
         <SectionHeader title="Receiving & Delay History" subtitle="ใช้ย้อนดูว่า Supplier หรือกระบวนการใดทำให้ส่งช้า และกระทบ demand ระหว่างรอของเท่าไร" />
-        <DataTable columns={["วันที่บันทึก", "SKU", "คลัง", "Supplier", "Plan", "Actual", "Delay", "Impact Demand", "สาเหตุ", "หมายเหตุ", "ดำเนินการ"]} empty={receiptDelayLogs.length === 0}>
+        <DataTable columns={["วันที่บันทึก", "SKU", "คลัง", "Supplier", "Plan", "Actual", "Delay", "Impact Demand", "ตรวจรับ", "สาเหตุ", "หมายเหตุ", "ดำเนินการ"]} empty={receiptDelayLogs.length === 0}>
           {receiptDelayLogs.map((log) => (
             <tr key={log.id} className="hover:bg-slate-50">
               <td className="px-4 py-3 font-semibold text-slate-900">{log.id}<br /><span className="text-xs font-normal text-slate-500">{log.createdAt}</span></td>
@@ -4072,6 +4258,13 @@ function ReceivingDelayPage({
               <td className="px-4 py-3">{log.actualReceiveDate}</td>
               <td className={`px-4 py-3 font-semibold ${log.delayDays > 0 ? "text-red-700" : "text-emerald-700"}`}>{log.delayDays} วัน</td>
               <td className="px-4 py-3">{formatNumber(log.impactDemand, 2)}</td>
+              <td className="px-4 py-3">
+                {log.inspectionResult ? (
+                  <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${log.inspectionResult === "ผ่าน" ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : "bg-red-50 text-red-700 ring-red-200"}`}>{log.inspectionResult}</span>
+                ) : (
+                  <span className="text-xs text-slate-400">-</span>
+                )}
+              </td>
               <td className="px-4 py-3">{log.reasonCategory}</td>
               <td className="min-w-72 px-4 py-3 text-sm leading-6 text-slate-600">{log.note}</td>
               <td className="px-4 py-3">
@@ -6962,8 +7155,15 @@ function getApprovalLayerLabel(layer: string) {
   return labels[layer] ?? layer;
 }
 
-function getSku(id: string) {
-  return skus.find((sku) => sku.id === id) ?? skus[0];
+function getSku(id: string): Sku {
+  const demo = skus.find((sku) => sku.id === id);
+  if (demo) return demo;
+  // SKU ที่ไม่ได้อยู่ในชุด demo (อีก 5 ตัวใน catalog) — ดึงชื่อ/หน่วยจาก catalog ให้ถูกต้อง
+  const cat = getCatalogSku(id);
+  if (cat) {
+    return { id: cat.skuId, name: cat.skuName, category: cat.category, unit: cat.unit, criticality: cat.criticality === "Low" ? "Medium" : cat.criticality };
+  }
+  return skus[0];
 }
 
 function getWarehouse(id: string) {

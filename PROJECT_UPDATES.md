@@ -87,6 +87,27 @@
 ### Notes / Follow-up
 - ยังเหลือเฟส 3 (แยก dashboard เป็นเรื่อง ๆ) และเฟส 4 (เก็บกวาดไอคอน/ชื่อ/modal pattern + ลบ `_legacy*` arrays)
 
+## 2026-06-13 - เพิ่ม Landing page (หน้าแนะนำก่อนเข้าระบบ)
+
+### Summary
+- เพิ่ม `LandingPage` แสดงก่อนเข้าแอป (gate ด้วย state `showLanding`, default true): hero + headline/tagline, การ์ดความสามารถหลัก 6 อัน, section "ปัญหาจริง PEA → ระบบแก้" 3 ข้อ (อิงงานวิจัยธรรมศาสตร์), stat strip, CTA "เข้าใช้งานระบบ" / "เข้าสู่ระบบ"
+- "เข้าใช้งานระบบ" → เข้า dashboard · "เข้าสู่ระบบ" → เข้าแอป + ไปหน้า auth
+- เพิ่ม import ไอคอน `ArrowRight`
+
+### Why
+- ผู้ใช้ต้องการหน้า Front (landing) ก่อน login เดิมแอปเปิดมาเจอ dashboard เลย ไม่มีหน้าแนะนำสำหรับ demo/pitch
+
+### Changed Files
+- `src/App.tsx`
+- `PROJECT_UPDATES.md`
+
+### Verification
+- `npm.cmd run build` ผ่าน
+- ตรวจ build สด: เปิดมาเจอ landing (hero/features/ปัญหา-ทางแก้/stats, ไม่มี sidebar), กด "เข้าใช้งานระบบ" → เข้า dashboard (มี sidebar + Dead Stock Exchange) สำเร็จ
+
+### Notes / Follow-up
+- landing แสดงทุกครั้งที่โหลดใหม่ (ไม่ persist) — เหมาะกับ demo (โชว์หน้าแรกได้เสมอ); ถ้าอยากให้ข้ามหลังเข้าครั้งแรกค่อย persist `showLanding`
+
 ## 2026-06-13 - เก็บกวาด: ลบ legacy arrays + แก้ factory mapping เขต A (เฟส 4)
 
 ### Summary

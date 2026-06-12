@@ -65,3 +65,20 @@ export function removePersistentJson(key: string) {
   if (!canUseBrowserStorage()) return;
   window.localStorage.removeItem(getStorageKey(key));
 }
+
+const SEED_VERSION_KEY = "__seedVersion";
+
+/**
+ * รีเซ็ต cache ของ seed/master data เมื่อมีการเปลี่ยนชุดข้อมูลตั้งต้น (เช่น เพิ่ม SKU ใหม่)
+ *
+ * ปัญหาเดิม: localStorage เก็บ seed เวอร์ชันเก่าไว้ แล้ว overwrite ข้อมูล seed ใหม่ตอนโหลด
+ * ทำให้ SKU/inventory ที่เพิ่งเพิ่มไม่ขึ้น — ต้อง bump seedVersion เพื่อล้าง cache ชุดนั้น
+ */
+export function ensureSeedVersion(currentSeedVersion: number, keysToReset: string[]) {
+  if (!canUseBrowserStorage()) return;
+  const storedRaw = window.localStorage.getItem(getStorageKey(SEED_VERSION_KEY));
+  const stored = storedRaw === null ? null : Number(storedRaw);
+  if (stored === currentSeedVersion) return;
+  keysToReset.forEach((key) => window.localStorage.removeItem(getStorageKey(key)));
+  window.localStorage.setItem(getStorageKey(SEED_VERSION_KEY), String(currentSeedVersion));
+}

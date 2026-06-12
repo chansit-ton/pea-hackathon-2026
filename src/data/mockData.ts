@@ -18,6 +18,8 @@ import {
   calculatePurchaseRequestPreview,
   calculateVmiSuitabilityScore,
 } from "../utils/inventoryCalculations";
+import { peaCatalog } from "./peaCatalog";
+import { peaMonthlyUsage, peaStockSummary } from "./peaDataModel";
 
 export const formulaVersion = "v1.0";
 
@@ -211,6 +213,42 @@ export const inventoryRecords: InventoryRecord[] = [
     status: "Near Reorder Point",
   },
 ];
+
+// สร้าง inventory record ให้ SKU ใน catalog ที่ยังไม่มีชุด demo (เพื่อให้หน้า SKU Detail ใช้ได้ครบ 12 ตัว
+// และตัวเลขต่อกับ data rich: คงคลังจาก peaStockSummary + ใช้ย้อนหลังจาก peaMonthlyUsage)
+function buildCatalogInventoryRecords(): InventoryRecord[] {
+  const demoIds = new Set(inventoryRecords.map((record) => record.skuId));
+  return peaCatalog
+    .filter((cat) => !demoIds.has(cat.skuId))
+    .map((cat) => {
+      const stockRow = peaStockSummary.find((row) => row.skuId === cat.skuId);
+      const warehouseId = stockRow?.factoryId ?? "I010";
+      const currentStock = Math.round(stockRow?.stockQty ?? 0);
+      const usageRows = peaMonthlyUsage
+        .filter((usage) => usage.warehouseId === warehouseId && usage.skuId === cat.skuId)
+        .sort((a, b) => a.usageMonth - b.usageMonth)
+        .slice(-6);
+      const historicalUsage =
+        usageRows.length > 0
+          ? usageRows.map((usage, index) => ({ periodLabel: `Month ${index + 1}`, days: 30, quantity: Math.round(usage.usageQty) }))
+          : [{ periodLabel: "Month 1", days: 30, quantity: 0 }];
+      const avgMonthly = historicalUsage.reduce((sum, item) => sum + item.quantity, 0) / historicalUsage.length;
+      return {
+        skuId: cat.skuId,
+        warehouseId,
+        currentStock,
+        historicalUsage,
+        forecastDemandForPlanningPeriod: Math.round(avgMonthly),
+        planningPeriodDays: 30,
+        serviceLevel: 0.95,
+        zScore: 1.65,
+        seasonalFactor: cat.season === "work" ? 1.2 : 1.1,
+        budgetFactor: 1,
+        status: "Normal",
+      } satisfies InventoryRecord;
+    });
+}
+inventoryRecords.push(...buildCatalogInventoryRecords());
 
 export const formulaList = [
   "ค่าเฉลี่ยการใช้ต่อวัน = การใช้ย้อนหลังรวม / จำนวนวันย้อนหลัง",
