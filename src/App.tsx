@@ -714,17 +714,17 @@ function seedTransfer(p: Partial<TransferRequest> & { id: string; type: Transfer
 }
 
 const initialTransferRequests: TransferRequest[] = [
-  seedTransfer({ id: "TRF-101", type: "Borrow", skuId: "C01", skuName: "สายไฟแรงต่ำ", unit: "เมตร", sourceWarehouseId: "I020", destinationWarehouseId: "I010", quantity: 120, status: "Completed", createdAt: "2026-02-18 09:20:00", dueDate: "2026-03-15", returnedDate: "2026-03-10", decisionBasis: "I010 ต่ำกว่า ROP ช่วงปลายฤดูหนาว ยืมจาก I020 ที่มี stock เหลือ" }),
-  seedTransfer({ id: "TRF-102", type: "Borrow", skuId: "P01", skuName: "เสาไฟคอนกรีต 12 เมตร", unit: "ต้น", sourceWarehouseId: "K010", destinationWarehouseId: "K030", quantity: 40, status: "Approved", createdAt: "2026-04-22 13:05:00", dueDate: "2026-05-20", decisionBasis: "K030 ขาดเสาไฟงานขยายเขต ยืมจาก K010" }),
-  seedTransfer({ id: "TRF-103", type: "Borrow", skuId: "B05", skuName: "เบรกเกอร์ 3P 50A", unit: "pcs", sourceWarehouseId: "I010", destinationWarehouseId: "I020", quantity: 30, status: "Approved", createdAt: "2026-05-30 10:40:00", dueDate: "2026-06-30", decisionBasis: "I020 รองาน MOQ ซื้อไม่ทัน ยืมก่อน" }),
-  seedTransfer({ id: "TRF-104", type: "Borrow", skuId: "C01", skuName: "สายไฟแรงต่ำ", unit: "เมตร", sourceWarehouseId: "K010", destinationWarehouseId: "K030", quantity: 80, status: "Approved", createdAt: "2026-03-28 15:10:00", dueDate: "2026-04-30", decisionBasis: "K030 สายไฟไม่พอ ยืมจาก K010" }),
-  seedTransfer({ id: "TRF-105", type: "Borrow", skuId: "T01", skuName: "หม้อแปลง 100 kVA", unit: "ลูก", sourceWarehouseId: "I010", destinationWarehouseId: "I020", quantity: 2, status: "Completed", createdAt: "2026-01-20 11:00:00", dueDate: "2026-02-28", returnedDate: "2026-02-24", decisionBasis: "งานเร่งด่วน I020 ยืมหม้อแปลงจาก I010" }),
-  seedTransfer({ id: "TRF-106", type: "Borrow", skuId: "C01", skuName: "สายไฟแรงต่ำ", unit: "เมตร", sourceWarehouseId: "I020", destinationWarehouseId: "K030", quantity: 100, status: "Requested", createdAt: "2026-06-09 09:15:00", dueDate: "2026-07-10", decisionBasis: "K030 ขอยืมสายไฟอีกรอบก่อนตั้งงบซื้อ" }),
-  seedTransfer({ id: "TRF-201", type: "Transfer", skuId: "P01", skuName: "เสาไฟคอนกรีต 12 เมตร", unit: "ต้น", sourceWarehouseId: "K030", destinationWarehouseId: "K010", quantity: 60, status: "Completed", createdAt: "2026-05-12 14:30:00", decisionBasis: "ย้ายเสาไฟที่จมที่ K030 ไปเติม K010 ที่กำลังขาด" }),
-  seedTransfer({ id: "TRF-202", type: "Transfer", skuId: "C01", skuName: "สายไฟแรงต่ำ", unit: "เมตร", sourceWarehouseId: "K030", destinationWarehouseId: "I010", quantity: 120, status: "Approved", createdAt: "2026-06-05 16:00:00", decisionBasis: "เคลียร์สายไฟจมที่ K030 ส่งให้ I010 ที่ต่ำกว่า ROP" }),
-  seedTransfer({ id: "TRF-301", type: "Swap", skuId: "C01", skuName: "สายไฟแรงต่ำ", unit: "เมตร", sourceWarehouseId: "I010", destinationWarehouseId: "I020", quantity: 50, status: "Completed", createdAt: "2026-03-05 10:10:00", counterpartSkuName: "สายไฟแรงสูง C02", decisionBasis: "แลกสายไฟแรงต่ำกับแรงสูงระหว่างคลังให้ตรงงาน" }),
-  seedTransfer({ id: "TRF-302", type: "Swap", skuId: "B05", skuName: "เบรกเกอร์ 3P 50A", unit: "pcs", sourceWarehouseId: "K010", destinationWarehouseId: "K030", quantity: 20, status: "Completed", createdAt: "2026-04-15 11:45:00", counterpartSkuName: "ท่อ PVC D12", decisionBasis: "แลกเบรกเกอร์กับท่อ PVC ให้ตรงงานซ่อม" }),
-  seedTransfer({ id: "TRF-303", type: "Swap", skuId: "C01", skuName: "สายไฟแรงต่ำ", unit: "เมตร", sourceWarehouseId: "I020", destinationWarehouseId: "I010", quantity: 40, status: "Completed", createdAt: "2026-05-25 13:20:00", counterpartSkuName: "สายไฟแรงสูง C02", decisionBasis: "แลกสายไฟให้ตรง spec งานติดตั้ง" }),
+  seedTransfer({ id: "TRF-101", type: "Borrow", skuId: "1CC0CG0002", skuName: "สายเคเบิลใต้ดิน XLPE 240", unit: "เมตร", sourceWarehouseId: "I020", destinationWarehouseId: "I010", quantity: 120, status: "Completed", createdAt: "2026-02-18 09:20:00", dueDate: "2026-03-15", returnedDate: "2026-03-10", decisionBasis: "I010 ต่ำกว่า ROP ช่วงปลายฤดูหนาว ยืมจาก I020 ที่มี stock เหลือ" }),
+  seedTransfer({ id: "TRF-102", type: "Borrow", skuId: "1CC0CP0012", skuName: "เสาคอนกรีตอัดแรง 12 เมตร", unit: "ต้น", sourceWarehouseId: "K010", destinationWarehouseId: "K030", quantity: 40, status: "Approved", createdAt: "2026-04-22 13:05:00", dueDate: "2026-05-20", decisionBasis: "K030 ขาดเสาไฟงานขยายเขต ยืมจาก K010" }),
+  seedTransfer({ id: "TRF-103", type: "Borrow", skuId: "1CC0BK0050", skuName: "เบรกเกอร์ 3 เฟส 50 แอมป์", unit: "pcs", sourceWarehouseId: "I010", destinationWarehouseId: "I020", quantity: 30, status: "Approved", createdAt: "2026-05-30 10:40:00", dueDate: "2026-06-30", decisionBasis: "I020 รองาน MOQ ซื้อไม่ทัน ยืมก่อน" }),
+  seedTransfer({ id: "TRF-104", type: "Borrow", skuId: "1CC0CG0002", skuName: "สายเคเบิลใต้ดิน XLPE 240", unit: "เมตร", sourceWarehouseId: "K010", destinationWarehouseId: "K030", quantity: 80, status: "Approved", createdAt: "2026-03-28 15:10:00", dueDate: "2026-04-30", decisionBasis: "K030 สายไฟไม่พอ ยืมจาก K010" }),
+  seedTransfer({ id: "TRF-105", type: "Borrow", skuId: "1DD0DC0000", skuName: "หม้อแปลงจำหน่าย 3 เฟส 100 kVA", unit: "ลูก", sourceWarehouseId: "I010", destinationWarehouseId: "I020", quantity: 2, status: "Completed", createdAt: "2026-01-20 11:00:00", dueDate: "2026-02-28", returnedDate: "2026-02-24", decisionBasis: "งานเร่งด่วน I020 ยืมหม้อแปลงจาก I010" }),
+  seedTransfer({ id: "TRF-106", type: "Borrow", skuId: "1CC0CG0002", skuName: "สายเคเบิลใต้ดิน XLPE 240", unit: "เมตร", sourceWarehouseId: "I020", destinationWarehouseId: "K030", quantity: 100, status: "Requested", createdAt: "2026-06-09 09:15:00", dueDate: "2026-07-10", decisionBasis: "K030 ขอยืมสายไฟอีกรอบก่อนตั้งงบซื้อ" }),
+  seedTransfer({ id: "TRF-201", type: "Transfer", skuId: "1CC0CP0012", skuName: "เสาคอนกรีตอัดแรง 12 เมตร", unit: "ต้น", sourceWarehouseId: "K030", destinationWarehouseId: "K010", quantity: 60, status: "Completed", createdAt: "2026-05-12 14:30:00", decisionBasis: "ย้ายเสาไฟที่จมที่ K030 ไปเติม K010 ที่กำลังขาด" }),
+  seedTransfer({ id: "TRF-202", type: "Transfer", skuId: "1CC0CG0002", skuName: "สายเคเบิลใต้ดิน XLPE 240", unit: "เมตร", sourceWarehouseId: "K030", destinationWarehouseId: "I010", quantity: 120, status: "Approved", createdAt: "2026-06-05 16:00:00", decisionBasis: "เคลียร์สายไฟจมที่ K030 ส่งให้ I010 ที่ต่ำกว่า ROP" }),
+  seedTransfer({ id: "TRF-301", type: "Swap", skuId: "1CC0CG0002", skuName: "สายเคเบิลใต้ดิน XLPE 240", unit: "เมตร", sourceWarehouseId: "I010", destinationWarehouseId: "I020", quantity: 50, status: "Completed", createdAt: "2026-03-05 10:10:00", counterpartSkuName: "สายอะลูมิเนียม SAC 50", decisionBasis: "แลกสายเคเบิลใต้ดิน XLPE 240กับแรงสูงระหว่างคลังให้ตรงงาน" }),
+  seedTransfer({ id: "TRF-302", type: "Swap", skuId: "1CC0BK0050", skuName: "เบรกเกอร์ 3 เฟส 50 แอมป์", unit: "pcs", sourceWarehouseId: "K010", destinationWarehouseId: "K030", quantity: 20, status: "Completed", createdAt: "2026-04-15 11:45:00", counterpartSkuName: "สายเคเบิลอากาศ SAC 185", decisionBasis: "แลกเบรกเกอร์กับท่อ PVC ให้ตรงงานซ่อม" }),
+  seedTransfer({ id: "TRF-303", type: "Swap", skuId: "1CC0CG0002", skuName: "สายเคเบิลใต้ดิน XLPE 240", unit: "เมตร", sourceWarehouseId: "I020", destinationWarehouseId: "I010", quantity: 40, status: "Completed", createdAt: "2026-05-25 13:20:00", counterpartSkuName: "สายอะลูมิเนียม SAC 50", decisionBasis: "แลกสายไฟให้ตรง spec งานติดตั้ง" }),
 ];
 
 function App() {
@@ -733,7 +733,7 @@ function App() {
     return 0;
   });
   const [view, setView] = useState<View>("dashboard");
-  const [selectedSkuId, setSelectedSkuId] = useState("C01");
+  const [selectedSkuId, setSelectedSkuId] = useState("1CC0CG0002");
   const [selectedSupplierId, setSelectedSupplierId] = useState("S001");
   const [selectedRequestId, setSelectedRequestId] = useState("REQ-002");
   const [approvalTab, setApprovalTab] = useState<ApprovalTab>("regional");
@@ -1385,7 +1385,7 @@ function App() {
       case "inventory":
         return <InventoryPage openSku={openSku} supplierOfferData={editableSupplierOffers} formulaPolicy={formulaPolicy} />;
       case "usage":
-        return <WarehouseSkuUsagePage />;
+        return <WarehouseSkuUsagePage onOpenSku={openSku} />;
       case "transfer":
         return (
           <TransferCenterPage
@@ -1570,6 +1570,11 @@ function App() {
             receiptDelayLogs={receiptDelayLogs}
             supplierOfferData={editableSupplierOffers}
             onSave={addReceiptDelayLog}
+            onOpenRequestHistory={(requestId) => {
+              if (requestId) setSelectedRequestId(requestId);
+              setView("history");
+            }}
+            onOpenSku={openSku}
           />
         );
       case "budget-settings":
@@ -1699,26 +1704,53 @@ function AppLayout({
 }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const nav = [
-    { id: "dashboard", label: "แดชบอร์ด", icon: BarChart3 },
-    { id: "inventory", label: "คลังพัสดุ", icon: Boxes },
-    { id: "usage", label: "การใช้ SKU", icon: BarChart3 },
-    { id: "transfer", label: "โอน/ยืมพัสดุ", icon: ArrowRightLeft },
-    { id: "stock-intelligence", label: "วิเคราะห์สต็อก", icon: Archive },
-    { id: "procurement-audit", label: "ตรวจซื้อซ้ำ-ของจม", icon: Scale },
-    { id: "supplier", label: "ซัพพลายเออร์", icon: Truck },
-    { id: "request", label: "คำขอซื้อ", icon: FileText },
-    { id: "approval", label: "อนุมัติ", icon: ClipboardCheck },
-    { id: "history", label: "ประวัติ", icon: History },
-    { id: "vmi", label: "VMI", icon: Workflow },
-    { id: "receiving-delay", label: "รับของ/Delay", icon: PackageCheck },
-    { id: "budget-settings", label: "งบประมาณ", icon: Landmark },
-    { id: "feedback", label: "ศูนย์ความเห็น (Feedback)", icon: MessageSquare },
-    { id: "auth", label: "บัญชีผู้ใช้", icon: User },
-    { id: "settings", label: "ตั้งค่า", icon: Settings },
+  // เมนูจัดเป็น 5 หมวดตามลำดับงานจริง (ดูภาพรวม → วิเคราะห์ความเสี่ยง → ลงมือจัดซื้อ → อ้างอิง → ตั้งค่า)
+  // หน้า "การใช้ SKU" ยุบเป็นแท็บใน "คลังพัสดุ" และ "บัญชีผู้ใช้" ย้ายไปปุ่มบน header
+  const navSections = [
+    { title: "ภาพรวม", items: [{ id: "dashboard", label: "แดชบอร์ด", icon: BarChart3 }] },
+    {
+      title: "คลัง & ความเสี่ยง",
+      items: [
+        { id: "inventory", label: "คลังพัสดุ", icon: Boxes },
+        { id: "stock-intelligence", label: "วิเคราะห์สต็อก", icon: Archive },
+        { id: "procurement-audit", label: "ตรวจซื้อซ้ำ-ของจม", icon: Scale },
+      ],
+    },
+    {
+      title: "จัดซื้อ & เคลื่อนย้าย",
+      items: [
+        { id: "request", label: "คำขอซื้อ", icon: FileText },
+        { id: "approval", label: "อนุมัติ", icon: ClipboardCheck },
+        { id: "transfer", label: "โอน/ยืม/แลก", icon: ArrowRightLeft },
+        { id: "receiving-delay", label: "รับของ/Delay", icon: PackageCheck },
+      ],
+    },
+    {
+      title: "ข้อมูล & ประวัติ",
+      items: [
+        { id: "supplier", label: "ซัพพลายเออร์", icon: Truck },
+        { id: "vmi", label: "VMI", icon: Workflow },
+        { id: "history", label: "ประวัติ", icon: History },
+      ],
+    },
+    {
+      title: "ระบบ",
+      items: [
+        { id: "budget-settings", label: "งบประมาณ", icon: Landmark },
+        { id: "settings", label: "ตั้งค่าสูตร", icon: Settings },
+        { id: "feedback", label: "ศูนย์ความเห็น", icon: MessageSquare },
+      ],
+    },
   ] as const;
 
-  const activeRoot = view === "sku-detail" || view === "calculation" ? "inventory" : view === "supplier-detail" || view === "contact-log" ? "supplier" : view === "vmi-simulation" ? "vmi" : view;
+  const activeRoot =
+    view === "sku-detail" || view === "calculation" || view === "usage"
+      ? "inventory"
+      : view === "supplier-detail" || view === "contact-log"
+        ? "supplier"
+        : view === "vmi-simulation"
+          ? "vmi"
+          : view;
   const handleNavigate = (nextView: View) => {
     onNavigate(nextView);
     setMobileMenuOpen(false);
@@ -1755,24 +1787,35 @@ function AppLayout({
           </div>
         </div>
 
-        <nav className={`space-y-1 ${collapsed ? "p-2" : "p-3"}`}>
-          {nav.map((item) => {
-            const Icon = item.icon;
-            const active = activeRoot === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => handleNavigate(item.id)}
-                title={collapsed ? item.label : undefined}
-                className={`flex h-10 w-full items-center rounded-md text-sm font-medium transition ${
-                  collapsed ? "justify-center px-0" : "gap-3 px-3 text-left"
-                } ${active ? "bg-blue-600 text-white" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}
-              >
-                <Icon className="h-4 w-4 shrink-0" />
-                {!collapsed ? <span className="truncate">{item.label}</span> : null}
-              </button>
-            );
-          })}
+        <nav className={`${collapsed ? "space-y-1 p-2" : "p-3"}`}>
+          {navSections.map((section, sectionIndex) => (
+            <div key={section.title} className={collapsed ? "" : sectionIndex > 0 ? "mt-4" : ""}>
+              {!collapsed ? (
+                <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-500">{section.title}</p>
+              ) : sectionIndex > 0 ? (
+                <div className="mx-2 my-2 border-t border-white/10" />
+              ) : null}
+              <div className="space-y-1">
+                {section.items.map((item) => {
+                  const Icon = item.icon;
+                  const active = activeRoot === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => handleNavigate(item.id)}
+                      title={collapsed ? item.label : undefined}
+                      className={`flex h-10 w-full items-center rounded-md text-sm font-medium transition ${
+                        collapsed ? "justify-center px-0" : "gap-3 px-3 text-left"
+                      } ${active ? "bg-blue-600 text-white" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}
+                    >
+                      <Icon className="h-4 w-4 shrink-0" />
+                      {!collapsed ? <span className="truncate">{item.label}</span> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
       </>
     );
@@ -2136,6 +2179,7 @@ function DashboardPage({
   const dashboardStockoutForecastCount = stockIntelligenceRows.filter((row) => row.status === "Stockout Risk").length;
   const openTransferCount = transferRequests.filter((request) => request.status === "Requested" || request.status === "Approved").length;
   const delayImpactTotal = receiptDelayLogs.reduce((sum, log) => sum + log.impactDemand, 0);
+  const [dashTab, setDashTab] = useState<"overview" | "risk" | "budget">("overview");
 
   return (
     <>
@@ -2210,6 +2254,14 @@ function DashboardPage({
         </p>
       </Card>
 
+      <div className="mb-5 flex flex-wrap gap-1 rounded-lg border border-slate-200 bg-white p-1">
+        <button type="button" onClick={() => setDashTab("overview")} className={`rounded-md px-4 py-2 text-sm font-medium transition ${dashTab === "overview" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}>ภาพรวม</button>
+        <button type="button" onClick={() => setDashTab("risk")} className={`rounded-md px-4 py-2 text-sm font-medium transition ${dashTab === "risk" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}>ความเสี่ยง &amp; ของจม</button>
+        <button type="button" onClick={() => setDashTab("budget")} className={`rounded-md px-4 py-2 text-sm font-medium transition ${dashTab === "budget" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}>งบประมาณ</button>
+      </div>
+
+      {dashTab === "overview" && (
+      <>
       <Card className="mb-5 overflow-hidden border-blue-200">
         <div className="grid grid-cols-1 gap-4 p-5 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-center">
           <div>
@@ -2217,13 +2269,13 @@ function DashboardPage({
               <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 ring-1 ring-blue-200">Demo Scenario</span>
               <span className="text-sm font-medium text-slate-500">AI-assisted decision support</span>
             </div>
-            <h3 className="mt-3 text-lg font-semibold text-slate-950">เริ่ม Demo Flow: สายไฟแรงต่ำ C01</h3>
+            <h3 className="mt-3 text-lg font-semibold text-slate-950">เริ่ม Demo Flow: สายเคเบิลใต้ดิน XLPE 240 ตร.มม. (1CC0CG0002)</h3>
             <p className="mt-2 text-sm leading-6 text-slate-600">
               ระบบแนะนำให้เติม 10 เมตร แต่ผู้ใช้ลองขอ 20 เมตร ระบบจะบังคับกรอกเหตุผล ตรวจงบ 3 ชั้น ส่งอนุมัติระดับเขต และเก็บบันทึกค่าคำนวณสำหรับตรวจสอบย้อนหลัง
             </p>
           </div>
           <div className="grid gap-2">
-            <Button onClick={() => openSku("C01")}>
+            <Button onClick={() => openSku("1CC0CG0002")}>
               <Sparkles className="h-4 w-4" />
               เริ่ม Demo Flow
             </Button>
@@ -2267,6 +2319,11 @@ function DashboardPage({
         />
       </div>
 
+      </>
+      )}
+
+      {dashTab === "risk" && (
+      <>
       <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           label="Transfer Candidate"
@@ -2307,6 +2364,11 @@ function DashboardPage({
         <Button variant="secondary" onClick={onOpenStockIntelligence}><Archive className="h-4 w-4" /> วิเคราะห์สต็อกและ Dead Stock</Button>
       </div>
 
+      </>
+      )}
+
+      {dashTab === "budget" && (
+      <>
       <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
         <MetricCard
           label="งบคลังพื้นที่"
@@ -2331,6 +2393,11 @@ function DashboardPage({
         />
       </div>
 
+      </>
+      )}
+
+      {dashTab === "risk" && (
+      <>
       <Card className="mt-5">
         <SectionHeader
           title="ภาพรวมความสัมพันธ์ข้อมูลจาก Excel"
@@ -2390,6 +2457,11 @@ function DashboardPage({
         </div>
       </Card>
 
+      </>
+      )}
+
+      {dashTab === "overview" && (
+      <>
       <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card>
           <SectionHeader title="แจ้งเตือนสต็อกวิกฤต" subtitle="รายการที่สต็อกต่ำกว่าจุดสั่งซื้อใหม่ (Reorder Point) หรือระดับพัสดุสำรองปลอดภัย (Safety Stock)" />
@@ -2422,10 +2494,10 @@ function DashboardPage({
             <h3 className="font-semibold text-slate-950">สรุปจากระบบ AI</h3>
           </div>
           <div className="mt-4 space-y-3 text-sm leading-6 text-slate-600">
-            <p>C01 ที่คลัง I010 อยู่ต่ำกว่าจุดสั่งซื้อใหม่ (Reorder Point) 122 เมตร และมีงบคลังพื้นที่เพียง 25,000 บาท</p>
-            <p>จาก relationship analysis พบว่า C01 ที่ I010 มี stock cover ประมาณ 0.09 รอบ และยังไม่พบ Lead Time เฉพาะ Factory/SKU จึงควรใช้ Lead Time จากซัพพลายเออร์เป็นค่าตั้งต้นใน PoC</p>
+            <p>1CC0CG0002 (สายเคเบิล XLPE 240) ที่คลัง I010 อยู่ต่ำกว่าจุดสั่งซื้อใหม่ (Reorder Point) และมีงบคลังพื้นที่เพียง 25,000 บาท</p>
+            <p>จาก relationship analysis พบว่า 1CC0CG0002 ที่ I010 มี stock cover ต่ำ และยังไม่พบ Lead Time เฉพาะ Factory/SKU จึงควรใช้ Lead Time จากซัพพลายเออร์เป็นค่าตั้งต้นใน PoC</p>
             <p>หากขอซื้อ 20 เมตรจาก S001 จะใช้เงิน 40,000 บาท จึงต้องส่งอนุมัติระดับเขต</p>
-            <p>C01 มีความต้องการค่อนข้างสม่ำเสมอและซัพพลายเออร์มีความน่าเชื่อถือ 96% เหมาะสำหรับทดลอง VMI ระดับเขต</p>
+            <p>1CC0CG0002 มีความต้องการค่อนข้างสม่ำเสมอและซัพพลายเออร์มีความน่าเชื่อถือ 96% เหมาะสำหรับทดลอง VMI ระดับเขต</p>
           </div>
           <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
             <h4 className="font-semibold text-slate-950">AI Accuracy Feedback</h4>
@@ -2441,12 +2513,14 @@ function DashboardPage({
               </p>
             )}
           </div>
-          <Button className="mt-5 w-full" onClick={() => openSku("C01")}>
+          <Button className="mt-5 w-full" onClick={() => openSku("1CC0CG0002")}>
             <Boxes className="h-4 w-4" />
             เปิดรายละเอียด SKU C01
           </Button>
         </Card>
       </div>
+      </>
+      )}
     </>
   );
 }
@@ -2460,13 +2534,22 @@ function InventoryPage({
   supplierOfferData: SupplierOffer[];
   formulaPolicy: FormulaPolicyState;
 }) {
+  const [tab, setTab] = useState<"stock" | "usage">("stock");
   return (
     <>
       <PageTitle
         eyebrow="คลังพัสดุ"
-        title="รายการสต็อกตามคลัง"
-        subtitle="ตรวจสอบ Stock ปัจจุบัน ระดับพัสดุสำรองปลอดภัย จุดสั่งซื้อใหม่ และจำนวนที่ระบบแนะนำ"
+        title="คลังพัสดุ & การใช้งาน SKU"
+        subtitle="ดูสถานะสต็อก/คำแนะนำจัดซื้อ และประวัติการใช้รายเดือนของแต่ละคลังในที่เดียว"
       />
+      <div className="mb-5 inline-flex gap-1 rounded-lg border border-slate-200 bg-white p-1">
+        <button type="button" onClick={() => setTab("stock")} className={`rounded-md px-4 py-2 text-sm font-medium transition ${tab === "stock" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}>สถานะสต็อก</button>
+        <button type="button" onClick={() => setTab("usage")} className={`rounded-md px-4 py-2 text-sm font-medium transition ${tab === "usage" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}>การใช้งานรายเดือน</button>
+      </div>
+      {tab === "usage" ? (
+        <WarehouseSkuUsagePage onOpenSku={openSku} embedded />
+      ) : (
+      <>
       <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           label="สต็อกปัจจุบัน"
@@ -2524,11 +2607,13 @@ function InventoryPage({
           })}
         </DataTable>
       </Card>
+      </>
+      )}
     </>
   );
 }
 
-function WarehouseSkuUsagePage() {
+function WarehouseSkuUsagePage({ onOpenSku, embedded = false }: { onOpenSku: (skuId: string) => void; embedded?: boolean }) {
   const regionOptions = getSharedUsageRegionOptions();
   const skuOptions = getSharedUsageSkuOptions();
   const [selectedRegionCode, setSelectedRegionCode] = useState("all");
@@ -2555,11 +2640,13 @@ function WarehouseSkuUsagePage() {
 
   return (
     <>
-      <PageTitle
-        eyebrow="ข้อมูลการใช้จาก Excel"
-        title="ปริมาณการใช้ SKU รายคลัง"
-        subtitle="ดูประวัติการใช้รายเดือนจากชีต WH Season Data Item โดยแปลงข้อมูล Jan-Dec เป็น long format สำหรับคำนวณ demand"
-      />
+      {embedded ? null : (
+        <PageTitle
+          eyebrow="ข้อมูลการใช้จาก Excel"
+          title="ปริมาณการใช้ SKU รายคลัง"
+          subtitle="ดูประวัติการใช้รายเดือนจากชีต WH Season Data Item โดยแปลงข้อมูล Jan-Dec เป็น long format สำหรับคำนวณ demand"
+        />
+      )}
       <Card className="mb-5 p-4">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
           <Field label="เขตจากชีต WH">
@@ -2715,7 +2802,7 @@ function WarehouseSkuUsagePage() {
           title="ตารางปริมาณการใช้ SKU รายเดือน"
           subtitle="แสดงยอดรายเดือนพร้อม % เพิ่ม/ลดจากเดือนก่อน คล้ายมุมมอง Excel wide view"
         />
-        <DataTable columns={["เขต", "ขอบเขตคลัง", "SKU", "รายการ", "หมวดหมู่", "หน่วย", ...usageMonthTrendColumns, "รวม", "เฉลี่ย/เดือน", "เดือนสูงสุด"]} empty={rows.length === 0}>
+        <DataTable columns={["เขต", "ขอบเขตคลัง", "SKU", "รายการ", "หมวดหมู่", "หน่วย", ...usageMonthTrendColumns, "รวม", "เฉลี่ย/เดือน", "เดือนสูงสุด", "ดำเนินการ"]} empty={rows.length === 0}>
           {rows.map((row) => (
             <tr key={`${row.warehouseId}-${row.skuId}`} className="hover:bg-slate-50">
               <td className="px-4 py-3 font-semibold text-slate-900">{row.regionLabel}</td>
@@ -2744,6 +2831,7 @@ function WarehouseSkuUsagePage() {
               <td className="px-4 py-3 text-right font-semibold tabular-nums text-slate-950">{formatNumber(row.total)}</td>
               <td className="px-4 py-3 text-right tabular-nums text-slate-700">{formatNumber(row.averageMonthly)}</td>
               <td className="px-4 py-3 text-slate-700">{row.peakMonth}</td>
+              <td className="px-4 py-3"><Button variant="secondary" onClick={() => onOpenSku(row.skuId)}>ดู SKU</Button></td>
             </tr>
           ))}
         </DataTable>
@@ -3821,16 +3909,20 @@ function ReceivingDelayPage({
   receiptDelayLogs,
   supplierOfferData,
   onSave,
+  onOpenRequestHistory,
+  onOpenSku,
 }: {
   requests: PurchaseRequest[];
   receiptDelayLogs: ReceiptDelayLog[];
   supplierOfferData: SupplierOffer[];
   onSave: (log: ReceiptDelayLog) => void;
+  onOpenRequestHistory: (requestId?: string) => void;
+  onOpenSku: (skuId: string) => void;
 }) {
   const defaultRequest = requests[0];
   const [relatedRequestId, setRelatedRequestId] = useState(defaultRequest?.id ?? "");
   const selectedRequest = relatedRequestId ? requests.find((request) => request.id === relatedRequestId) : undefined;
-  const [skuId, setSkuId] = useState(selectedRequest?.skuId ?? "C01");
+  const [skuId, setSkuId] = useState(selectedRequest?.skuId ?? "1CC0CG0002");
   const [warehouseId, setWarehouseId] = useState(selectedRequest?.warehouseId ?? "I010");
   const [supplierId, setSupplierId] = useState(selectedRequest?.supplierId ?? "S001");
   const [plannedReceiveDate, setPlannedReceiveDate] = useState(getDateInputValue());
@@ -3948,18 +4040,28 @@ function ReceivingDelayPage({
               <textarea className={textareaClass} value={note} onChange={(event) => setNote(event.target.value)} />
             </Field>
           </div>
-          <div className="flex items-end">
-            <Button className="w-full" onClick={saveLog}>
+          <div className="flex items-end gap-2">
+            <Button className="flex-1" onClick={saveLog}>
               <PackageCheck className="h-4 w-4" />
               บันทึกรับของ / Delay
             </Button>
+            {relatedRequestId ? (
+              <Button variant="secondary" onClick={() => onOpenRequestHistory(relatedRequestId)}>
+                <History className="h-4 w-4" /> เปิดคำขอในประวัติ
+              </Button>
+            ) : null}
           </div>
+        </div>
+        <div className="border-t border-slate-100 px-5 py-3">
+          <p className="text-xs text-slate-500">
+            ขั้นต่อไป: หลังบันทึก Delay ระบบใช้ Impact Demand เป็น feedback ปรับ Lead Time/ความเสี่ยงรอบถัดไป — กด “เปิดคำขอในประวัติ” เพื่อดู snapshot ของคำขอที่เกี่ยว หรือ “ดู SKU” เพื่อตรวจสถานะสต็อกปัจจุบัน
+          </p>
         </div>
       </Card>
 
       <Card className="mt-5">
         <SectionHeader title="Receiving & Delay History" subtitle="ใช้ย้อนดูว่า Supplier หรือกระบวนการใดทำให้ส่งช้า และกระทบ demand ระหว่างรอของเท่าไร" />
-        <DataTable columns={["วันที่บันทึก", "SKU", "คลัง", "Supplier", "Plan", "Actual", "Delay", "Impact Demand", "สาเหตุ", "หมายเหตุ"]} empty={receiptDelayLogs.length === 0}>
+        <DataTable columns={["วันที่บันทึก", "SKU", "คลัง", "Supplier", "Plan", "Actual", "Delay", "Impact Demand", "สาเหตุ", "หมายเหตุ", "ดำเนินการ"]} empty={receiptDelayLogs.length === 0}>
           {receiptDelayLogs.map((log) => (
             <tr key={log.id} className="hover:bg-slate-50">
               <td className="px-4 py-3 font-semibold text-slate-900">{log.id}<br /><span className="text-xs font-normal text-slate-500">{log.createdAt}</span></td>
@@ -3972,6 +4074,14 @@ function ReceivingDelayPage({
               <td className="px-4 py-3">{formatNumber(log.impactDemand, 2)}</td>
               <td className="px-4 py-3">{log.reasonCategory}</td>
               <td className="min-w-72 px-4 py-3 text-sm leading-6 text-slate-600">{log.note}</td>
+              <td className="px-4 py-3">
+                <div className="flex gap-2">
+                  {log.relatedRequestId ? (
+                    <Button variant="secondary" onClick={() => onOpenRequestHistory(log.relatedRequestId)}><History className="h-4 w-4" /> ดูคำขอ</Button>
+                  ) : null}
+                  <Button variant="ghost" onClick={() => onOpenSku(log.skuId)}>ดู SKU</Button>
+                </div>
+              </td>
             </tr>
           ))}
         </DataTable>
@@ -5564,9 +5674,9 @@ function CreatePurchaseRequestPage({
   const supplierRecord = getSupplierSkuRecord(offer.supplierId, skuId, supplierOfferData);
   const recommendation = calculateInventoryRecommendation({ inventory: record, supplier: supplierRecord, formulaVersion: formulaPolicy.formulaVersion });
   const budget = getBudgetContextForInventory(record, budgetSettings);
-  const [requestedQuantity, setRequestedQuantity] = useState(skuId === "C01" ? 20 : recommendation.suggestedQuantity);
-  const [reasonCategory, setReasonCategory] = useState(skuId === "C01" ? "มีแผนซ่อมบำรุงเพิ่มเติม" : "");
-  const [reasonText, setReasonText] = useState(skuId === "C01" ? "รวมแผนซ่อมบำรุงเพิ่มเติมของคลัง I010 ในรอบเดียวกัน" : "");
+  const [requestedQuantity, setRequestedQuantity] = useState(skuId === "1CC0CG0002" ? 20 : recommendation.suggestedQuantity);
+  const [reasonCategory, setReasonCategory] = useState(skuId === "1CC0CG0002" ? "มีแผนซ่อมบำรุงเพิ่มเติม" : "");
+  const [reasonText, setReasonText] = useState(skuId === "1CC0CG0002" ? "รวมแผนซ่อมบำรุงเพิ่มเติมของคลัง I010 ในรอบเดียวกัน" : "");
   const [showExplanation, setShowExplanation] = useState(false);
 
   const preview = calculatePurchaseRequestPreview({
@@ -6237,7 +6347,7 @@ function VmiCandidatePage({ onSimulation, openSku }: { onSimulation: () => void;
             <h3 className="font-semibold text-slate-950">สรุปจากระบบ AI</h3>
           </div>
           <p className="mt-4 text-sm leading-6 text-slate-600">
-            ระบบแนะนำ C01 สายไฟแรงต่ำเป็นรายการเหมาะกับ VMI อันดับหนึ่ง เพราะความต้องการใช้มีเสถียรภาพสูง ซัพพลายเออร์มีความน่าเชื่อถือ 96% และได้คะแนน 88
+            ระบบแนะนำ 1CC0CG0002 สายเคเบิลใต้ดิน XLPE 240 ตร.มม. เป็นรายการเหมาะกับ VMI อันดับหนึ่ง เพราะความต้องการใช้มีเสถียรภาพสูง ซัพพลายเออร์มีความน่าเชื่อถือ 96% และได้คะแนน 88
           </p>
           <StatusBadge status="VMI Candidate" />
           <Button className="mt-5 w-full" onClick={onSimulation}><Workflow className="h-4 w-4" /> เปิดการจำลอง VMI</Button>
@@ -6258,8 +6368,8 @@ function VmiSimulationPage({
   onBack: () => void;
   onCreateProposal: () => void;
 }) {
-  const record = applyFormulaPolicy(inventoryRecords.find((item) => item.skuId === "C01") ?? inventoryRecords[0], formulaPolicy);
-  const supplierRecord = getSupplierSkuRecord("S001", "C01", supplierOfferData);
+  const record = applyFormulaPolicy(inventoryRecords.find((item) => item.skuId === "1CC0CG0002") ?? inventoryRecords[0], formulaPolicy);
+  const supplierRecord = getSupplierSkuRecord("S001", "1CC0CG0002", supplierOfferData);
   const recommendation = calculateInventoryRecommendation({ inventory: record, supplier: supplierRecord, formulaVersion: formulaPolicy.formulaVersion });
   const currentSafetyStock = 30;
   const currentReorderPoint = 100;
@@ -6297,7 +6407,7 @@ function VmiSimulationPage({
       </div>
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card>
-          <SectionHeader title="ตารางเปรียบเทียบ" subtitle="C01 สายไฟแรงต่ำ · I010" />
+          <SectionHeader title="ตารางเปรียบเทียบ" subtitle="C01 สายเคเบิลใต้ดิน XLPE 240 · I010" />
           <DataTable columns={["ตัวชี้วัด", "ปัจจุบัน", "VMI", "ผลกระทบ"]}>
             {rows.map((row) => (
               <tr key={row.metric}>

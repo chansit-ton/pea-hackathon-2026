@@ -1,3 +1,23 @@
+## 2026-06-12 - เพิ่มเอกสาร DEPLOY_VERCEL.md
+
+### Summary
+- เพิ่ม `DEPLOY_VERCEL.md` รวม checklist deploy บน Vercel: build settings, env vars (`VITE_GOOGLE_CLIENT_ID`/`VITE_ADMIN_EMAIL`/`VITE_GOOGLE_PO_FEEDBACK_ENDPOINT`), Authorized origins + consent screen ของ Google OAuth, การ deploy Apps Script, จุดที่มักลืม (preview deploy origin, localStorage แยกเครื่อง, redeploy หลังแก้ env)
+- เพิ่ม pointer ใน `README.md`
+
+### Why
+- ผู้ใช้จะ deploy บน Vercel และถามว่าต้องทำอะไรเพิ่ม จึงรวมขั้นตอนไว้เป็นไฟล์กดทำตามได้
+
+### Changed Files
+- `DEPLOY_VERCEL.md` (ใหม่)
+- `README.md`
+- `PROJECT_UPDATES.md`
+
+### Verification
+- เอกสารอย่างเดียว ไม่กระทบ runtime
+
+### Notes / Follow-up
+- จุดสำคัญที่สุดบน Vercel: ใส่ env แล้ว redeploy + เพิ่มโดเมน Vercel ใน Google Authorized origins ไม่งั้น Google Sign-In ไม่ทำงาน
+
 ## 2026-06-12 - ส่งความเห็น/feedback เข้า Google Sheet (รวมศูนย์)
 
 ### Summary
@@ -44,6 +64,119 @@
 ### Notes / Follow-up
 - ยังไม่ได้ทดสอบ popup Google จริงเพราะต้องใช้ Client ID + authorized origin ของผู้ใช้ (มีขั้นตอนใน `GOOGLE_AUTH_SETUP.md`)
 - PoC decode id_token ฝั่ง client ไม่ verify ที่ server; feedback ยังเก็บ localStorage ต่อเครื่อง — ถ้าต้องรวมศูนย์ค่อยต่อ Firestore หรือส่งเข้า Google Sheet endpoint
+
+## 2026-06-13 - จัด sidebar 5 หมวด + รวม Usage เป็นแท็บใน คลังพัสดุ + แก้ dead-end (เฟส 1-2)
+
+### Summary
+- เปลี่ยน sidebar จากลิสต์เรียบ 16 เมนู เป็น 5 หมวด (ภาพรวม / คลัง & ความเสี่ยง / จัดซื้อ & เคลื่อนย้าย / ข้อมูล & ประวัติ / ระบบ) มีหัวข้อหมวด + เส้นคั่นตอนย่อ
+- ยุบหน้า "การใช้ SKU" เป็นแท็บ "การใช้งานรายเดือน" ในหน้า คลังพัสดุ (แท็บ สถานะสต็อก | การใช้งานรายเดือน) — `WarehouseSkuUsagePage` รับ prop `embedded` เพื่อซ่อน PageTitle ซ้ำ
+- แก้ dead-end ของหน้า Usage: เพิ่มคอลัมน์ "ดำเนินการ" + ปุ่ม "ดู SKU" ในตาราง usage → กดแล้วเปิด SKU detail ได้ (เดิมเป็น data view ตัน)
+- ย้าย "บัญชีผู้ใช้" ออกจาก sidebar (มีปุ่ม chip บน header อยู่แล้ว)
+
+### Why
+- จาก audit: 16 เมนูเรียงพรืดไม่มีการจัดกลุ่ม, หน้า "การใช้ SKU" เป็น dead-end (ไม่มีปุ่มไปต่อ), บัญชีผู้ใช้ซ้ำกับ header
+
+### Changed Files
+- `src/App.tsx`
+- `PROJECT_UPDATES.md`
+
+### Verification
+- `npm.cmd run build` ผ่าน
+- ตรวจ build สด (vite preview): sidebar แสดง 5 หัวข้อหมวดครบ, ไม่มีเมนู "การใช้ SKU"/"บัญชีผู้ใช้" แล้ว, หน้าคลังพัสดุมีแท็บ Stock|Usage, แท็บ Usage มี 24 แถว + ปุ่ม "ดู SKU" กดแล้วเปิด SKU detail (1CC0CG0002) ได้ และไม่มี PageTitle ซ้ำ
+
+### Notes / Follow-up
+- ยังเหลือเฟส 3 (แยก dashboard เป็นเรื่อง ๆ) และเฟส 4 (เก็บกวาดไอคอน/ชื่อ/modal pattern + ลบ `_legacy*` arrays)
+
+## 2026-06-13 - เก็บกวาด: ลบ legacy arrays + แก้ factory mapping เขต A (เฟส 4)
+
+### Summary
+- ลบ `_legacyPea*` arrays 7 ชุด + helper `usageRows` + const `usageYear` ที่ไม่ใช้แล้วออกจาก `peaDataModel.ts` (ลด 370 บรรทัด: 790 → 420) — ของพวกนี้ถูก tree-shake ออกจาก bundle อยู่แล้ว แต่รก source
+- เพิ่ม Factory/Plant + WH-Factory mapping ของเขต A (A010/A020/A030) ให้ครบ — เดิม A010 เป็น mapping "unknown" ทำให้ Data Coverage panel ของคลังเขต A แสดงว่าไม่มี stock mapping ทั้งที่ generate ข้อมูลให้แล้ว
+- ไอคอนเมนูซ้ำ (dashboard/usage ใช้ BarChart3) แก้ไปแล้วโดยปริยายตั้งแต่เฟส 1 (ยุบ usage ออกจาก nav)
+
+### Why
+- เฟส 4 เก็บกวาดหลัง overhaul: ลบ dead code ให้ source สะอาด และทำให้ coverage flag ของ 8 คลังที่ใช้งานจริงถูกต้องครบ
+
+### Changed Files
+- `src/data/peaDataModel.ts`
+- `PROJECT_UPDATES.md`
+
+### Verification
+- `npm.cmd run build` ผ่าน
+- ตรวจ build สด: หน้าวิเคราะห์สต็อกยังมี 73 แถวครบ (ข้อมูลไม่หาย), ไม่มี console error
+
+### Notes / Follow-up
+- ยังไม่ได้ทำ: รวม drill-down pattern ให้เป็น modal แบบเดียวทั้งแอป (ตอนนี้ Audit ใช้ modal, SKU detail ใช้ navigate) — เป็น UX refactor ใหญ่กว่า ไว้รอบหน้าถ้าต้องการ
+
+## 2026-06-13 - แยก Dashboard เป็น 3 แท็บตามเรื่อง (เฟส 3)
+
+### Summary
+- แยกเนื้อหา Dashboard ที่ยาวมากเป็น 3 แท็บ: **ภาพรวม** / **ความเสี่ยง & ของจม** / **งบประมาณ** (Banner Dead Stock Exchange + ตัวกรองยังอยู่บนสุดเป็น context ร่วม)
+- ภาพรวม = Demo Scenario + KPI ภาพรวม (SKU/เสี่ยง/PR/VMI) + แจ้งเตือนสต็อกวิกฤต + สรุป AI
+- ความเสี่ยง & ของจม = KPI ความเสี่ยง (Transfer/Dead Stock/Seasonal/Delay) + ปุ่มลัด + สรุป relationship จาก Excel
+- งบประมาณ = KPI งบ 3 ชั้น (คลัง/เขต/ส่วนกลาง)
+- ทำด้วยการ wrap แต่ละบล็อกด้วย `{dashTab === ... && (...)}` โดยไม่ย้าย logic/คำนวณ
+
+### Why
+- จาก audit/feedback: dashboard ยัดทุกเรื่องในหน้าเดียว scroll ยาว ผู้ใช้ใหม่งง — แยกเป็นเรื่อง ๆ ตามที่ผู้ใช้เสนอ
+
+### Changed Files
+- `src/App.tsx`
+- `PROJECT_UPDATES.md`
+
+### Verification
+- `npm.cmd run build` ผ่าน (JSX balanced)
+- ตรวจ build สด: มี 3 แท็บ, สลับแล้วเนื้อหาถูกต้อง (ภาพรวมโชว์ Demo+alert ซ่อน risk/budget KPI; ความเสี่ยงโชว์ KPI ความเสี่ยง+relationship ซ่อน Demo; งบประมาณโชว์งบ 3 ชั้น ซ่อน risk/alert)
+
+### Notes / Follow-up
+- เหลือเฟส 4 (เก็บกวาด: ไอคอนซ้ำ/ชื่อ/modal pattern + ลบ `_legacy*` arrays ~500 บรรทัด)
+
+## 2026-06-13 - แก้ dead-end หน้ารับของ/Delay (ลิงก์ไปคำขอ/ประวัติ/SKU)
+
+### Summary
+- เพิ่มปุ่ม "เปิดคำขอในประวัติ" ในฟอร์มรับของ/Delay (แสดงเมื่อผูกกับคำขอซื้อ) → ไปหน้าประวัติพร้อมเลือกคำขอนั้น
+- เพิ่มคอลัมน์ "ดำเนินการ" ในตาราง Receiving & Delay History: ปุ่ม "ดูคำขอ" (ถ้ามี relatedRequestId) และ "ดู SKU"
+- เพิ่มข้อความ "ขั้นต่อไป" อธิบายว่า Impact Demand เป็น feedback ปรับ Lead Time/ความเสี่ยงรอบถัดไป
+- เพิ่ม prop `onOpenRequestHistory` / `onOpenSku` ให้ `ReceivingDelayPage` และ wire จาก routing (เลือก request + setView history)
+
+### Why
+- หน้ารับของ/Delay เดิมบันทึกแล้วได้แค่ตาราง log ไปต่อไม่ได้ (dead-end) — ตามแผน audit flow
+
+### Changed Files
+- `src/App.tsx`
+- `PROJECT_UPDATES.md`
+
+### Verification
+- `npm.cmd run build` ผ่าน
+- ตรวจ build สด: หน้ารับของ/Delay มีปุ่ม "เปิดคำขอในประวัติ" + ข้อความขั้นต่อไป, กดแล้วนำทางไปหน้าประวัติได้, ตาราง log มีปุ่ม ดูคำขอ/ดู SKU
+
+### Notes / Follow-up
+- เหลือเฟส 3 (แยก dashboard) และเฟส 4 (เก็บกวาด + ลบ `_legacy*`)
+
+## 2026-06-13 - Overhaul mock data: catalog 12 SKU × 8 คลัง + เปลี่ยนเป็นรหัส PEA จริง
+
+### Summary
+- เพิ่ม `src/data/peaCatalog.ts`: catalog พัสดุไฟฟ้าจริง 12 SKU (สายเคเบิล, หม้อแปลง, เสาคอนกรีต, มิเตอร์, ลูกถ้วย, ดรอพเอาท์, เบรกเกอร์ ฯลฯ) + 8 คลัง 3 เขต (I/K/A) + generator usage 12 เดือน (มี season), stock, risk coverage, lead time, supplier price แบบ deterministic (hash เสถียรทุก render)
+- เปลี่ยน `peaDataModel.ts` ให้ array หลัก (skuMaster, monthlyUsage, stockSummary, riskCoverage, leadTime, leadTimeSku, supplierSkuPrice) มาจาก generator แทน hardcode 6 SKU/4 คลัง → ข้อมูลครบ ~73 (คลัง×SKU) แทน ~3
+- เปลี่ยน demo จากรหัสสั้น (C01/T01/P01...) เป็นรหัส PEA จริง (1CC0CG0002/1DD0DC0000/1CC0CP0012...) ทั้ง `mockData.ts`, `App.tsx`, `procurementHistory.ts`, transfer seed + อัปเดตชื่อ/หน่วย/ราคาให้สมจริงและสอดคล้องกัน (สายใต้ดิน XLPE 240 = 2,000/ม., หม้อแปลง 100kVA = 165,000/เครื่อง, เสาคอนกรีต 12ม. = 4,500/ต้น)
+- ล้าง `prototypeAlias.skuId` (demo ใช้รหัส PEA ตรงแล้ว)
+
+### Why
+- ผู้ใช้ต้องการ mock data ที่ "เจ๋งกว่านี้": เดิมดูเยอะ (129 คลัง, ชื่อ "Mock") แต่จริง ๆ มีข้อมูลแค่ 4 คลัง 6 SKU หน้าหลายหน้าจึงโล่ง; เลือกให้ริชเต็มและใช้รหัส PEA จริง
+
+### Changed Files
+- `src/data/peaCatalog.ts` (ใหม่)
+- `src/data/peaDataModel.ts`, `src/data/mockData.ts`, `src/data/procurementHistory.ts`, `src/App.tsx`
+- `PROJECT_UPDATES.md`
+
+### Verification
+- `npm.cmd run build` ผ่าน
+- ตรวจ build จริง (vite preview): หน้าคลังพัสดุแสดงรหัส PEA + ชื่อจริง + หน่วยถูก (เครื่อง/ต้น/ชุด/เมตร); หน้าวิเคราะห์สต็อกมี ~73 แถวครบ 8 คลัง 3 เขต + SKU ใหม่ (มิเตอร์/ลูกถ้วย); demo flow ยังทำงาน (1CC0CG0002 20ม. = ฿40,000 → อนุมัติระดับเขต + การ์ดดักของจมยังเด้ง)
+
+### Notes / Follow-up
+- สำคัญ: dev server ที่เปิดค้างต้อง restart (`npm run dev`) เพื่อโหลด data ใหม่ — HMR ไม่ได้ apply การเปลี่ยน data module ขนาดใหญ่ในเครื่องที่รันค้างไว้นาน (ผมตรวจด้วย vite preview จาก build สดแทน)
+- peaDataModel.ts ยังมี array เดิมเก็บไว้เป็น `_legacy*` (unused, ~500 บรรทัด) — ลบทิ้งได้ถ้าต้องการความสะอาด (ยังไม่ลบเพื่อลดความเสี่ยงตอน migrate)
+- inventoryRecords ฝั่ง demo ยังเป็น 7 SKU (ตัวเลขเดิมเพื่อคง demo flow) ส่วนข้อมูล PEA ริชครบ 12 SKU × 8 คลัง
 
 ## 2026-06-12 - ปรับหน้า login ให้จริงจัง (Login/Register/ลืมรหัสผ่าน)
 

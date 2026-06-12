@@ -40,13 +40,13 @@ export const regionalBudgets: RegionalBudget[] = [
 export const centralBudgetRemaining = 5_000_000;
 
 export const skus: Sku[] = [
-  { id: "C01", name: "สายไฟแรงต่ำ", category: "สายไฟ", unit: "เมตร", criticality: "High" },
-  { id: "C02", name: "สายไฟแรงสูง", category: "สายไฟ", unit: "เมตร", criticality: "High" },
-  { id: "T01", name: "หม้อแปลง 100 kVA", category: "หม้อแปลง", unit: "ลูก", criticality: "Critical" },
-  { id: "P01", name: "เสาไฟคอนกรีต 12 เมตร", category: "เสาไฟ", unit: "ต้น", criticality: "High" },
-  { id: "P02", name: "เสาไฟคอนกรีต 14 เมตร", category: "เสาไฟ", unit: "ต้น", criticality: "Medium" },
-  { id: "B05", name: "เบรกเกอร์ 3P 50A", category: "เบรกเกอร์", unit: "pcs", criticality: "Medium" },
-  { id: "D12", name: "ท่อ PVC 3/4\"", category: "ท่อ", unit: "m", criticality: "Medium" },
+  { id: "1CC0CG0002", name: "สายเคเบิลใต้ดิน XLPE 240 ตร.มม. 22kV", category: "สายไฟ/เคเบิล", unit: "เมตร", criticality: "High" },
+  { id: "1CC0CG0004", name: "สายอะลูมิเนียมหุ้มฉนวน SAC 50 ตร.มม.", category: "สายไฟ/เคเบิล", unit: "เมตร", criticality: "High" },
+  { id: "1DD0DC0000", name: "หม้อแปลงจำหน่าย 3 เฟส 100 kVA 22kV", category: "หม้อแปลง", unit: "เครื่อง", criticality: "Critical" },
+  { id: "1CC0CP0012", name: "เสาคอนกรีตอัดแรง 12 เมตร", category: "เสาไฟ", unit: "ต้น", criticality: "High" },
+  { id: "1CC0CP0014", name: "เสาคอนกรีตอัดแรง 14 เมตร", category: "เสาไฟ", unit: "ต้น", criticality: "Medium" },
+  { id: "1CC0BK0050", name: "เบรกเกอร์ 3 เฟส 50 แอมป์", category: "เบรกเกอร์/สวิตช์", unit: "ชุด", criticality: "Medium" },
+  { id: "1CC0CH0501", name: "สายเคเบิลอากาศ SAC 185 ตร.มม. 22kV", category: "สายไฟ/เคเบิล", unit: "เมตร", criticality: "High" },
 ];
 
 export const suppliers: Supplier[] = [
@@ -80,14 +80,14 @@ export const suppliers: Supplier[] = [
 ];
 
 export const supplierOffers: SupplierOffer[] = [
-  { supplierId: "S001", skuId: "C01", unitPrice: 2_000, currency: "THB", leadTimeDays: 25, moq: 10, unit: "เมตร", reliabilityScore: 96 },
-  { supplierId: "S002", skuId: "C01", unitPrice: 2_150, currency: "THB", leadTimeDays: 18, moq: 20, unit: "เมตร", reliabilityScore: 92 },
-  { supplierId: "S003", skuId: "C01", unitPrice: 1_950, currency: "THB", leadTimeDays: 40, moq: 30, unit: "เมตร", reliabilityScore: 85 },
-  { supplierId: "S002", skuId: "C02", unitPrice: 3_500, currency: "THB", leadTimeDays: 30, moq: 10, unit: "เมตร", reliabilityScore: 92 },
-  { supplierId: "S003", skuId: "T01", unitPrice: 150_000, currency: "THB", leadTimeDays: 60, moq: 1, unit: "ลูก", reliabilityScore: 85 },
-  { supplierId: "S001", skuId: "P01", unitPrice: 4_500, currency: "THB", leadTimeDays: 20, moq: 10, unit: "ต้น", reliabilityScore: 88 },
-  { supplierId: "S002", skuId: "B05", unitPrice: 1_800, currency: "THB", leadTimeDays: 20, moq: 5, unit: "pcs", reliabilityScore: 90 },
-  { supplierId: "S003", skuId: "D12", unitPrice: 150, currency: "THB", leadTimeDays: 14, moq: 50, unit: "m", reliabilityScore: 87 },
+  { supplierId: "S001", skuId: "1CC0CG0002", unitPrice: 2_000, currency: "THB", leadTimeDays: 25, moq: 10, unit: "เมตร", reliabilityScore: 96 },
+  { supplierId: "S002", skuId: "1CC0CG0002", unitPrice: 2_150, currency: "THB", leadTimeDays: 18, moq: 20, unit: "เมตร", reliabilityScore: 92 },
+  { supplierId: "S003", skuId: "1CC0CG0002", unitPrice: 1_950, currency: "THB", leadTimeDays: 40, moq: 30, unit: "เมตร", reliabilityScore: 85 },
+  { supplierId: "S002", skuId: "1CC0CG0004", unitPrice: 3_500, currency: "THB", leadTimeDays: 30, moq: 10, unit: "เมตร", reliabilityScore: 92 },
+  { supplierId: "S003", skuId: "1DD0DC0000", unitPrice: 165_000, currency: "THB", leadTimeDays: 60, moq: 1, unit: "เครื่อง", reliabilityScore: 85 },
+  { supplierId: "S001", skuId: "1CC0CP0012", unitPrice: 4_500, currency: "THB", leadTimeDays: 21, moq: 10, unit: "ต้น", reliabilityScore: 88 },
+  { supplierId: "S002", skuId: "1CC0BK0050", unitPrice: 1_800, currency: "THB", leadTimeDays: 20, moq: 5, unit: "ชุด", reliabilityScore: 90 },
+  { supplierId: "S003", skuId: "1CC0CH0501", unitPrice: 320, currency: "THB", leadTimeDays: 30, moq: 50, unit: "เมตร", reliabilityScore: 87 },
 ];
 
 /**
@@ -100,7 +100,7 @@ export const supplierOffers: SupplierOffer[] = [
  */
 export const inventoryRecords: InventoryRecord[] = [
   {
-    skuId: "C01",
+    skuId: "1CC0CG0002",
     warehouseId: "I010",
     currentStock: 60,
     // C01 ใช้ข้อมูลย้อนหลัง 6 เดือน รวม 600 เมตร / 180 วัน
@@ -127,7 +127,7 @@ export const inventoryRecords: InventoryRecord[] = [
     status: "Critical",
   },
   {
-    skuId: "T01",
+    skuId: "1DD0DC0000",
     warehouseId: "K010",
     currentStock: 1,
     historicalUsage: [
@@ -148,7 +148,7 @@ export const inventoryRecords: InventoryRecord[] = [
     status: "Critical",
   },
   {
-    skuId: "P01",
+    skuId: "1CC0CP0012",
     warehouseId: "K030",
     currentStock: 8,
     historicalUsage: [
@@ -169,7 +169,7 @@ export const inventoryRecords: InventoryRecord[] = [
     status: "Critical",
   },
   {
-    skuId: "B05",
+    skuId: "1CC0BK0050",
     warehouseId: "I020",
     currentStock: 5,
     historicalUsage: [
@@ -190,7 +190,7 @@ export const inventoryRecords: InventoryRecord[] = [
     status: "Near Reorder Point",
   },
   {
-    skuId: "D12",
+    skuId: "1CC0CH0501",
     warehouseId: "I010",
     currentStock: 150,
     historicalUsage: [
@@ -228,7 +228,7 @@ export const initialContactLogs: SupplierContactLog[] = [
   {
     id: "LOG-001",
     supplierId: "S001",
-    skuId: "C01",
+    skuId: "1CC0CG0002",
     requestId: "REQ-001",
     channel: "Phone",
     purpose: "ยืนยันราคาและระยะเวลาส่งมอบ",
@@ -239,7 +239,7 @@ export const initialContactLogs: SupplierContactLog[] = [
   {
     id: "LOG-002",
     supplierId: "S003",
-    skuId: "T01",
+    skuId: "1DD0DC0000",
     requestId: "REQ-002",
     channel: "Email",
     purpose: "ขอใบเสนอราคา",
@@ -359,12 +359,12 @@ function createSnapshot(params: {
   };
 }
 
-const c01Inventory = getInventoryRecord("C01");
-const t01Inventory = getInventoryRecord("T01");
-const p01Inventory = getInventoryRecord("P01");
-const c01Supplier = toSupplierSkuRecord("S001", "C01");
-const t01Supplier = toSupplierSkuRecord("S003", "T01");
-const p01Supplier = toSupplierSkuRecord("S001", "P01");
+const c01Inventory = getInventoryRecord("1CC0CG0002");
+const t01Inventory = getInventoryRecord("1DD0DC0000");
+const p01Inventory = getInventoryRecord("1CC0CP0012");
+const c01Supplier = toSupplierSkuRecord("S001", "1CC0CG0002");
+const t01Supplier = toSupplierSkuRecord("S003", "1DD0DC0000");
+const p01Supplier = toSupplierSkuRecord("S001", "1CC0CP0012");
 
 // Snapshot ตัวอย่างของ C01 สำหรับอธิบาย demo flow:
 // Suggested 10 เมตร แต่ผู้ใช้ขอ 20 เมตร จึงเกิด variance +100%
@@ -403,7 +403,7 @@ const p01CalculationSnapshot = createSnapshot({
 export const initialRequests: PurchaseRequest[] = [
   {
     id: "REQ-002",
-    skuId: "T01",
+    skuId: "1DD0DC0000",
     warehouseId: "K010",
     supplierId: "S003",
     aiSuggestedQuantity: t01CalculationSnapshot.suggestedQuantity,
@@ -435,7 +435,7 @@ export const initialRequests: PurchaseRequest[] = [
   },
   {
     id: "REQ-003",
-    skuId: "T01",
+    skuId: "1DD0DC0000",
     warehouseId: "K010",
     supplierId: "S003",
     aiSuggestedQuantity: t01CalculationSnapshot.suggestedQuantity,
@@ -473,7 +473,7 @@ export const initialRequests: PurchaseRequest[] = [
   },
   {
     id: "REQ-010",
-    skuId: "P01",
+    skuId: "1CC0CP0012",
     warehouseId: "K030",
     supplierId: "S001",
     aiSuggestedQuantity: p01CalculationSnapshot.suggestedQuantity,
@@ -504,7 +504,7 @@ export const initialRequests: PurchaseRequest[] = [
 
 export const vmiCandidates: VmiCandidate[] = [
   {
-    skuId: "C01",
+    skuId: "1CC0CG0002",
     demandStability: "High",
     supplierReliability: 96,
     score: calculateVmiSuitabilityScore({
@@ -517,7 +517,7 @@ export const vmiCandidates: VmiCandidate[] = [
     }),
   },
   {
-    skuId: "C02",
+    skuId: "1CC0CG0004",
     demandStability: "Medium",
     supplierReliability: 92,
     score: calculateVmiSuitabilityScore({
@@ -530,7 +530,7 @@ export const vmiCandidates: VmiCandidate[] = [
     }),
   },
   {
-    skuId: "T01",
+    skuId: "1DD0DC0000",
     demandStability: "Low",
     supplierReliability: 85,
     score: calculateVmiSuitabilityScore({

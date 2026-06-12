@@ -35,10 +35,12 @@ Open the local Vite URL shown in the terminal.
 - มีระบบ login (เมนู `บัญชีผู้ใช้`): รองรับ **Google Sign-In (OAuth)** เมื่อตั้ง `VITE_GOOGLE_CLIENT_ID` (ดู `GOOGLE_AUTH_SETUP.md`) และมี login/register/ลืมรหัสผ่าน แบบ local (PoC, localStorage) เป็น fallback. ต้องเข้าสู่ระบบก่อนให้ความเห็น; admin (`admin/admin` หรืออีเมลตรง `VITE_ADMIN_EMAIL`) ลบความเห็นได้โดยใส่รหัสยืนยัน `99999`. หมายเหตุ: ยังไม่มี backend จึงเก็บข้อมูลแยกตามเครื่อง ไม่รวมศูนย์ — ถ้าต้องรวมต้องต่อ Firestore หรือ Google Sheet endpoint.
 - Dashboard มี `Dead Stock Exchange` banner ประกาศของจมที่ยืม/แลกได้ พร้อมมูลค่าทุนจมและ aging และหน้า Create Purchase Request มีการ์ดดักเตือนถ้า SKU ที่จะซื้อมีของจมที่คลังอื่น (เสนอยืมแทนการซื้อ).
 - New PEA data model seed lives in `src/data/peaDataModel.ts` and separates `WH Id`, `Factory / Plant Id`, and `Supplier / Vendor`.
+- Mock data รุ่นใหม่ใช้ catalog `src/data/peaCatalog.ts` (12 SKU พัสดุไฟฟ้าจริง × 8 คลัง × 3 เขต) generate usage/stock/risk/lead time/price แบบ deterministic ให้ทุกหน้าแน่นและ consistent; demo และ seed ต่าง ๆ ใช้รหัส PEA จริง (เช่น `1CC0CG0002`).
 - Database setup and future schema notes are in `database-setup.md`.
 - Project progress and change history must be recorded in `PROJECT_UPDATES.md`.
 - When changing code, mock data, UX, schema docs, or project behavior, always update `PROJECT_UPDATES.md` in the same work session.
 - No SAP, database, or backend integration is required. Google Sheet PO feedback is optional and only runs when `VITE_GOOGLE_PO_FEEDBACK_ENDPOINT` is configured.
+- การ deploy บน Vercel ดู checklist ใน `DEPLOY_VERCEL.md` (ต้องตั้ง env vars + เพิ่มโดเมน Vercel ใน Google OAuth Authorized origins).
 - Frontend persistence uses browser JSON storage until a real backend/database is added.
 - `src/App.tsx` has comments marking where real API integration can be added later.
 

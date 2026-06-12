@@ -59,24 +59,24 @@ export type DeadStockListing = {
 // ───────────────────────────────────────────────────────────────────────────
 export const budgetRequestHistory: BudgetRequestRecord[] = [
   // เขต K — คลัง K030 (เคสซื้อซ้ำเสาไฟทั้งที่ของจม)
-  { id: "BR-K030-67-P01", fiscalYear: "2567", warehouseId: "K030", regionLabel: "เขต K", skuId: "P01", skuName: "เสาไฟคอนกรีต 12 เมตร", category: "เสาไฟ", unit: "ต้น", requestedQty: 400, unitCost: 4_500, note: "ตั้งงบประจำปีตามค่าเฉลี่ยเดิม" },
-  { id: "BR-K030-68-P01", fiscalYear: "2568", warehouseId: "K030", regionLabel: "เขต K", skuId: "P01", skuName: "เสาไฟคอนกรีต 12 เมตร", category: "เสาไฟ", unit: "ต้น", requestedQty: 380, unitCost: 4_500, note: "ของเดิมยังเหลือ แต่ตั้งงบใกล้เคียงเดิม" },
-  { id: "BR-K030-69-P01", fiscalYear: "2569", warehouseId: "K030", regionLabel: "เขต K", skuId: "P01", skuName: "เสาไฟคอนกรีต 12 เมตร", category: "เสาไฟ", unit: "ต้น", requestedQty: 400, unitCost: 4_500, note: "ของบเท่าเดิมเพื่อสั่งเสาไฟอีกรอบ" },
-  { id: "BR-K030-67-C01", fiscalYear: "2567", warehouseId: "K030", regionLabel: "เขต K", skuId: "C01", skuName: "สายไฟแรงต่ำ", category: "สายไฟ", unit: "เมตร", requestedQty: 300, unitCost: 2_000 },
-  { id: "BR-K030-68-C01", fiscalYear: "2568", warehouseId: "K030", regionLabel: "เขต K", skuId: "C01", skuName: "สายไฟแรงต่ำ", category: "สายไฟ", unit: "เมตร", requestedQty: 350, unitCost: 2_000 },
-  { id: "BR-K030-69-B05", fiscalYear: "2569", warehouseId: "K030", regionLabel: "เขต K", skuId: "B05", skuName: "เบรกเกอร์ 3P 50A", category: "เบรกเกอร์", unit: "pcs", requestedQty: 250, unitCost: 1_800, note: "ปิดงบปลายปีให้ใช้หมด" },
+  { id: "BR-K030-67-P01", fiscalYear: "2567", warehouseId: "K030", regionLabel: "เขต K", skuId: "1CC0CP0012", skuName: "เสาคอนกรีตอัดแรง 12 เมตร", category: "เสาไฟ", unit: "ต้น", requestedQty: 400, unitCost: 4_500, note: "ตั้งงบประจำปีตามค่าเฉลี่ยเดิม" },
+  { id: "BR-K030-68-P01", fiscalYear: "2568", warehouseId: "K030", regionLabel: "เขต K", skuId: "1CC0CP0012", skuName: "เสาคอนกรีตอัดแรง 12 เมตร", category: "เสาไฟ", unit: "ต้น", requestedQty: 380, unitCost: 4_500, note: "ของเดิมยังเหลือ แต่ตั้งงบใกล้เคียงเดิม" },
+  { id: "BR-K030-69-P01", fiscalYear: "2569", warehouseId: "K030", regionLabel: "เขต K", skuId: "1CC0CP0012", skuName: "เสาคอนกรีตอัดแรง 12 เมตร", category: "เสาไฟ", unit: "ต้น", requestedQty: 400, unitCost: 4_500, note: "ของบเท่าเดิมเพื่อสั่งเสาไฟอีกรอบ" },
+  { id: "BR-K030-67-C01", fiscalYear: "2567", warehouseId: "K030", regionLabel: "เขต K", skuId: "1CC0CG0002", skuName: "สายเคเบิลใต้ดิน XLPE 240", category: "สายไฟ", unit: "เมตร", requestedQty: 300, unitCost: 2_000 },
+  { id: "BR-K030-68-C01", fiscalYear: "2568", warehouseId: "K030", regionLabel: "เขต K", skuId: "1CC0CG0002", skuName: "สายเคเบิลใต้ดิน XLPE 240", category: "สายไฟ", unit: "เมตร", requestedQty: 350, unitCost: 2_000 },
+  { id: "BR-K030-69-B05", fiscalYear: "2569", warehouseId: "K030", regionLabel: "เขต K", skuId: "1CC0BK0050", skuName: "เบรกเกอร์ 3P 50A", category: "เบรกเกอร์", unit: "pcs", requestedQty: 250, unitCost: 1_800, note: "ปิดงบปลายปีให้ใช้หมด" },
 
   // เขต K — คลัง K010 (คลังที่บริหารงบสมเหตุผลกว่า ใช้เทียบ peer)
-  { id: "BR-K010-67-P01", fiscalYear: "2567", warehouseId: "K010", regionLabel: "เขต K", skuId: "P01", skuName: "เสาไฟคอนกรีต 12 เมตร", category: "เสาไฟ", unit: "ต้น", requestedQty: 180, unitCost: 4_500 },
-  { id: "BR-K010-68-P01", fiscalYear: "2568", warehouseId: "K010", regionLabel: "เขต K", skuId: "P01", skuName: "เสาไฟคอนกรีต 12 เมตร", category: "เสาไฟ", unit: "ต้น", requestedQty: 150, unitCost: 4_500 },
-  { id: "BR-K010-69-P01", fiscalYear: "2569", warehouseId: "K010", regionLabel: "เขต K", skuId: "P01", skuName: "เสาไฟคอนกรีต 12 เมตร", category: "เสาไฟ", unit: "ต้น", requestedQty: 200, unitCost: 4_500, note: "เพิ่มตาม demand จริงที่โต" },
-  { id: "BR-K010-69-C01", fiscalYear: "2569", warehouseId: "K010", regionLabel: "เขต K", skuId: "C01", skuName: "สายไฟแรงต่ำ", category: "สายไฟ", unit: "เมตร", requestedQty: 400, unitCost: 2_000 },
+  { id: "BR-K010-67-P01", fiscalYear: "2567", warehouseId: "K010", regionLabel: "เขต K", skuId: "1CC0CP0012", skuName: "เสาคอนกรีตอัดแรง 12 เมตร", category: "เสาไฟ", unit: "ต้น", requestedQty: 180, unitCost: 4_500 },
+  { id: "BR-K010-68-P01", fiscalYear: "2568", warehouseId: "K010", regionLabel: "เขต K", skuId: "1CC0CP0012", skuName: "เสาคอนกรีตอัดแรง 12 เมตร", category: "เสาไฟ", unit: "ต้น", requestedQty: 150, unitCost: 4_500 },
+  { id: "BR-K010-69-P01", fiscalYear: "2569", warehouseId: "K010", regionLabel: "เขต K", skuId: "1CC0CP0012", skuName: "เสาคอนกรีตอัดแรง 12 เมตร", category: "เสาไฟ", unit: "ต้น", requestedQty: 200, unitCost: 4_500, note: "เพิ่มตาม demand จริงที่โต" },
+  { id: "BR-K010-69-C01", fiscalYear: "2569", warehouseId: "K010", regionLabel: "เขต K", skuId: "1CC0CG0002", skuName: "สายเคเบิลใต้ดิน XLPE 240", category: "สายไฟ", unit: "เมตร", requestedQty: 400, unitCost: 2_000 },
 
   // เขต I — คลัง I010, I020
-  { id: "BR-I010-68-C01", fiscalYear: "2568", warehouseId: "I010", regionLabel: "เขต I", skuId: "C01", skuName: "สายไฟแรงต่ำ", category: "สายไฟ", unit: "เมตร", requestedQty: 500, unitCost: 2_000 },
-  { id: "BR-I010-69-C01", fiscalYear: "2569", warehouseId: "I010", regionLabel: "เขต I", skuId: "C01", skuName: "สายไฟแรงต่ำ", category: "สายไฟ", unit: "เมตร", requestedQty: 550, unitCost: 2_000 },
-  { id: "BR-I020-68-T01", fiscalYear: "2568", warehouseId: "I020", regionLabel: "เขต I", skuId: "T01", skuName: "หม้อแปลง 100 kVA", category: "หม้อแปลง", unit: "ลูก", requestedQty: 8, unitCost: 150_000 },
-  { id: "BR-I020-69-T01", fiscalYear: "2569", warehouseId: "I020", regionLabel: "เขต I", skuId: "T01", skuName: "หม้อแปลง 100 kVA", category: "หม้อแปลง", unit: "ลูก", requestedQty: 12, unitCost: 150_000, note: "เผื่อโครงการขยายเขต" },
+  { id: "BR-I010-68-C01", fiscalYear: "2568", warehouseId: "I010", regionLabel: "เขต I", skuId: "1CC0CG0002", skuName: "สายเคเบิลใต้ดิน XLPE 240", category: "สายไฟ", unit: "เมตร", requestedQty: 500, unitCost: 2_000 },
+  { id: "BR-I010-69-C01", fiscalYear: "2569", warehouseId: "I010", regionLabel: "เขต I", skuId: "1CC0CG0002", skuName: "สายเคเบิลใต้ดิน XLPE 240", category: "สายไฟ", unit: "เมตร", requestedQty: 550, unitCost: 2_000 },
+  { id: "BR-I020-68-T01", fiscalYear: "2568", warehouseId: "I020", regionLabel: "เขต I", skuId: "1DD0DC0000", skuName: "หม้อแปลงจำหน่าย 3 เฟส 100 kVA", category: "หม้อแปลง", unit: "ลูก", requestedQty: 8, unitCost: 165_000 },
+  { id: "BR-I020-69-T01", fiscalYear: "2569", warehouseId: "I020", regionLabel: "เขต I", skuId: "1DD0DC0000", skuName: "หม้อแปลงจำหน่าย 3 เฟส 100 kVA", category: "หม้อแปลง", unit: "ลูก", requestedQty: 12, unitCost: 165_000, note: "เผื่อโครงการขยายเขต" },
 ];
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -105,8 +105,8 @@ export const warehouseBudgetByYear: WarehouseBudgetYear[] = [
 export const deadStockListings: DeadStockListing[] = [
   {
     id: "DS-K030-P01",
-    skuId: "P01",
-    skuName: "เสาไฟคอนกรีต 12 เมตร",
+    skuId: "1CC0CP0012",
+    skuName: "เสาคอนกรีตอัดแรง 12 เมตร",
     category: "เสาไฟ",
     warehouseId: "K030",
     regionLabel: "เขต K",
@@ -120,8 +120,8 @@ export const deadStockListings: DeadStockListing[] = [
   },
   {
     id: "DS-K030-C01",
-    skuId: "C01",
-    skuName: "สายไฟแรงต่ำ",
+    skuId: "1CC0CG0002",
+    skuName: "สายเคเบิลใต้ดิน XLPE 240",
     category: "สายไฟ",
     warehouseId: "K030",
     regionLabel: "เขต K",
@@ -135,7 +135,7 @@ export const deadStockListings: DeadStockListing[] = [
   },
   {
     id: "DS-K020-B05",
-    skuId: "B05",
+    skuId: "1CC0BK0050",
     skuName: "เบรกเกอร์ 3P 50A",
     category: "เบรกเกอร์",
     warehouseId: "K020",
@@ -148,14 +148,14 @@ export const deadStockListings: DeadStockListing[] = [
   },
   {
     id: "DS-I020-T01",
-    skuId: "T01",
-    skuName: "หม้อแปลง 100 kVA",
+    skuId: "1DD0DC0000",
+    skuName: "หม้อแปลงจำหน่าย 3 เฟส 100 kVA",
     category: "หม้อแปลง",
     warehouseId: "I020",
     regionLabel: "เขต I",
     qty: 3,
     unit: "ลูก",
-    unitCost: 150_000,
+    unitCost: 165_000,
     monthsIdle: 8,
     lastMovement: "ต.ค. 68",
     matchWarehouseId: "I010",
