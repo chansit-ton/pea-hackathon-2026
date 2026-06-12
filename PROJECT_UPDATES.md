@@ -1,3 +1,87 @@
+## 2026-06-12 - ปรับถ้อยคำให้สุภาพ + เพิ่มการถือครอง SKU รายคลังในหน้า SKU
+
+### Summary
+- เปลี่ยนถ้อยคำใน UI ให้เป็นทางการ: "จุดที่ควรตบหน้า" → "จุดที่ควรทบทวน", "เคสน่าตรวจ (กวนทีน)" → "เคสที่ควรทบทวน" และเพิ่มกฎใน `DATA_POLICY.md` ว่าห้ามใช้คำกระแทกแดกดัน (ตบหน้า/กวนทีน/ประจาน) ใน UI
+- เพิ่ม helper `getSkuHoldingsByWarehouse` ใน `procurementAnalysis.ts` รวมคงคลังราย Factory/Plant (`peaStockSummary`) + usage/cover (`peaRiskCoverageRecords`) + annotate ของจม (`deadStockListings`)
+- เพิ่มตาราง "การถือครอง {SKU} รายคลัง" ในหน้า SKU Detail แสดง คลัง/เขต/คงคลัง/ใช้เฉลี่ยต่อเดือน/Stock Cover/สถานะ (ของจม·ไม่ขยับกี่เดือน / เสี่ยงขาด / เหมาะสม) เพื่อให้ตอนกระโดดจาก Audit ไปหน้า SKU เห็นภาพการถือครองรายคลังทันที
+
+### Why
+- Feedback ผู้ใช้: เลี่ยงคำแรง ๆ ในทุกหน้า และตอนกระโดดไปหน้า SKU ควรเห็นรายละเอียดการถือครอง SKU นั้นของแต่ละคลัง
+
+### Changed Files
+- `src/App.tsx`
+- `src/utils/procurementAnalysis.ts`
+- `DATA_POLICY.md`
+- `PROJECT_UPDATES.md`
+
+### Verification
+- `npm.cmd run build` ผ่าน
+- ตรวจผ่าน DOM: หน้า Audit ไม่มีคำว่า ตบหน้า/กวนทีน แล้ว (เป็น ทบทวน), หน้า SKU C01 แสดงตารางถือครอง 4 คลัง (K030 ของจม, I010/I020/K010 เสี่ยงขาด), flow Audit → ดูใบของบ → ดูหน้า SKU (P01) แสดงถือครอง K030 ของจมไม่ขยับ 9 เดือน
+
+### Notes / Follow-up
+- มี unit mismatch เล็กน้อยสำหรับ P01 (seed: คงคลังจาก BATCH เป็น "M" แต่ของจม/ชื่อ demo เป็น "ต้น") เพราะ demo SKU สั้น map ไป long PEA SKU ที่หน่วยต่างกัน — เป็น artifact ของ seed ถ้าต้องการให้ตรงค่อย normalize ภายหลัง
+
+## 2026-06-12 - ปรับ Dead Stock UX ตาม feedback: banner hero, audit drill-down, ศูนย์ความเห็น PO
+
+### Summary
+- ย้าย Dead Stock Exchange banner ขึ้นบนสุดของ Dashboard (เหนือ filter) และทำเป็น hero (header gradient, มูลค่าทุนจมตัวใหญ่, ปุ่มยืม/แลกเด่นเมื่อจับคู่คลังได้)
+- หน้า Procurement Audit เพิ่ม filter (ปีงบ/เขต/หมวดพัสดุ/เฉพาะที่ติด flag), เพิ่มแถบ % ใช้งบและไอคอนแนวโน้มในตารางเทียบคลัง
+- เพิ่ม drill-down: กดแถวหรือปุ่ม "ดูใบของบ" เปิด modal รายละเอียดใบของบ (เหตุผล flag เต็ม, การ์ดสรุป จำนวน/ต้นทุน/มูลค่า/เทียบ peer, ตารางประวัติของบ SKU เดียวกันย้อนหลัง, ของจม SKU นั้นทุกคลัง, ปุ่มไปโอน/ยืม) แทนปุ่ม "ดู SKU" เดิม ลดการกระโดดข้ามหน้า
+- เปลี่ยนความเห็น PO เป็นแบบ hybrid: เพิ่ม `FeedbackQuickAdd` ปุ่มลอยทุกหน้า (auto-tag หน้าปัจจุบัน) + หน้าใหม่ `ศูนย์ความเห็น PO` (Feedback Center) รวมความเห็นทุกหน้า กรองตามหน้าได้ และกด tag เพื่อกระโดดไปหน้านั้น
+- เพิ่ม View `feedback`, เมนู `ศูนย์ความเห็น PO`, `viewLabels` map สำหรับ tag context และ helper `addPoNote(text, context)` / `deletePoNote`
+- เพิ่ม helper ใน `procurementAnalysis.ts`: `getDeadStockForSku`, `getBudgetHistoryForWarehouseSku`, `getPeerAverageForCategory` และ field `peerAverageAmount` ใน flagged record
+
+### Why
+- Feedback ผู้ใช้: banner จมอยู่ใต้ filter ไม่สะดุดตา, หน้า Audit แบนไม่มีมิติ (กรองไม่ได้/ดูรายละเอียดใบของบไม่ได้), flow กระโดดไปมา, และความเห็น PO ควรอยู่ทุกหน้า + มีหน้ารวม
+
+### Changed Files
+- `src/App.tsx`
+- `src/utils/procurementAnalysis.ts`
+- `DATA_POLICY.md`
+- `README.md`
+- `Design.md`
+- `PROJECT_UPDATES.md`
+
+### Verification
+- `npm.cmd run build` ผ่าน
+- ตรวจผ่าน DOM บน dev server: banner อยู่บนสุดเหนือ filter, audit มี 3 filter + ปุ่มดูใบของบ 14 ปุ่ม + แถบ % ใช้งบ, เปิด modal ใบของบ BR-K030-69-P01 เห็น flag ครบ 3 + ประวัติของบเสาไฟ 3 ปีติด (2567/2568/2569) + ของจม 320 ต้น, ปุ่มลอยความเห็น PO auto-tag "แดชบอร์ด" บันทึกแล้ว persist + แสดงในศูนย์ความเห็นพร้อม tag
+
+### Notes / Follow-up
+- modal ใช้ position:fixed overlay (เป็นแอปจริงไม่ใช่ widget sandbox จึงใช้ได้)
+- ความเห็น PO เก่าที่เคยบันทึกก่อนเพิ่ม field `context` จะไม่มี tag หน้า (แสดง undefined) — ของใหม่ tag ครบ
+
+## 2026-06-12 - เพิ่ม Dead Stock Exchange, การ์ดดักก่อนซื้อ และหน้า "ตรวจซื้อซ้ำ-ของจม"
+
+### Summary
+- เพิ่ม seed data `src/data/procurementHistory.ts`: ประวัติการของบ/สั่งซื้อย้อนหลัง 3 ปีงบ (2567-2569) ราย คลัง×SKU, งบจัดสรร/ใช้จริง/มูลค่าของจมรายปี และรายการ Dead Stock พร้อมจับคู่คลังที่ขาด
+- เพิ่ม util `src/utils/procurementAnalysis.ts` สำหรับคำนวณมูลค่าของจม, % ใช้งบ และ flag "กวนทีน" 3 เกณฑ์ (ซื้อซ้ำทั้งที่ของจม / เร่งใช้งบให้หมด / งบสูงกว่าคลังอื่น) โดยคำนวณจาก seed ไม่ hardcode ผลลัพธ์
+- เพิ่ม `Dead Stock Exchange` banner บน Dashboard เพื่อประกาศของจมที่ยืม/แลกได้ พร้อมมูลค่าทุนจมและ aging (ไม่ขยับกี่เดือน) ปุ่มต่อเข้าหน้าโอน/ยืม
+- เพิ่มการ์ด `DeadStockBorrowAlert` ดักในหน้า Create Purchase Request: ถ้า SKU ที่กำลังจะซื้อมีของจมที่คลังอื่น ระบบเสนอยืมแทนพร้อมตัวเลขประหยัด (เช่น C01 ที่ I010 → มีของจมที่ K030)
+- เพิ่มเมนู/หน้าใหม่ `ตรวจซื้อซ้ำ-ของจม` (Procurement Audit): metric สรุป, ตารางเทียบคลัง (งบ vs ของจม + แนวโน้ม), ตารางประวัติการของบพร้อม flag และกล่องบันทึกความเห็น PO ที่ persist
+- เพิ่ม persistent key `procurementNotes` สำหรับเก็บความเห็น PO เป็น JSON state
+
+### Why
+- จาก feedback PO ที่ถามว่า Dead Stock monitor ยังไงและเทียบได้ไหม + แนวคิดของผู้ใช้ว่าถ้าจัดซื้อแม่นและตรวจสอบได้ ของจมต้องลดเอง
+- เคสจริง: หลายคลังเร่งใช้งบปลายปีให้หมด (กลัวโดนตัดงบปีหน้า) จนสั่งของซ้ำทั้งที่ยังมีของจม ต้องมีหน้าที่เปรียบเทียบย้อนหลังเพื่อจับ pattern นี้และใช้คุยกับเจ้าของโจทย์
+
+### Changed Files
+- `src/data/procurementHistory.ts` (ใหม่)
+- `src/utils/procurementAnalysis.ts` (ใหม่)
+- `src/App.tsx`
+- `DATA_POLICY.md`
+- `README.md`
+- `Design.md`
+- `.claude/launch.json` (ใหม่ - สำหรับ dev preview)
+- `PROJECT_UPDATES.md`
+
+### Verification
+- `npm.cmd run build` ผ่าน
+- รัน dev server + ตรวจผ่าน DOM: banner แสดงบน Dashboard, การ์ดดักแสดงในหน้า Create PR ของ C01 (กำลังซื้อ 20 เมตร ฿40,000 ↔ ของจม K030 6,200 เมตร), หน้า Audit แสดงมูลค่าของจมรวม ฿5,894,000 และ flag ครบ 3 เกณฑ์, ความเห็น PO persist ใน localStorage แล้วยังอยู่หลังบันทึก
+
+### Notes / Follow-up
+- ประวัติการของบและรายการ Dead Stock เป็น seed สำหรับ PoC; ใน production ควร derive จาก movement transaction + งบจัดสรรจริง ตามที่คอมเมนต์ไว้ในไฟล์ seed
+- เกณฑ์ flag (95% ใช้งบ, 1.5 เท่า peer) รวมไว้ที่ `procurementThresholds` ปรับได้ที่เดียว
+
 ## 2026-06-12 - เพิ่มเอกสาร Design สำหรับสรุปสถานะและแนวทางออกแบบ
 
 ### Summary

@@ -15,13 +15,17 @@ import {
   History,
   Landmark,
   Mail,
+  Megaphone,
   Menu,
+  MessageSquare,
   Minus,
   PackageCheck,
   PanelLeftClose,
   PanelLeftOpen,
   Phone,
   Plus,
+  Recycle,
+  Scale,
   Search,
   Send,
   Settings,
@@ -58,6 +62,22 @@ import {
   resolvePeaSkuId,
 } from "./data/peaDataModel";
 import type { PeaDataCoverage, PeaLeadTimeSkuSummary, PeaRiskCoverageRecord } from "./data/peaDataModel";
+import { fiscalYears } from "./data/procurementHistory";
+import {
+  analyzeBudgetRequests,
+  findDeadStockForSkuElsewhere,
+  getBudgetHistoryForWarehouseSku,
+  getDeadStockForSku,
+  getDeadStockListings,
+  getGotchaCaseCount,
+  getSkuHoldingsByWarehouse,
+  getTotalDeadStockValue,
+  getWarehouseProcurementSummaries,
+  gotchaFlagLabel,
+  procurementThresholds,
+  type BudgetRequestWithFlags,
+  type GotchaFlag,
+} from "./utils/procurementAnalysis";
 import { CalculationExplanationPanel } from "./components/CalculationExplanationPanel";
 import { CalculationSnapshotView } from "./components/CalculationSnapshotView";
 import {
@@ -115,6 +135,8 @@ type View =
   | "usage"
   | "transfer"
   | "stock-intelligence"
+  | "procurement-audit"
+  | "feedback"
   | "sku-detail"
   | "calculation"
   | "supplier"
@@ -128,6 +150,30 @@ type View =
   | "receiving-delay"
   | "budget-settings"
   | "settings";
+
+// ป้ายชื่อหน้าใช้ tag ความเห็น PO ว่าเขียนจากหน้าไหน (hybrid feedback)
+const viewLabels: Record<View, string> = {
+  dashboard: "แดชบอร์ด",
+  inventory: "คลังพัสดุ",
+  usage: "การใช้ SKU",
+  transfer: "โอน/ยืมพัสดุ",
+  "stock-intelligence": "วิเคราะห์สต็อก",
+  "procurement-audit": "ตรวจซื้อซ้ำ-ของจม",
+  feedback: "ศูนย์ความเห็น PO",
+  "sku-detail": "รายละเอียด SKU",
+  calculation: "รายละเอียดการคำนวณ",
+  supplier: "ซัพพลายเออร์",
+  "supplier-detail": "รายละเอียดซัพพลายเออร์",
+  "contact-log": "ประวัติติดต่อซัพพลายเออร์",
+  request: "คำขอซื้อ",
+  approval: "อนุมัติ",
+  history: "ประวัติ",
+  vmi: "VMI",
+  "vmi-simulation": "จำลอง VMI",
+  "receiving-delay": "รับของ/Delay",
+  "budget-settings": "งบประมาณ",
+  settings: "ตั้งค่า",
+};
 
 type ApprovalTab = "regional" | "central";
 
@@ -331,6 +377,14 @@ const delayReasonOptions = [
   "อื่น ๆ",
 ];
 
+type ProcurementNote = {
+  id: string;
+  text: string;
+  author: string;
+  context: string;
+  createdAt: string;
+};
+
 const persistentKeys = {
   suppliers: "suppliers",
   skus: "skus",
@@ -345,6 +399,7 @@ const persistentKeys = {
   budgetSettings: "budgetSettings",
   transferRequests: "transferRequests",
   receiptDelayLogs: "receiptDelayLogs",
+  procurementNotes: "procurementNotes",
 };
 
 const defaultFormulaPolicy: FormulaPolicyState = {
@@ -649,6 +704,7 @@ function App() {
   const [aiFeedbackLogs, setAiFeedbackLogs] = useState<AiSuggestionFeedback[]>(() => loadPersistentJson(persistentKeys.aiFeedbackLogs, []));
   const [transferRequests, setTransferRequests] = useState<TransferRequest[]>(() => loadPersistentJson(persistentKeys.transferRequests, []));
   const [receiptDelayLogs, setReceiptDelayLogs] = useState<ReceiptDelayLog[]>(() => loadPersistentJson(persistentKeys.receiptDelayLogs, []));
+  const [procurementNotes, setProcurementNotes] = useState<ProcurementNote[]>(() => loadPersistentJson(persistentKeys.procurementNotes, []));
   const [submittedConfirmation, setSubmittedConfirmation] = useState<PurchaseRequest | null>(null);
 
   useEffect(() => {
@@ -667,6 +723,7 @@ function App() {
   useEffect(() => savePersistentJson(persistentKeys.aiFeedbackLogs, aiFeedbackLogs), [aiFeedbackLogs]);
   useEffect(() => savePersistentJson(persistentKeys.transferRequests, transferRequests), [transferRequests]);
   useEffect(() => savePersistentJson(persistentKeys.receiptDelayLogs, receiptDelayLogs), [receiptDelayLogs]);
+  useEffect(() => savePersistentJson(persistentKeys.procurementNotes, procurementNotes), [procurementNotes]);
 
   const markMasterDataChanged = () => setMasterDataVersion((version) => version + 1);
 
@@ -674,6 +731,18 @@ function App() {
     setToast(message);
     window.setTimeout(() => setToast(""), 2600);
   };
+
+  // ความเห็น PO แบบ hybrid: เพิ่มได้จากทุกหน้า (auto-tag context) เก็บรวมที่ศูนย์ความเห็น
+  const addPoNote = (text: string, context: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    setProcurementNotes((current) => [
+      { id: `NOTE-${Date.now()}`, text: trimmed, author: "PO", context, createdAt: getCurrentDateTimeLabel() },
+      ...current,
+    ]);
+    notify("บันทึกความเห็น PO แล้ว");
+  };
+  const deletePoNote = (id: string) => setProcurementNotes((current) => current.filter((note) => note.id !== id));
 
   // เก็บ audit log ของการแก้ไขค่าตั้งต้นใน prototype
   // ถ้าต่อ API จริง จุดนี้สามารถเปลี่ยนเป็น service call เพื่อบันทึกลงฐานข้อมูลได้
@@ -1160,7 +1229,12 @@ function App() {
             aiFeedbackLogs={aiFeedbackLogs}
             budgetSettings={budgetSettings}
             onOpenTransfer={() => setView("transfer")}
+            onOpenTransferSku={(skuId) => {
+              setSelectedSkuId(skuId);
+              setView("transfer");
+            }}
             onOpenStockIntelligence={() => setView("stock-intelligence")}
+            onOpenAudit={() => setView("procurement-audit")}
           />
         );
       case "inventory":
@@ -1186,6 +1260,20 @@ function App() {
             receiptDelayLogs={receiptDelayLogs}
             onOpenSku={openSku}
           />
+        );
+      case "procurement-audit":
+        return (
+          <ProcurementAuditPage
+            onOpenSku={openSku}
+            onOpenTransfer={(skuId) => {
+              setSelectedSkuId(skuId);
+              setView("transfer");
+            }}
+          />
+        );
+      case "feedback":
+        return (
+          <FeedbackCenterPage notes={procurementNotes} onDeleteNote={deletePoNote} onOpenView={(target) => setView(target)} />
         );
       case "sku-detail":
         return (
@@ -1270,6 +1358,10 @@ function App() {
               setSelectedSupplierId(supplierId);
               setView("supplier-detail");
             }}
+            onOpenTransfer={(skuId) => {
+              setSelectedSkuId(skuId);
+              setView("transfer");
+            }}
             onSubmit={submitRequest}
           />
         );
@@ -1342,7 +1434,7 @@ function App() {
   })();
 
   return (
-    <AppLayout view={view} formulaPolicy={formulaPolicy} onNavigate={setView}>
+    <AppLayout view={view} formulaPolicy={formulaPolicy} onNavigate={setView} noteCount={procurementNotes.length} onAddNote={addPoNote}>
       {toast ? (
         <div className="fixed right-6 top-5 z-30 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 shadow-soft">
           {toast}
@@ -1430,11 +1522,15 @@ function AppLayout({
   view,
   formulaPolicy,
   onNavigate,
+  noteCount,
+  onAddNote,
   children,
 }: {
   view: View;
   formulaPolicy: FormulaPolicyState;
   onNavigate: (view: View) => void;
+  noteCount: number;
+  onAddNote: (text: string, context: string) => void;
   children: ReactNode;
 }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -1445,6 +1541,7 @@ function AppLayout({
     { id: "usage", label: "การใช้ SKU", icon: BarChart3 },
     { id: "transfer", label: "โอน/ยืมพัสดุ", icon: ArrowRightLeft },
     { id: "stock-intelligence", label: "วิเคราะห์สต็อก", icon: Archive },
+    { id: "procurement-audit", label: "ตรวจซื้อซ้ำ-ของจม", icon: Scale },
     { id: "supplier", label: "ซัพพลายเออร์", icon: Truck },
     { id: "request", label: "คำขอซื้อ", icon: FileText },
     { id: "approval", label: "อนุมัติ", icon: ClipboardCheck },
@@ -1452,6 +1549,7 @@ function AppLayout({
     { id: "vmi", label: "VMI", icon: Workflow },
     { id: "receiving-delay", label: "รับของ/Delay", icon: PackageCheck },
     { id: "budget-settings", label: "งบประมาณ", icon: Landmark },
+    { id: "feedback", label: "ศูนย์ความเห็น PO", icon: MessageSquare },
     { id: "settings", label: "ตั้งค่า", icon: Settings },
   ] as const;
 
@@ -1576,6 +1674,61 @@ function AppLayout({
         </header>
         <div className="p-4 md:p-7">{children}</div>
       </main>
+      <FeedbackQuickAdd contextLabel={viewLabels[view]} noteCount={noteCount} onAddNote={onAddNote} onOpenCenter={() => onNavigate("feedback")} />
+    </div>
+  );
+}
+
+// ปุ่มลอย "+ ความเห็น PO" บนทุกหน้า — เพิ่มความเห็นโดย auto-tag หน้าปัจจุบัน แล้วรวมที่ศูนย์ความเห็น
+function FeedbackQuickAdd({
+  contextLabel,
+  noteCount,
+  onAddNote,
+  onOpenCenter,
+}: {
+  contextLabel: string;
+  noteCount: number;
+  onAddNote: (text: string, context: string) => void;
+  onOpenCenter: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState("");
+
+  return (
+    <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-3">
+      {open ? (
+        <div className="w-80 rounded-xl border border-slate-200 bg-white shadow-2xl">
+          <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+            <p className="text-sm font-semibold text-slate-900">ความเห็น PO</p>
+            <button type="button" className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" onClick={() => setOpen(false)} aria-label="ปิด"><X className="h-4 w-4" /></button>
+          </div>
+          <div className="space-y-2 p-4">
+            <p className="text-xs text-slate-500">หน้านี้: <span className="font-medium text-slate-700">{contextLabel}</span></p>
+            <textarea className={textareaClass} placeholder="พิมพ์ความเห็น/feedback ของ PO ที่หน้านี้..." value={draft} onChange={(event) => setDraft(event.target.value)} />
+            <div className="flex items-center justify-between">
+              <button type="button" className="text-xs text-blue-700 hover:underline" onClick={onOpenCenter}>ดูทั้งหมด ({noteCount})</button>
+              <Button
+                disabled={!draft.trim()}
+                onClick={() => {
+                  onAddNote(draft, contextLabel);
+                  setDraft("");
+                  setOpen(false);
+                }}
+              >
+                <Plus className="h-4 w-4" /> บันทึก
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        className="inline-flex h-12 items-center gap-2 rounded-full bg-blue-700 px-5 text-sm font-semibold text-white shadow-lg transition hover:bg-blue-800"
+      >
+        <MessageSquare className="h-5 w-5" /> ความเห็น PO
+        {noteCount > 0 ? <span className="ml-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-white px-1.5 text-xs font-bold text-blue-700">{noteCount}</span> : null}
+      </button>
     </div>
   );
 }
@@ -1715,7 +1868,9 @@ function DashboardPage({
   aiFeedbackLogs,
   budgetSettings,
   onOpenTransfer,
+  onOpenTransferSku,
   onOpenStockIntelligence,
+  onOpenAudit,
 }: {
   openSku: (skuId: string) => void;
   requests: PurchaseRequest[];
@@ -1726,7 +1881,9 @@ function DashboardPage({
   aiFeedbackLogs: AiSuggestionFeedback[];
   budgetSettings: BudgetSettingsState;
   onOpenTransfer: () => void;
+  onOpenTransferSku: (skuId: string) => void;
   onOpenStockIntelligence: () => void;
+  onOpenAudit: () => void;
 }) {
   const [selectedRegionCode, setSelectedRegionCode] = useState("all");
   const [selectedWarehouseId, setSelectedWarehouseId] = useState("all");
@@ -1790,6 +1947,11 @@ function DashboardPage({
         title="ภาพรวมความเสี่ยงสต็อกและคำแนะนำจัดซื้อ"
         subtitle="หน้าหลักสำหรับผู้ใช้งานคลังและฝ่ายจัดซื้อ ตรวจสอบความเสี่ยง งบประมาณ และงานที่รออนุมัติ"
       />
+
+      <div className="mb-5">
+        <DeadStockExchangeBanner onOpenTransfer={onOpenTransferSku} onOpenAudit={onOpenAudit} />
+      </div>
+
       <Card className="mb-5 p-4">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
           <Field label="ปีข้อมูล">
@@ -2702,6 +2864,478 @@ function StockIntelligencePage({
   );
 }
 
+function GotchaBadge({ flag }: { flag: GotchaFlag }) {
+  const className: Record<GotchaFlag, string> = {
+    "repeat-buy": "bg-red-50 text-red-700 ring-red-200",
+    "spend-to-keep": "bg-amber-50 text-amber-700 ring-amber-200",
+    "over-peer": "bg-violet-50 text-violet-700 ring-violet-200",
+  };
+  return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${className[flag]}`}>{gotchaFlagLabel[flag]}</span>;
+}
+
+// แบนเนอร์ hero "ตลาดนัดเคลียร์ของจม" — โชว์ของจมที่ยืม/แลกได้ ใช้บนสุดของ Dashboard
+function DeadStockExchangeBanner({ onOpenTransfer, onOpenAudit }: { onOpenTransfer: (skuId: string) => void; onOpenAudit: () => void }) {
+  const listings = getDeadStockListings();
+  const totalValue = getTotalDeadStockValue();
+  const borrowableCount = listings.filter((item) => item.matchWarehouseId).length;
+  if (listings.length === 0) return null;
+
+  return (
+    <Card className="overflow-hidden border-amber-300 ring-1 ring-amber-200">
+      <div className="grid grid-cols-1 gap-4 bg-gradient-to-r from-amber-500 to-orange-500 px-5 py-4 text-white sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+        <div className="flex items-start gap-3">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/20">
+            <Megaphone className="h-6 w-6" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-lg font-bold leading-tight">ตลาดนัดเคลียร์ของจม · Dead Stock Exchange</p>
+            <p className="mt-0.5 text-sm text-amber-50">ของพร้อมแบ่งปันจากคลังเพื่อนบ้าน — ยืม/แลกก่อนตั้งงบซื้อใหม่ · ยืม/แลกได้ทันที {borrowableCount} รายการ</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-4 sm:flex-col sm:items-end sm:gap-0">
+          <div className="text-right">
+            <p className="text-xs font-medium uppercase tracking-wide text-amber-50">ทุนจมรวมที่เคลียร์ได้</p>
+            <p className="text-2xl font-extrabold leading-none">{formatTHB(totalValue)}</p>
+          </div>
+        </div>
+      </div>
+      <div className="divide-y divide-slate-100">
+        {listings.slice(0, 4).map((item) => (
+          <div key={item.id} className="flex flex-col gap-2 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-slate-900">
+                {item.skuName} <span className="font-normal text-slate-400">· {item.skuId}</span>
+                <span className="ml-2 inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">ไม่ขยับ {item.monthsIdle} เดือน</span>
+              </p>
+              <p className="mt-0.5 text-xs text-slate-500">
+                คลัง {item.warehouseId} · {formatNumber(item.qty, 0)} {item.unit} · ทุนจม {formatTHB(item.value)}
+                {item.matchWarehouseId ? <span className="font-medium text-emerald-700"> · คลัง {item.matchWarehouseId} กำลังขาด {formatNumber(item.matchShortageQty ?? 0, 0)} {item.unit}</span> : null}
+              </p>
+            </div>
+            <div className="flex shrink-0 gap-2">
+              <Button variant={item.matchWarehouseId ? "success" : "secondary"} onClick={() => onOpenTransfer(item.skuId)}>
+                <Recycle className="h-4 w-4" /> {item.matchWarehouseId ? "ยืม/แลกเลย" : "หาผู้รับโอน"}
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50 px-5 py-3">
+        <p className="text-xs text-slate-500">คำนวณจริงจาก: จำนวนของจม × ต้นทุนต่อหน่วย · เปลี่ยนเมื่อ: ของจม/ราคา หรือมีการยืม-โอน</p>
+        <Button variant="secondary" onClick={onOpenAudit}>
+          <Scale className="h-4 w-4" /> ตรวจซื้อซ้ำ-ของจม ทุกคลัง
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+// การ์ดดักตอนจะสร้างคำขอซื้อ — ถ้า SKU นี้มีของจมที่คลังอื่น เสนอยืมแทนการซื้อใหม่
+function DeadStockBorrowAlert({
+  skuId,
+  warehouseId,
+  requestedQuantity,
+  unitPrice,
+  onOpenTransfer,
+}: {
+  skuId: string;
+  warehouseId: string;
+  requestedQuantity: number;
+  unitPrice: number;
+  onOpenTransfer: (skuId: string) => void;
+}) {
+  const deadElsewhere = findDeadStockForSkuElsewhere(skuId, warehouseId);
+  if (!deadElsewhere) return null;
+
+  const potentialSaving = Math.max(0, requestedQuantity) * Math.max(0, unitPrice);
+
+  return (
+    <div className="rounded-md border border-red-300 bg-red-50 p-4">
+      <div className="flex items-start gap-3">
+        <Megaphone className="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-red-800">เบรกก่อนตั้งงบซื้อ! ของนี้มีอยู่แล้วที่คลังเพื่อนบ้าน</p>
+          <p className="mt-1 text-sm text-slate-700">
+            กำลังจะสั่งซื้อ {deadElsewhere.skuName} {formatNumber(requestedQuantity, 0)} {deadElsewhere.unit}
+            {potentialSaving > 0 ? <> ({formatTHB(potentialSaving)})</> : null} — แต่คลัง {deadElsewhere.warehouseId} มีของจม {formatNumber(deadElsewhere.qty, 0)} {deadElsewhere.unit} (ไม่ขยับ {deadElsewhere.monthsIdle} เดือน) ยืมได้ทันที
+          </p>
+          <div className="mt-3">
+            <Button variant="danger" onClick={() => onOpenTransfer(skuId)}>
+              <Recycle className="h-4 w-4" /> ขอยืมจาก {deadElsewhere.warehouseId} แทนการซื้อ
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BudgetRequestDetailModal({
+  record,
+  onClose,
+  onOpenSku,
+  onOpenTransfer,
+}: {
+  record: BudgetRequestWithFlags;
+  onClose: () => void;
+  onOpenSku: (skuId: string) => void;
+  onOpenTransfer: (skuId: string) => void;
+}) {
+  const deadForSku = getDeadStockForSku(record.skuId);
+  const history = getBudgetHistoryForWarehouseSku(record.warehouseId, record.skuId);
+  const peerRatio = record.peerAverageAmount > 0 ? record.amount / record.peerAverageAmount : 0;
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-slate-950/50 p-0 sm:items-center sm:p-4" onClick={onClose}>
+      <div
+        className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">ใบของบ · {record.id}</p>
+            <h3 className="mt-0.5 text-lg font-bold text-slate-950">
+              ปีงบ {record.fiscalYear} · {record.skuName}
+            </h3>
+            <p className="text-sm text-slate-500">คลัง {record.warehouseId} · {record.regionLabel} · {record.category}</p>
+          </div>
+          <button type="button" className="shrink-0 rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" onClick={onClose} aria-label="ปิด">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="space-y-5 px-5 py-4">
+          {record.flags.length > 0 ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+              <div className="flex flex-wrap gap-1.5">
+                {record.flags.map((flag) => (
+                  <GotchaBadge key={flag} flag={flag} />
+                ))}
+              </div>
+              <ul className="mt-2 space-y-1">
+                {record.flagNotes.map((note, index) => (
+                  <li key={index} className="text-sm text-red-800">• {note}</li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">ใบของบนี้ไม่ติด flag — ของบตาม demand จริง ไม่มีของจมค้าง</div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="rounded-lg bg-slate-50 p-3"><p className="text-xs text-slate-500">จำนวนที่ของบ</p><p className="text-base font-semibold text-slate-900">{formatNumber(record.requestedQty, 0)} {record.unit}</p></div>
+            <div className="rounded-lg bg-slate-50 p-3"><p className="text-xs text-slate-500">ต้นทุน/หน่วย</p><p className="text-base font-semibold text-slate-900">{formatTHB(record.unitCost)}</p></div>
+            <div className="rounded-lg bg-slate-50 p-3"><p className="text-xs text-slate-500">มูลค่างบ</p><p className="text-base font-semibold text-slate-900">{formatTHB(record.amount)}</p></div>
+            <div className="rounded-lg bg-slate-50 p-3"><p className="text-xs text-slate-500">เทียบคลังอื่น</p><p className={`text-base font-semibold ${peerRatio >= procurementThresholds.overPeerRatio ? "text-violet-700" : "text-slate-900"}`}>{peerRatio > 0 ? `${peerRatio.toFixed(1)}×` : "—"}</p></div>
+          </div>
+          {record.note ? <p className="text-sm text-slate-600">หมายเหตุ: {record.note}</p> : null}
+
+          <div>
+            <p className="mb-2 text-sm font-semibold text-slate-800">ประวัติการของบ {record.skuId} ของคลังนี้ (ย้อนหลัง)</p>
+            <div className="overflow-hidden rounded-lg border border-slate-200">
+              <table className="min-w-full text-left text-sm">
+                <thead className="bg-slate-50 text-xs text-slate-500"><tr><th className="px-3 py-2">ปีงบ</th><th className="px-3 py-2">จำนวน</th><th className="px-3 py-2">มูลค่างบ</th></tr></thead>
+                <tbody className="divide-y divide-slate-100">
+                  {history.map((row) => (
+                    <tr key={row.id} className={row.fiscalYear === record.fiscalYear ? "bg-amber-50" : ""}>
+                      <td className="px-3 py-2 font-medium">{row.fiscalYear}{row.fiscalYear === record.fiscalYear ? " (ใบนี้)" : ""}</td>
+                      <td className="px-3 py-2">{formatNumber(row.requestedQty, 0)} {row.unit}</td>
+                      <td className="px-3 py-2">{formatTHB(row.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {history.length >= 2 ? <p className="mt-1.5 text-xs text-slate-500">ของบ SKU เดียวกัน {history.length} ปีติด — ดูว่าซื้อซ้ำต่อเนื่องหรือไม่</p> : null}
+          </div>
+
+          <div>
+            <p className="mb-2 text-sm font-semibold text-slate-800">ของจม {record.skuId} ที่ยังค้างอยู่ในระบบ</p>
+            {deadForSku.length === 0 ? (
+              <p className="text-sm text-slate-500">ไม่พบของจมของ SKU นี้</p>
+            ) : (
+              <ul className="space-y-2">
+                {deadForSku.map((item) => (
+                  <li key={item.id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-900">คลัง {item.warehouseId} · {formatNumber(item.qty, 0)} {item.unit}</p>
+                      <p className="text-xs text-slate-500">ไม่ขยับ {item.monthsIdle} เดือน · ทุนจม {formatTHB(item.value)}{item.matchWarehouseId ? ` · คลัง ${item.matchWarehouseId} กำลังขาด` : ""}</p>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">{formatTHB(item.value)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
+          <Button variant="secondary" onClick={() => onOpenSku(record.skuId)}>ดูหน้า SKU</Button>
+          <Button variant="success" onClick={() => onOpenTransfer(record.skuId)}><Recycle className="h-4 w-4" /> ดูทางเลือกโอน/ยืม</Button>
+          <Button onClick={onClose}>ปิด</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProcurementAuditPage({
+  onOpenSku,
+  onOpenTransfer,
+}: {
+  onOpenSku: (skuId: string) => void;
+  onOpenTransfer: (skuId: string) => void;
+}) {
+  const allRequests = analyzeBudgetRequests();
+  const deadListings = getDeadStockListings();
+  const totalDeadValue = getTotalDeadStockValue();
+  const gotchaCount = getGotchaCaseCount();
+  const warehouseSummaries = getWarehouseProcurementSummaries();
+  const spendToKeepCount = warehouseSummaries.filter((row) => row.spendToKeep).length;
+
+  const regionOptions = Array.from(new Set(allRequests.map((record) => record.regionLabel)));
+  const categoryOptions = Array.from(new Set(allRequests.map((record) => record.category)));
+
+  const [yearFilter, setYearFilter] = useState("all");
+  const [regionFilter, setRegionFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [flaggedOnly, setFlaggedOnly] = useState(false);
+  const [selectedRecord, setSelectedRecord] = useState<BudgetRequestWithFlags | null>(null);
+
+  const filteredRequests = allRequests
+    .filter((record) => yearFilter === "all" || record.fiscalYear === yearFilter)
+    .filter((record) => regionFilter === "all" || record.regionLabel === regionFilter)
+    .filter((record) => categoryFilter === "all" || record.category === categoryFilter)
+    .filter((record) => !flaggedOnly || record.flags.length > 0);
+
+  return (
+    <>
+      <SectionHeader
+        title="ตรวจซื้อซ้ำ-ของจม · Procurement Audit"
+        subtitle="เก็บทุกการของบ/สั่งซื้อย้อนหลัง 3 ปีงบ เทียบรายคลัง เพื่อจับเคส 'ของบซื้อซ้ำทั้งที่ของยังจม' และเร่งใช้งบให้หมด"
+      />
+
+      <Card>
+        <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+          <p className="text-sm text-slate-700">
+            แนวคิด: ถ้าจัดซื้อแม่นและตรวจสอบได้ ของจมต้องลดลง หน้านี้ใช้ <b>เปรียบเทียบย้อนหลัง</b> ว่าคลังไหนยังของบซื้อของที่ตัวเองมีจมอยู่ หรือเร่งใช้งบปลายปีจนเกิดของจมรอบใหม่ · กดที่แถวเพื่อดูรายละเอียดใบของบ
+          </p>
+        </div>
+        <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
+          <MetricCard
+            label="มูลค่าของจมรวม"
+            value={formatTHB(totalDeadValue)}
+            helper={`${deadListings.length} รายการของจม`}
+            tone="red"
+            formula={`ผลรวม (จำนวนของจม × ต้นทุนต่อหน่วย) ของทุกรายการ = ${formatTHB(totalDeadValue)}`}
+            changes="ข้อมูลของจมหรือต้นทุนต่อหน่วยเปลี่ยน"
+          />
+          <MetricCard
+            label="เคสที่ควรทบทวน"
+            value={String(gotchaCount)}
+            helper="รายการของบที่ติด flag"
+            tone="yellow"
+            formula={`นับรายการของบที่เข้าเกณฑ์อย่างน้อย 1 flag (ซื้อซ้ำของจม / เร่งใช้งบ / งบสูงกว่าคลังอื่น) = ${gotchaCount}`}
+            changes="ข้อมูลการของบ ของจม หรือเกณฑ์ flag เปลี่ยน"
+          />
+          <MetricCard
+            label="คลังเข้าข่ายเร่งใช้งบ"
+            value={String(spendToKeepCount)}
+            helper={`ใช้งบ ≥ ${Math.round(procurementThresholds.spendToKeepUsageRatio * 100)}% + ของจมเพิ่ม`}
+            tone="purple"
+            formula={`นับคลังที่ปีล่าสุดใช้งบ ≥ ${Math.round(procurementThresholds.spendToKeepUsageRatio * 100)}% ของที่จัดสรร และมูลค่าของจมเพิ่มจากปีแรก = ${spendToKeepCount}`}
+            changes="งบจัดสรร/ใช้จริง หรือมูลค่าของจมรายปีเปลี่ยน"
+          />
+        </div>
+      </Card>
+
+      <Card className="mt-6">
+        <SectionHeader
+          title="เทียบคลัง: งบ vs ของจม (ปีงบล่าสุด)"
+          subtitle="คลังที่ใช้งบเกือบเต็มแต่ของจมยังโตเร็ว = สัญญาณซื้อของไม่ตรง demand"
+        />
+        <DataTable columns={["คลัง", "เขต", "ใช้งบปีล่าสุด", "มูลค่าของจม", "แนวโน้มของจม", "สถานะ"]} empty={warehouseSummaries.length === 0}>
+          {warehouseSummaries.map((row) => {
+            const usedPct = Math.min(100, Math.round(row.budgetUsedPercent));
+            const hot = row.budgetUsedPercent >= procurementThresholds.spendToKeepUsageRatio * 100;
+            return (
+              <tr key={row.warehouseId} className="hover:bg-slate-50">
+                <td className="px-4 py-3 font-semibold text-slate-900">{row.warehouseId}</td>
+                <td className="px-4 py-3">{row.regionLabel}</td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <div className="h-2 w-24 overflow-hidden rounded-full bg-slate-200">
+                      <div className={`h-full rounded-full ${hot ? "bg-amber-500" : "bg-blue-500"}`} style={{ width: `${usedPct}%` }} />
+                    </div>
+                    <span className={`text-xs font-semibold ${hot ? "text-amber-700" : "text-slate-600"}`}>{usedPct}%</span>
+                  </div>
+                  <span className="text-xs text-slate-500">{formatTHB(row.budgetUsed)} / {formatTHB(row.budgetAllocated)}</span>
+                </td>
+                <td className="px-4 py-3 font-semibold text-red-700">{formatTHB(row.deadStockValueLatest)}</td>
+                <td className={`px-4 py-3 font-semibold ${row.deadStockTrendPercent > 0 ? "text-red-600" : "text-emerald-700"}`}>
+                  <span className="inline-flex items-center gap-1">
+                    {row.deadStockTrendPercent > 0 ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />}
+                    {row.deadStockTrendPercent > 0 ? "+" : ""}{formatNumber(row.deadStockTrendPercent, 0)}%
+                  </span>
+                  <br /><span className="text-xs font-normal text-slate-500">เทียบปีแรก</span>
+                </td>
+                <td className="px-4 py-3">
+                  {row.spendToKeep ? <GotchaBadge flag="spend-to-keep" /> : <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">ปกติ</span>}
+                </td>
+              </tr>
+            );
+          })}
+        </DataTable>
+        <p className="border-t border-slate-100 px-4 py-3 text-xs text-slate-500">
+          คำนวณจริงจาก: งบจัดสรร/ใช้จริงปีล่าสุด และมูลค่าของจมปลายปี · เปลี่ยนเมื่อ: seed งบหรือของจมรายปีเปลี่ยน
+        </p>
+      </Card>
+
+      <Card className="mt-6">
+        <SectionHeader
+          title="ประวัติการของบ + จุดที่ควรทบทวน"
+          subtitle="กดที่แถวเพื่อดูรายละเอียดใบของบ เหตุผล flag ของจมที่เกี่ยว และประวัติย้อนหลัง"
+        />
+        <div className="flex flex-wrap items-end gap-3 border-b border-slate-200 px-4 py-3">
+          <Field label="ปีงบ">
+            <select className={inputClass} value={yearFilter} onChange={(event) => setYearFilter(event.target.value)}>
+              <option value="all">ทุกปีงบ</option>
+              {fiscalYears.map((year) => <option key={year} value={year}>{year}</option>)}
+            </select>
+          </Field>
+          <Field label="เขต">
+            <select className={inputClass} value={regionFilter} onChange={(event) => setRegionFilter(event.target.value)}>
+              <option value="all">ทุกเขต</option>
+              {regionOptions.map((region) => <option key={region} value={region}>{region}</option>)}
+            </select>
+          </Field>
+          <Field label="หมวดพัสดุ">
+            <select className={inputClass} value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
+              <option value="all">ทุกหมวด</option>
+              {categoryOptions.map((category) => <option key={category} value={category}>{category}</option>)}
+            </select>
+          </Field>
+          <label className="flex h-10 cursor-pointer items-center gap-2 rounded-md border border-slate-300 px-3 text-sm text-slate-700">
+            <input type="checkbox" checked={flaggedOnly} onChange={(event) => setFlaggedOnly(event.target.checked)} />
+            เฉพาะที่ติด flag
+          </label>
+          <span className="ml-auto text-sm text-slate-500">{filteredRequests.length} รายการ</span>
+        </div>
+        <DataTable columns={["ปีงบ", "คลัง", "SKU", "จำนวน", "มูลค่างบ", "flag", "รายละเอียด"]} empty={filteredRequests.length === 0}>
+          {filteredRequests.map((record) => (
+            <tr key={record.id} className={`cursor-pointer hover:bg-blue-50 ${record.flags.length > 0 ? "bg-red-50/40" : ""}`} onClick={() => setSelectedRecord(record)}>
+              <td className="px-4 py-3 whitespace-nowrap">{record.fiscalYear}</td>
+              <td className="px-4 py-3 font-semibold text-slate-900">{record.warehouseId}<br /><span className="text-xs font-normal text-slate-500">{record.regionLabel}</span></td>
+              <td className="px-4 py-3">{record.skuName}<br /><span className="text-xs text-slate-500">{record.skuId} · {record.category}</span></td>
+              <td className="px-4 py-3 whitespace-nowrap">{formatNumber(record.requestedQty, 0)} {record.unit}</td>
+              <td className="px-4 py-3 whitespace-nowrap font-semibold">{formatTHB(record.amount)}</td>
+              <td className="px-4 py-3">
+                {record.flags.length === 0 ? (
+                  <span className="text-xs text-slate-400">—</span>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {record.flags.map((flag) => (
+                      <GotchaBadge key={flag} flag={flag} />
+                    ))}
+                  </div>
+                )}
+              </td>
+              <td className="px-4 py-3">
+                <Button variant="secondary" onClick={(event) => { event.stopPropagation(); setSelectedRecord(record); }}>
+                  <Search className="h-4 w-4" /> ดูใบของบ
+                </Button>
+              </td>
+            </tr>
+          ))}
+        </DataTable>
+        <p className="border-t border-slate-100 px-4 py-3 text-xs text-slate-500">
+          เกณฑ์ flag: ซื้อซ้ำของจม = ของบ SKU ที่ยังมี dead stock ค้าง · เร่งใช้งบ = ใช้งบ ≥ {Math.round(procurementThresholds.spendToKeepUsageRatio * 100)}% + ของจมเพิ่ม · งบสูงกว่าคลังอื่น = งบ category สูงกว่าค่าเฉลี่ยคลังอื่น ≥ {procurementThresholds.overPeerRatio} เท่า
+        </p>
+      </Card>
+
+      {selectedRecord ? (
+        <BudgetRequestDetailModal
+          record={selectedRecord}
+          onClose={() => setSelectedRecord(null)}
+          onOpenSku={onOpenSku}
+          onOpenTransfer={onOpenTransfer}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function FeedbackCenterPage({
+  notes,
+  onDeleteNote,
+  onOpenView,
+}: {
+  notes: ProcurementNote[];
+  onDeleteNote: (id: string) => void;
+  onOpenView: (view: View) => void;
+}) {
+  const [contextFilter, setContextFilter] = useState("all");
+  const contextOptions = Array.from(new Set(notes.map((note) => note.context)));
+  const filtered = notes.filter((note) => contextFilter === "all" || note.context === contextFilter);
+  const labelToView = Object.fromEntries(Object.entries(viewLabels).map(([view, label]) => [label, view])) as Record<string, View>;
+
+  return (
+    <>
+      <SectionHeader
+        title="ศูนย์ความเห็น PO · Feedback Center"
+        subtitle="รวมความเห็นจากเจ้าของโจทย์/PO ทุกหน้าไว้ที่เดียว แต่ละความเห็น tag ว่ามาจากหน้าไหน · เพิ่มความเห็นได้จากปุ่มลอยทุกหน้า"
+      />
+      <Card>
+        <div className="flex flex-wrap items-end gap-3 border-b border-slate-200 px-4 py-3">
+          <Field label="กรองตามหน้า">
+            <select className={inputClass} value={contextFilter} onChange={(event) => setContextFilter(event.target.value)}>
+              <option value="all">ทุกหน้า</option>
+              {contextOptions.map((context) => <option key={context} value={context}>{context}</option>)}
+            </select>
+          </Field>
+          <span className="ml-auto text-sm text-slate-500">{filtered.length} ความเห็น</span>
+        </div>
+        <div className="p-4">
+          {filtered.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-slate-300 px-4 py-10 text-center">
+              <MessageSquare className="mx-auto h-8 w-8 text-slate-300" />
+              <p className="mt-2 text-sm text-slate-500">ยังไม่มีความเห็น — กดปุ่ม "ความเห็น PO" มุมขวาล่างเพื่อเพิ่มจากหน้าใดก็ได้</p>
+            </div>
+          ) : (
+            <ul className="space-y-3">
+              {filtered.map((note) => (
+                <li key={note.id} className="rounded-lg border border-slate-200 bg-white p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm text-slate-800">{note.text}</p>
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                        <span className="font-medium text-slate-700">{note.author}</span>
+                        <span>·</span>
+                        <button
+                          type="button"
+                          className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 font-medium text-blue-700 ring-1 ring-blue-200 hover:bg-blue-100"
+                          onClick={() => labelToView[note.context] && onOpenView(labelToView[note.context])}
+                        >
+                          {note.context}
+                        </button>
+                        <span>·</span>
+                        <span>{note.createdAt}</span>
+                      </div>
+                    </div>
+                    <button type="button" className="shrink-0 text-slate-400 hover:text-red-600" onClick={() => onDeleteNote(note.id)} aria-label="ลบความเห็น">
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </Card>
+    </>
+  );
+}
+
 function ReceivingDelayPage({
   requests,
   receiptDelayLogs,
@@ -3210,6 +3844,7 @@ function SkuDetailPage({
   const reorderPointRaw = recommendation.demandDuringLeadTime + recommendation.safetyStock;
   const rawSuggestedQuantity = recommendation.targetStockLevel - record.currentStock;
   const transferSuggestion = buildTransferSuggestions(supplierOfferData, formulaPolicy).find((suggestion) => suggestion.skuId === sku.id && suggestion.destinationWarehouseId === record.warehouseId);
+  const skuHoldings = getSkuHoldingsByWarehouse(sku.id);
 
   return (
     <>
@@ -3295,6 +3930,39 @@ function SkuDetailPage({
           supplierLeadTimeDays={primarySupplierRecord.leadTimeDays}
         />
       </div>
+      {skuHoldings.length > 0 ? (
+        <Card className="mt-4">
+          <SectionHeader
+            title={`การถือครอง ${sku.id} รายคลัง`}
+            subtitle="ดูว่า SKU นี้ถูกถือครองที่คลังไหนบ้าง คลังไหนของจม และคลังไหนกำลังขาด เพื่อช่วยตัดสินใจโอน/ยืมก่อนซื้อใหม่"
+          />
+          <DataTable columns={["คลัง", "เขต", "คงคลัง", "ใช้เฉลี่ย/เดือน", "Stock Cover", "สถานะ"]} empty={skuHoldings.length === 0}>
+            {skuHoldings.map((holding) => (
+              <tr key={holding.warehouseId} className="hover:bg-slate-50">
+                <td className="px-4 py-3 font-semibold text-slate-900">{holding.warehouseId}</td>
+                <td className="px-4 py-3">{holding.regionLabel}</td>
+                <td className="px-4 py-3">{formatNumber(holding.stockQty, 0)} {holding.unit}</td>
+                <td className="px-4 py-3">{holding.avgMonthlyUsage !== null ? `${formatNumber(holding.avgMonthlyUsage, 0)} ${holding.unit}` : "—"}</td>
+                <td className="px-4 py-3">{holding.stockCoverPeriods !== null ? `${formatNumber(holding.stockCoverPeriods, 2)} รอบ` : "—"}</td>
+                <td className="px-4 py-3">
+                  {holding.status === "dead" ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700 ring-1 ring-violet-200">
+                      ของจม{holding.monthsIdle !== null ? ` · ไม่ขยับ ${holding.monthsIdle} เดือน` : ""}
+                    </span>
+                  ) : holding.status === "short" ? (
+                    <span className="inline-flex rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700 ring-1 ring-red-200">เสี่ยงขาด</span>
+                  ) : (
+                    <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">เหมาะสม</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </DataTable>
+          <p className="border-t border-slate-100 px-4 py-3 text-xs text-slate-500">
+            คำนวณจริงจาก: คงคลังราย Factory/Plant (BATCH) + usage/cover จาก relationship analysis + รายการของจม · เปลี่ยนเมื่อ: stock, usage หรือข้อมูลของจมเปลี่ยน
+          </p>
+        </Card>
+      ) : null}
       {transferSuggestion ? (
         <Card className="mt-4 border-blue-200 bg-blue-50">
           <SectionHeader
@@ -4302,6 +4970,7 @@ function CreatePurchaseRequestPage({
   existingRequests,
   onBack,
   onContactSupplier,
+  onOpenTransfer,
   onSubmit,
 }: {
   skuId: string;
@@ -4312,6 +4981,7 @@ function CreatePurchaseRequestPage({
   existingRequests: PurchaseRequest[];
   onBack: () => void;
   onContactSupplier: (supplierId: string) => void;
+  onOpenTransfer: (skuId: string) => void;
   onSubmit: (request: PurchaseRequest) => void;
 }) {
   const sku = getSku(skuId);
@@ -4433,6 +5103,17 @@ function CreatePurchaseRequestPage({
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card className="p-5">
+          {findDeadStockForSkuElsewhere(sku.id, record.warehouseId) ? (
+            <div className="mb-5">
+              <DeadStockBorrowAlert
+                skuId={sku.id}
+                warehouseId={record.warehouseId}
+                requestedQuantity={requestedQuantity}
+                unitPrice={offer.unitPrice}
+                onOpenTransfer={onOpenTransfer}
+              />
+            </div>
+          ) : null}
           {transferSuggestion ? (
             <div className="mb-5">
               <InlineAlert tone="info">

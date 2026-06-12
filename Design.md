@@ -28,6 +28,9 @@
 - เพิ่ม Transfer / Borrow Center สำหรับพิจารณาโอนหรือยืม SKU ระหว่างคลังก่อนสร้างคำขอซื้อ
 - เพิ่ม Stock Intelligence สำหรับดู Stock Cover, Dead/Slow Stock Candidate, Stockout Forecast และผลกระทบตาม season
 - เพิ่ม Receiving / Delay Log สำหรับบันทึกรับของเข้าคลังและเหตุผลที่ส่งช้า
+- เพิ่ม Dead Stock Exchange (Dashboard) + การ์ดดักก่อนซื้อ (Create PR) เพื่อเสนอยืม/แลกของจมแทนการซื้อใหม่
+- เพิ่มหน้า Procurement Audit (`ตรวจซื้อซ้ำ-ของจม`) เทียบประวัติการของบย้อนหลัง 3 ปีงบ มี filter และ drill-down ใบของบ จับเคสซื้อซ้ำทั้งที่ของจมและเร่งใช้งบให้หมด
+- เพิ่มความเห็น PO แบบ hybrid: ปุ่มลอยทุกหน้า + ศูนย์ความเห็น PO รวมความเห็น tag ตามหน้า
 - เพิ่ม optional Google Sheet PO Feedback endpoint สำหรับส่ง event เพิ่มเติม แต่ไม่ใช่ source of truth
 - เพิ่มกฎใน `DATA_POLICY.md` ว่าห้ามทำ mock-only workflow ที่ข้อมูลหายหลัง refresh และทุก action สำคัญต้อง persist
 
@@ -101,6 +104,8 @@ AI Suggest ใช้เป็นตัวช่วยตัดสินใจ �
 | VMI | วิเคราะห์ candidate และจำลองผลลัพธ์ VMI |
 | โอน/ยืมพัสดุ | ตรวจทางเลือก transfer หรือ borrow ก่อนซื้อใหม่ |
 | วิเคราะห์สต็อก | เทียบ stock รายคลัง, Dead/Slow Stock, Stockout Forecast และ forecast error |
+| ตรวจซื้อซ้ำ-ของจม | เทียบประวัติการของบ 3 ปีงบ รายคลัง, filter, drill-down ใบของบ, flag ซื้อซ้ำของจม/เร่งใช้งบ และมูลค่าทุนจม |
+| ศูนย์ความเห็น PO | รวมความเห็น PO ทุกหน้า (tag ตามหน้า) เพิ่มได้จากปุ่มลอยทุกหน้า |
 | รับของ/Delay | บันทึกรับของเข้าคลัง, delay reason และ impact demand |
 | งบประมาณ | ตั้งค่า Local, Regional และ Central Budget |
 | ตั้งค่า | ตั้งค่า Formula Policy และ version |

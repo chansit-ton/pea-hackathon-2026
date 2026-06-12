@@ -29,6 +29,9 @@ Open the local Vite URL shown in the terminal.
 - เมนู `โอน/ยืมพัสดุ` ใช้ตรวจทางเลือก Transfer/Borrow ก่อนสร้างคำขอซื้อ โดยเก็บคำขอและ timeline เป็น persistent JSON state.
 - เมนู `วิเคราะห์สต็อก` ใช้เทียบ stock รายคลัง, Stock Cover, Dead/Slow Stock Candidate, Stockout Forecast ตาม season และ Forecast Error/Delay.
 - เมนู `รับของ/Delay` ใช้บันทึกรับของเข้าคลังและสาเหตุส่งช้า โดยคำนวณ Impact Demand = Average Daily Demand × Delay Days สำหรับ feedback รอบถัดไป.
+- เมนู `ตรวจซื้อซ้ำ-ของจม` (Procurement Audit) ใช้เทียบประวัติการของบ/สั่งซื้อย้อนหลัง 3 ปีงบ รายคลัง เพื่อจับเคส "ของบซื้อซ้ำทั้งที่ของยังจม" และ "เร่งใช้งบให้หมด" มี filter (ปีงบ/เขต/หมวด/เฉพาะที่ติด flag) และกดดูรายละเอียด "ใบของบ" แต่ละใบได้ (เหตุผล flag, ประวัติของบ SKU เดิมย้อนหลัง, ของจมที่เกี่ยว, เทียบ peer). ข้อมูล seed อยู่ใน `src/data/procurementHistory.ts` และค่าสรุป/flag คำนวณใน `src/utils/procurementAnalysis.ts` (ไม่ hardcode).
+- ความเห็น PO เป็นแบบ hybrid: ปุ่มลอย `ความเห็น PO` มีทุกหน้า (auto-tag หน้าปัจจุบัน) และเมนู `ศูนย์ความเห็น PO` รวมความเห็นทุกหน้าไว้ที่เดียว กรองตามหน้าได้ เก็บเป็น persistent JSON state.
+- Dashboard มี `Dead Stock Exchange` banner ประกาศของจมที่ยืม/แลกได้ พร้อมมูลค่าทุนจมและ aging และหน้า Create Purchase Request มีการ์ดดักเตือนถ้า SKU ที่จะซื้อมีของจมที่คลังอื่น (เสนอยืมแทนการซื้อ).
 - New PEA data model seed lives in `src/data/peaDataModel.ts` and separates `WH Id`, `Factory / Plant Id`, and `Supplier / Vendor`.
 - Database setup and future schema notes are in `database-setup.md`.
 - Project progress and change history must be recorded in `PROJECT_UPDATES.md`.
