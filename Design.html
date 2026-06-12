@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI Inventory Planning & Procurement Platform Design</title>
+  <style>
+    :root {
+      --bg: #eef2f7;
+      --paper: #ffffff;
+      --ink: #0f172a;
+      --muted: #475569;
+      --line: #dbe3ef;
+      --blue: #1d4ed8;
+      --soft-blue: #eff6ff;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Segoe UI", "Noto Sans Thai", Tahoma, sans-serif;
+      line-height: 1.65;
+    }
+
+    .page {
+      max-width: 1120px;
+      margin: 32px auto;
+      padding: 0 20px 48px;
+    }
+
+    .hero {
+      background: linear-gradient(135deg, #0f172a 0%, #1d4ed8 58%, #0f766e 100%);
+      color: white;
+      border-radius: 18px;
+      padding: 36px;
+      box-shadow: 0 18px 48px rgba(15, 23, 42, 0.22);
+    }
+
+    .hero p {
+      color: #dbeafe;
+      max-width: 850px;
+      margin: 10px 0 0;
+    }
+
+    h1 { font-size: 34px; line-height: 1.2; margin: 0; }
+    h2 { font-size: 24px; margin: 34px 0 14px; }
+    h3 { font-size: 18px; margin: 22px 0 8px; }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .pill {
+      border: 1px solid rgba(255, 255, 255, 0.34);
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 999px;
+      padding: 7px 12px;
+      font-size: 13px;
+    }
+
+    .card {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 22px;
+      margin-top: 18px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+      background: #f8fafc;
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 24px;
+      color: var(--blue);
+      margin: 4px 0;
+    }
+
+    .muted { color: var(--muted); }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      overflow: hidden;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: white;
+    }
+
+    th, td {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+      text-align: left;
+    }
+
+    th {
+      background: #f1f5f9;
+      color: #334155;
+      font-weight: 700;
+    }
+
+    tr:last-child td { border-bottom: 0; }
+
+    code, pre { font-family: Consolas, "Courier New", monospace; }
+
+    pre {
+      background: #0f172a;
+      color: #e2e8f0;
+      border-radius: 12px;
+      padding: 16px;
+      overflow-x: auto;
+    }
+
+    .callout {
+      border-left: 5px solid var(--blue);
+      background: var(--soft-blue);
+      padding: 14px 16px;
+      border-radius: 10px;
+      color: #1e3a8a;
+      margin: 14px 0;
+    }
+
+    .flow {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .step {
+      background: #eef2ff;
+      color: #3730a3;
+      border: 1px solid #c7d2fe;
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    @media (max-width: 840px) {
+      .grid, .grid-3 { grid-template-columns: 1fr; }
+      .hero { padding: 26px; }
+      h1 { font-size: 28px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <h1>เอกสารออกแบบระบบ AI Inventory Planning & Procurement Platform</h1>
+      <p>สรุปสถานะปัจจุบัน แนวคิด UX, data model, calculation logic, workflow และแนวทางต่อยอด backend สำหรับ prototype วางแผนพัสดุและจัดซื้อด้วย AI-assisted decision support</p>
+      <div class="meta">
+        <span class="pill">อัปเดต 12 มิถุนายน 2026</span>
+        <span class="pill">React + TypeScript + Tailwind CSS</span>
+        <span class="pill">Persistent JSON state</span>
+        <span class="pill">ไม่มี SAP/API จริงใน prototype</span>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>1. สรุปความคืบหน้าจนถึงปัจจุบัน</h2>
+      <p>ระบบพัฒนาจากต้นแบบ dashboard ไปเป็น workflow ที่สาธิตได้ครบตั้งแต่เห็น SKU เสี่ยง, เปิดรายละเอียด, ดูที่มาของ AI Suggested Quantity, สร้างคำขอซื้อ, ตรวจงบประมาณ, ส่งอนุมัติ, เก็บ snapshot, ตรวจประวัติ และจำลอง VMI</p>
+      <div class="grid-3">
+        <div class="metric">
+          <span>Core Flow</span>
+          <strong>ครบ</strong>
+          <p class="muted">Dashboard → SKU Detail → Request → Approval → History → VMI</p>
+        </div>
+        <div class="metric">
+          <span>Explainability</span>
+          <strong>พร้อม</strong>
+          <p class="muted">อธิบายสูตรด้วยค่าจริง และเก็บ Calculation Snapshot</p>
+        </div>
+        <div class="metric">
+          <span>Operational Add-ons</span>
+          <strong>เพิ่มแล้ว</strong>
+          <p class="muted">Transfer/Borrow, Stock Intelligence, Receiving/Delay และ Budget Settings</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>2. เป้าหมายของระบบ</h2>
+      <ul>
+        <li>ลดการคำนวณด้วย Excel และทำให้การวางแผนพัสดุมีมาตรฐานกลาง</li>
+        <li>ช่วยลดความเสี่ยง Overstock และ Understock</li>
+        <li>อธิบายที่มาของ Safety Stock, Reorder Point และ AI Suggested Quantity ให้ผู้ใช้เชื่อถือได้</li>
+        <li>ตรวจงบประมาณ 3 ชั้นและกำหนดเส้นทางอนุมัติอัตโนมัติ</li>
+        <li>เก็บเหตุผล override และ Calculation Snapshot เพื่อ audit ย้อนหลัง</li>
+        <li>รองรับทางเลือกโอน/ยืมพัสดุก่อนซื้อใหม่</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>3. หลักการออกแบบ</h2>
+      <div class="grid">
+        <div>
+          <h3>อธิบายได้</h3>
+          <p>ทุกตัวเลขสำคัญต้องบอกว่าคำนวณจากอะไร ใช้สูตรอะไร และจะเปลี่ยนเมื่อข้อมูลหรือ policy ใดเปลี่ยน</p>
+        </div>
+        <div>
+          <h3>ไม่ตัดสินใจแทนผู้ใช้</h3>
+          <p>AI Suggest เป็น decision support ผู้ใช้ override ได้ แต่ต้องระบุเหตุผลและเก็บ audit trail</p>
+        </div>
+        <div>
+          <h3>Snapshot ไม่เปลี่ยนย้อนหลัง</h3>
+          <p>คำขอในอดีตต้องใช้ค่าที่บันทึก ณ วันที่สร้างคำขอ ไม่คำนวณใหม่จาก policy ปัจจุบัน</p>
+        </div>
+        <div>
+          <h3>ไม่เดาเมื่อไม่ชัดเจน</h3>
+          <p>ถ้าไม่เข้าใจ data source, สูตร หรือ business rule ต้องถามก่อน ห้ามสร้างข้อมูลเองโดยไม่มีที่มา</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>4. Information Architecture</h2>
+      <table>
+        <thead><tr><th>หน้า</th><th>จุดประสงค์</th></tr></thead>
+        <tbody>
+          <tr><td>แดชบอร์ด</td><td>ภาพรวม SKU เสี่ยง, งบประมาณ, pending PR, VMI และ relationship insight</td></tr>
+          <tr><td>คลังพัสดุ</td><td>รายการ SKU และสถานะ stock</td></tr>
+          <tr><td>การใช้ SKU</td><td>ดู usage รายเดือน รายคลัง รายเขต และ season average</td></tr>
+          <tr><td>ซัพพลายเออร์</td><td>จัดการ supplier, supported items, ราคา, Lead Time, MOQ และ contact</td></tr>
+          <tr><td>คำขอซื้อ</td><td>สร้าง purchase request จาก AI Suggested Quantity</td></tr>
+          <tr><td>อนุมัติ</td><td>Regional และ Central approval queue</td></tr>
+          <tr><td>ประวัติ</td><td>Request History, Audit Trail และ Calculation Snapshot</td></tr>
+          <tr><td>VMI</td><td>วิเคราะห์ candidate และจำลองผลลัพธ์ VMI</td></tr>
+          <tr><td>โอน/ยืมพัสดุ</td><td>ตรวจทางเลือก transfer หรือ borrow ก่อนซื้อใหม่</td></tr>
+          <tr><td>วิเคราะห์สต็อก</td><td>เทียบ stock รายคลัง, Dead/Slow Stock, Stockout Forecast และ forecast error</td></tr>
+          <tr><td>รับของ/Delay</td><td>บันทึกรับของเข้าคลัง, delay reason และ impact demand</td></tr>
+          <tr><td>งบประมาณ</td><td>ตั้งค่า Local, Regional และ Central Budget</td></tr>
+          <tr><td>ตั้งค่า</td><td>ตั้งค่า Formula Policy และ version</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <h2>5. Main Demo Flow</h2>
+      <div class="flow">
+        <span class="step">Dashboard</span>
+        <span class="step">C01 SKU Detail</span>
+        <span class="step">ทำไมระบบแนะนำค่านี้?</span>
+        <span class="step">Create Request 20 เมตร</span>
+        <span class="step">Budget Routing</span>
+        <span class="step">Regional Approval</span>
+        <span class="step">History + Snapshot</span>
+        <span class="step">VMI Simulation</span>
+      </div>
+      <div class="callout">
+        ระบบแนะนำ C01 = 10 เมตร แต่ผู้ใช้ขอ 20 เมตร ระบบจึงคำนวณ Estimated Cost = 40,000 บาท, พบว่างบคลังไม่พอแต่งบเขตพอ, บังคับกรอกเหตุผล และส่งไปอนุมัติระดับเขต
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>6. Data Model Design</h2>
+      <table>
+        <thead><tr><th>Concept</th><th>ความหมาย</th><th>ใช้ทำอะไร</th></tr></thead>
+        <tbody>
+          <tr><td>WH Id</td><td>รหัสคลังพื้นที่ที่เกิด demand</td><td>usage history, warehouse filter, demand location</td></tr>
+          <tr><td>Factory / Plant Id</td><td>รหัสคลังหลักหรือโรงงานในระบบ SAP</td><td>stock, batch, movement, lead time</td></tr>
+          <tr><td>Supplier Id</td><td>ผู้ขายจริง</td><td>contact, price, Lead Time, MOQ</td></tr>
+          <tr><td>SKU Id</td><td>รหัสพัสดุ</td><td>key เชื่อม usage, stock, supplier และ request</td></tr>
+          <tr><td>Warehouse-Factory Mapping</td><td>ตารางเชื่อม WH กับ Factory</td><td>เชื่อม demand กับ stock และ lead time</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <h2>7. Calculation Design</h2>
+      <table>
+        <thead><tr><th>ค่า</th><th>สูตร</th></tr></thead>
+        <tbody>
+          <tr><td>Average Daily Demand</td><td>Historical Usage Total / Historical Usage Days</td></tr>
+          <tr><td>Demand Variability</td><td>Standard Deviation ของข้อมูลการใช้ย้อนหลัง</td></tr>
+          <tr><td>Adjusted Lead Time</td><td>Supplier Lead Time × Seasonal Factor × Budget Factor</td></tr>
+          <tr><td>Safety Stock</td><td>Z-score × Demand Variability × √Adjusted Lead Time</td></tr>
+          <tr><td>Demand During Lead Time</td><td>Average Daily Demand × Adjusted Lead Time</td></tr>
+          <tr><td>Reorder Point</td><td>Demand During Lead Time + Safety Stock</td></tr>
+          <tr><td>AI Suggested Quantity</td><td>Target Stock Level - Current Stock แล้วปัดขึ้นตาม MOQ</td></tr>
+          <tr><td>Estimated Cost</td><td>Requested Quantity × Supplier Unit Price</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <h2>8. Workflow Design</h2>
+      <div class="grid">
+        <div>
+          <h3>Purchase Request</h3>
+          <p>ใช้ SKU, Warehouse, Supplier, AI Suggested Quantity, Requested Quantity, Unit Price, Lead Time, MOQ และ Budget Context เพื่อสร้างคำขอพร้อม snapshot</p>
+        </div>
+        <div>
+          <h3>Approval</h3>
+          <p>ผู้อนุมัติเห็น variance, reason, budget check, supplier contact log และ calculation snapshot ก่อนตัดสินใจ</p>
+        </div>
+        <div>
+          <h3>Transfer / Borrow</h3>
+          <p>แนะนำคลังต้นทางที่มี stock cover เหลือพอ เพื่อพิจารณาโอนหรือยืมก่อนสั่งซื้อใหม่</p>
+        </div>
+        <div>
+          <h3>Receiving / Delay</h3>
+          <p>บันทึก delay reason และคำนวณ Impact Demand = Average Daily Demand × Delay Days เพื่อใช้เป็น feedback</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>9. Audit และ Feedback</h2>
+      <p>ระบบต้องเก็บ Calculation Snapshot ทุกครั้งที่สร้างคำขอ และถ้า AI Suggest ไม่ตรงกับค่าจริง ต้องเก็บ feedback เพื่อวัด error และใช้ปรับสูตรเวอร์ชันถัดไป โดยไม่แก้ snapshot เดิมย้อนหลัง</p>
+      <div class="callout">
+        ตัวอย่าง: เก็บ Suggested Quantity, Actual Quantity, Error Quantity, Error Percent, Formula Version และ Request Id เพื่อใช้ประเมินคุณภาพคำแนะนำ
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>10. Technical Architecture</h2>
+      <pre>React UI
+  ├─ App.tsx
+  ├─ components/
+  ├─ data/
+  ├─ utils/
+  └─ types.ts
+
+Data Flow
+  Seed Data
+    → Persistent JSON Store
+    → Calculation Utilities
+    → UI Pages
+    → Snapshot / Logs
+    → Optional Google Sheet Feedback</pre>
+      <p>ปัจจุบันใช้ browser localStorage ผ่าน persistent JSON store และสามารถต่อยอดเป็น backend API/database ตาม schema ใน <code>database-setup.md</code></p>
+    </section>
+
+    <section class="card">
+      <h2>11. สิ่งที่ควรทำต่อ</h2>
+      <div class="grid">
+        <div>
+          <h3>ก่อน demo</h3>
+          <ul>
+            <li>ตรวจ main demo flow ให้ลื่น</li>
+            <li>ตรวจ metric card ทุกใบว่ามีคำอธิบายในกรอบ</li>
+            <li>ตรวจ calculation detail ว่าใช้ค่าจริงเสมอ</li>
+            <li>ตรวจ request confirmation ว่าบอก snapshot saved ชัดเจน</li>
+          </ul>
+        </div>
+        <div>
+          <h3>หลัง demo</h3>
+          <ul>
+            <li>เพิ่ม backend หรือ lightweight API</li>
+            <li>เพิ่ม Excel import pipeline</li>
+            <li>เพิ่ม role-based approval</li>
+            <li>เพิ่ม auto-tune formula แบบ versioned จาก AI feedback</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>12. Positioning สำหรับนำเสนอ</h2>
+      <p>ระบบนี้ไม่ได้ให้ AI ตัดสินใจแทนผู้ใช้ แต่ช่วยคำนวณค่าที่ควรเติมจากข้อมูลการใช้ย้อนหลัง, stock ปัจจุบัน, Lead Time, ความผันผวน, MOQ, งบประมาณ และ policy กลาง พร้อมอธิบายวิธีคิด ตรวจเส้นทางอนุมัติ และเก็บ snapshot ทุกครั้ง เพื่อให้การวางแผนพัสดุมีมาตรฐานเดียวกัน ตรวจสอบย้อนหลังได้ และลดความเสี่ยงทั้ง Overstock และ Understock</p>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,3 +1,24 @@
+## 2026-06-12 - เพิ่มเอกสาร Design สำหรับสรุปสถานะและแนวทางออกแบบ
+
+### Summary
+- เพิ่ม `Design.md` เพื่อสรุปความคืบหน้าปัจจุบัน, product goal, UX flow, data model, calculation design, workflow, audit, VMI และ technical architecture
+- เพิ่ม `Design.html` เป็นเวอร์ชัน HTML standalone สำหรับเปิดอ่านหรือส่งต่อเป็นเอกสาร presentation/reference ได้ง่าย
+- สรุปกฎสำคัญของระบบ เช่น ต้องใช้ค่าจริงในการอธิบายสูตร, ต้องเก็บ Calculation Snapshot, ห้ามเดาเมื่อ business rule ไม่ชัดเจน และต้อง persist action สำคัญ
+
+### Why
+- ผู้ใช้ต้องการสรุปภาพรวมทั้งหมดจนถึงตอนนี้ และต้องการเอกสาร Design ทั้งแบบ Markdown และ HTML เพื่อส่งต่อหรือใช้ประกอบการตรวจ review
+
+### Changed Files
+- `Design.md`
+- `Design.html`
+- `PROJECT_UPDATES.md`
+
+### Verification
+- ตรวจไฟล์เอกสารที่เพิ่มใหม่แล้วว่าเป็นเนื้อหา static ไม่กระทบ runtime ของแอป
+
+### Notes / Follow-up
+- หากมีการเปลี่ยน design, data model, formula หรือ workflow หลังจากนี้ ควรอัปเดต `Design.md` และ `Design.html` ให้ตรงกับระบบปัจจุบันด้วย
+
 # Project Updates
 
 ไฟล์นี้ใช้บันทึกความคืบหน้าและการแก้ไขของโปรเจกต์ `AI Inventory Planning & Procurement Platform Prototype`
@@ -712,3 +733,31 @@
 
 ### Notes / Follow-up
 - ช่อง read-only ที่แสดงค่าตัวเลขไม่จำเป็นต้องใช้ component นี้ เพราะผู้ใช้ไม่ได้พิมพ์แก้ไข
+
+## 2026-06-05 - เพิ่ม Transfer, Stock Intelligence และ Receiving Delay
+
+### Summary
+- เพิ่มเมนู `โอน/ยืมพัสดุ` สำหรับแนะนำ Transfer/Borrow ก่อนสร้างคำขอซื้อใหม่
+- เพิ่ม Transfer Request state พร้อมสถานะ Requested, Approved, Completed, Rejected และ timeline สำหรับ audit
+- เพิ่มเมนู `วิเคราะห์สต็อก` สำหรับเทียบ stock รายคลัง, Stock Cover, Dead/Slow Stock Candidate, Stockout Forecast ตาม season และ Forecast Error/Delay
+- เพิ่มเมนู `รับของ/Delay` สำหรับบันทึกรับของเข้าคลัง สาเหตุ Delay และ Impact Demand
+- ปรับ Dashboard ให้แสดง Transfer Candidate, Dead/Slow Stock, Seasonal Stockout Risk และ Delay Impact
+- ปรับ SKU Detail และ Create Purchase Request ให้เตือนทางเลือกโอน/ยืมก่อนซื้อ หากระบบพบ source warehouse ที่ช่วยเติมได้
+- เพิ่ม persistence keys สำหรับ `transferRequests` และ `receiptDelayLogs`
+- อัปเดต `DATA_POLICY.md` และ `README.md` ให้ระบุกฎของ Transfer, Dead Stock, Forecast และ Delay
+
+### Why
+- Product Owner ต้องการให้ prototype รองรับการตัดสินใจ “โอน/ยืมก่อนซื้อ”, เทียบ stock รายคลัง, ดู Dead Stock, คาดการณ์ขาดตาม season และใช้ข้อมูลรับของ/Delay กลับไปปรับความเสี่ยงในรอบถัดไป
+
+### Changed Files
+- `src/App.tsx`
+- `DATA_POLICY.md`
+- `README.md`
+- `PROJECT_UPDATES.md`
+
+### Verification
+- `npm.cmd run build` ผ่าน
+
+### Notes / Follow-up
+- Transfer/Borrow ใน PoC ยังเป็น decision-support workflow และ persistent JSON state ยังไม่ใช่ stock movement จริงใน backend
+- Dead Stock แสดงเป็น Dead/Slow Stock Candidate เพื่อไม่ให้ตีความเป็นข้อสรุปบัญชีถาวร

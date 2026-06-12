@@ -4,6 +4,8 @@ import {
   ArrowLeft,
   ArrowDown,
   ArrowUp,
+  ArrowRightLeft,
+  Archive,
   BarChart3,
   Boxes,
   Calculator,
@@ -15,6 +17,7 @@ import {
   Mail,
   Menu,
   Minus,
+  PackageCheck,
   PanelLeftClose,
   PanelLeftOpen,
   Phone,
@@ -110,6 +113,8 @@ type View =
   | "dashboard"
   | "inventory"
   | "usage"
+  | "transfer"
+  | "stock-intelligence"
   | "sku-detail"
   | "calculation"
   | "supplier"
@@ -120,6 +125,7 @@ type View =
   | "history"
   | "vmi"
   | "vmi-simulation"
+  | "receiving-delay"
   | "budget-settings"
   | "settings";
 
@@ -188,6 +194,86 @@ type AiFeedbackStats = {
   latest?: AiSuggestionFeedback;
 };
 
+type TransferType = "Transfer" | "Borrow";
+
+type TransferStatus = "Requested" | "Approved" | "Completed" | "Rejected";
+
+type TransferTimelineItem = {
+  role: string;
+  action: string;
+  actor: string;
+  date: string;
+  note?: string;
+};
+
+type TransferRequest = {
+  id: string;
+  type: TransferType;
+  skuId: string;
+  skuName: string;
+  unit: string;
+  sourceWarehouseId: string;
+  destinationWarehouseId: string;
+  quantity: number;
+  sourceStockBefore: number;
+  destinationStockBefore: number;
+  destinationShortage: number;
+  decisionBasis: string;
+  seasonImpact: string;
+  status: TransferStatus;
+  createdAt: string;
+  timeline: TransferTimelineItem[];
+};
+
+type TransferSuggestion = {
+  skuId: string;
+  skuName: string;
+  unit: string;
+  sourceWarehouseId: string;
+  destinationWarehouseId: string;
+  sourceStock: number;
+  destinationStock: number;
+  destinationReorderPoint: number;
+  destinationShortage: number;
+  sourceExcess: number;
+  suggestedQuantity: number;
+  sourceStockCoverPeriods: number;
+  destinationStockCoverPeriods: number;
+  peakSeasonLabel: string;
+  decisionBasis: string;
+};
+
+type StockIntelligenceRow = {
+  skuId: string;
+  skuName: string;
+  category: string;
+  warehouseId: string;
+  regionLabel: string;
+  unit: string;
+  stockQty: number;
+  averageMonthlyUsage: number;
+  stockCoverPeriods: number;
+  peakSeasonLabel: string;
+  peakSeasonDemand: number;
+  projectedAfterPeakSeason: number;
+  status: "Stockout Risk" | "Transfer Source" | "Dead Stock Candidate" | "Balanced";
+};
+
+type ReceiptDelayLog = {
+  id: string;
+  skuId: string;
+  warehouseId: string;
+  supplierId: string;
+  relatedRequestId?: string;
+  plannedReceiveDate: string;
+  actualReceiveDate: string;
+  delayDays: number;
+  reasonCategory: string;
+  note: string;
+  impactDemand: number;
+  createdAt: string;
+};
+
 type SupplierCatalogInput = {
   supplier: Supplier;
   sku: Sku;
@@ -236,6 +322,15 @@ const usageSeasons = [
   { id: "rainy", label: "ฤดูฝน", helper: "มิ.ย.-ต.ค.", months: [6, 7, 8, 9, 10] },
 ];
 
+const delayReasonOptions = [
+  "Supplier ส่งช้ากว่ากำหนด",
+  "เอกสาร PO/อนุมัติล่าช้า",
+  "ขนส่งติดขัด",
+  "รอ QC / ตรวจรับ",
+  "งบประมาณหรือรอบจัดซื้อเลื่อน",
+  "อื่น ๆ",
+];
+
 const persistentKeys = {
   suppliers: "suppliers",
   skus: "skus",
@@ -248,6 +343,8 @@ const persistentKeys = {
   formulaVersions: "formulaVersions",
   aiFeedbackLogs: "aiFeedbackLogs",
   budgetSettings: "budgetSettings",
+  transferRequests: "transferRequests",
+  receiptDelayLogs: "receiptDelayLogs",
 };
 
 const defaultFormulaPolicy: FormulaPolicyState = {
@@ -503,6 +600,21 @@ function getNextRequestId(requests: PurchaseRequest[]) {
   return `REQ-${String(nextNumber).padStart(3, "0")}`;
 }
 
+function getNextTransferRequestId(requests: TransferRequest[]) {
+  const usedNumbers = new Set(
+    requests
+      .map((request) => Number(request.id.replace(/^TRF-/, "")))
+      .filter((value) => Number.isInteger(value) && value > 0),
+  );
+  let nextNumber = 1;
+
+  while (usedNumbers.has(nextNumber)) {
+    nextNumber += 1;
+  }
+
+  return `TRF-${String(nextNumber).padStart(3, "0")}`;
+}
+
 function App() {
   const [masterDataVersion, setMasterDataVersion] = useState(() => {
     hydratePersistentSeedData();
@@ -535,6 +647,8 @@ function App() {
     loadPersistentJson(persistentKeys.contactLogs, initialContactLogs),
   );
   const [aiFeedbackLogs, setAiFeedbackLogs] = useState<AiSuggestionFeedback[]>(() => loadPersistentJson(persistentKeys.aiFeedbackLogs, []));
+  const [transferRequests, setTransferRequests] = useState<TransferRequest[]>(() => loadPersistentJson(persistentKeys.transferRequests, []));
+  const [receiptDelayLogs, setReceiptDelayLogs] = useState<ReceiptDelayLog[]>(() => loadPersistentJson(persistentKeys.receiptDelayLogs, []));
   const [submittedConfirmation, setSubmittedConfirmation] = useState<PurchaseRequest | null>(null);
 
   useEffect(() => {
@@ -551,6 +665,8 @@ function App() {
   useEffect(() => savePersistentJson(persistentKeys.requests, requests), [requests]);
   useEffect(() => savePersistentJson(persistentKeys.contactLogs, contactLogs), [contactLogs]);
   useEffect(() => savePersistentJson(persistentKeys.aiFeedbackLogs, aiFeedbackLogs), [aiFeedbackLogs]);
+  useEffect(() => savePersistentJson(persistentKeys.transferRequests, transferRequests), [transferRequests]);
+  useEffect(() => savePersistentJson(persistentKeys.receiptDelayLogs, receiptDelayLogs), [receiptDelayLogs]);
 
   const markMasterDataChanged = () => setMasterDataVersion((version) => version + 1);
 
@@ -832,6 +948,72 @@ function App() {
     notify("บันทึกประวัติการติดต่อแล้ว");
   };
 
+  const createTransferRequest = (suggestion: TransferSuggestion, type: TransferType) => {
+    const createdAt = getCurrentDateTimeLabel();
+    const request: TransferRequest = {
+      id: getNextTransferRequestId(transferRequests),
+      type,
+      skuId: suggestion.skuId,
+      skuName: suggestion.skuName,
+      unit: suggestion.unit,
+      sourceWarehouseId: suggestion.sourceWarehouseId,
+      destinationWarehouseId: suggestion.destinationWarehouseId,
+      quantity: suggestion.suggestedQuantity,
+      sourceStockBefore: suggestion.sourceStock,
+      destinationStockBefore: suggestion.destinationStock,
+      destinationShortage: suggestion.destinationShortage,
+      decisionBasis: suggestion.decisionBasis,
+      seasonImpact: suggestion.peakSeasonLabel,
+      status: "Requested",
+      createdAt,
+      timeline: [
+        {
+          role: "Warehouse Planner",
+          action: type === "Borrow" ? "สร้างคำขอยืมพัสดุ" : "สร้างคำขอโอนย้ายพัสดุ",
+          actor: "Demo Planner",
+          date: createdAt,
+          note: `ระบบแนะนำจาก stock cover และ shortage: ${suggestion.decisionBasis}`,
+        },
+      ],
+    };
+
+    // Transfer/Borrow เป็น workflow ก่อนซื้อ: เก็บเป็น persistent JSON state เพื่อให้ผู้อนุมัติเห็นหลักฐานการตัดสินใจ
+    setTransferRequests((current) => [request, ...current]);
+    notify(`${request.id}: สร้าง${type === "Borrow" ? "คำขอยืม" : "คำขอโอนย้าย"}แล้ว`);
+  };
+
+  const updateTransferRequestStatus = (id: string, status: TransferStatus, action: string, note?: string) => {
+    const actionAt = getCurrentDateTimeLabel();
+
+    setTransferRequests((current) =>
+      current.map((request) =>
+        request.id === id
+          ? {
+              ...request,
+              status,
+              timeline: [
+                ...request.timeline,
+                {
+                  role: status === "Completed" ? "Receiving Warehouse" : "Transfer Approver",
+                  action,
+                  actor: status === "Completed" ? "เจ้าหน้าที่คลังปลายทาง" : "ผู้อนุมัติคลัง",
+                  date: actionAt,
+                  note,
+                },
+              ],
+            }
+          : request,
+      ),
+    );
+    notify(`${id}: ${action}`);
+  };
+
+  const addReceiptDelayLog = (log: ReceiptDelayLog) => {
+    // Receiving/Delay log ใช้เป็น feedback ให้ lead time และ seasonal shortage risk ในรอบคำนวณถัดไป
+    setReceiptDelayLogs((current) => [log, ...current]);
+    notify(`บันทึกรับของและ Delay ${log.id} แล้ว`);
+  };
+
   const saveAiSuggestionFeedback = (request: PurchaseRequest, actualQuantity: number, note: string) => {
     const { errorQuantity, errorPercent } = calculateAiSuggestionError(request.aiSuggestedQuantity, actualQuantity);
     const shouldAutoTune = Math.abs(errorPercent) >= formulaPolicy.highVarianceThreshold;
@@ -939,6 +1121,8 @@ function App() {
     const resetChangeLogs: ChangeLogEntry[] = [];
     const resetFormulaVersions = [buildFormulaHistoryBaseline(formulaPolicy, resetAt)];
     const resetAiFeedbackLogs: AiSuggestionFeedback[] = [];
+    const resetTransferRequests: TransferRequest[] = [];
+    const resetReceiptDelayLogs: ReceiptDelayLog[] = [];
 
     // เขียนลง persistent JSON โดยตรงก่อน setState เพื่อกันข้อมูลเก่าค้างหลัง refresh
     savePersistentJson(persistentKeys.requests, resetRequests);
@@ -946,12 +1130,16 @@ function App() {
     savePersistentJson(persistentKeys.changeLogs, resetChangeLogs);
     savePersistentJson(persistentKeys.formulaVersions, resetFormulaVersions);
     savePersistentJson(persistentKeys.aiFeedbackLogs, resetAiFeedbackLogs);
+    savePersistentJson(persistentKeys.transferRequests, resetTransferRequests);
+    savePersistentJson(persistentKeys.receiptDelayLogs, resetReceiptDelayLogs);
 
     setRequests(resetRequests);
     setContactLogs(resetContactLogs);
     setChangeLogs(resetChangeLogs);
     setFormulaVersions(resetFormulaVersions);
     setAiFeedbackLogs(resetAiFeedbackLogs);
+    setTransferRequests(resetTransferRequests);
+    setReceiptDelayLogs(resetReceiptDelayLogs);
     setSubmittedConfirmation(null);
     setSelectedRequestId(resetRequests[0]?.id ?? "");
     setApprovalTab("regional");
@@ -961,11 +1149,44 @@ function App() {
   const page = (() => {
     switch (view) {
       case "dashboard":
-        return <DashboardPage openSku={openSku} requests={requests} supplierOfferData={editableSupplierOffers} formulaPolicy={formulaPolicy} aiFeedbackLogs={aiFeedbackLogs} budgetSettings={budgetSettings} />;
+        return (
+          <DashboardPage
+            openSku={openSku}
+            requests={requests}
+            transferRequests={transferRequests}
+            receiptDelayLogs={receiptDelayLogs}
+            supplierOfferData={editableSupplierOffers}
+            formulaPolicy={formulaPolicy}
+            aiFeedbackLogs={aiFeedbackLogs}
+            budgetSettings={budgetSettings}
+            onOpenTransfer={() => setView("transfer")}
+            onOpenStockIntelligence={() => setView("stock-intelligence")}
+          />
+        );
       case "inventory":
         return <InventoryPage openSku={openSku} supplierOfferData={editableSupplierOffers} formulaPolicy={formulaPolicy} />;
       case "usage":
         return <WarehouseSkuUsagePage />;
+      case "transfer":
+        return (
+          <TransferCenterPage
+            selectedSkuId={selectedSkuId}
+            transferRequests={transferRequests}
+            supplierOfferData={editableSupplierOffers}
+            formulaPolicy={formulaPolicy}
+            onOpenSku={openSku}
+            onCreateTransfer={createTransferRequest}
+            onUpdateTransfer={updateTransferRequestStatus}
+          />
+        );
+      case "stock-intelligence":
+        return (
+          <StockIntelligencePage
+            aiFeedbackLogs={aiFeedbackLogs}
+            receiptDelayLogs={receiptDelayLogs}
+            onOpenSku={openSku}
+          />
+        );
       case "sku-detail":
         return (
           <SkuDetailPage
@@ -983,6 +1204,7 @@ function App() {
               setSelectedSupplierId(supplierId);
               setView("supplier-detail");
             }}
+            onTransfer={() => setView("transfer")}
             onVmi={() => setView("vmi-simulation")}
           />
         );
@@ -1087,6 +1309,15 @@ function App() {
         return <VmiCandidatePage onSimulation={() => setView("vmi-simulation")} openSku={openSku} />;
       case "vmi-simulation":
         return <VmiSimulationPage supplierOfferData={editableSupplierOffers} formulaPolicy={formulaPolicy} onBack={() => setView("vmi")} onCreateProposal={() => notify("สร้างข้อเสนอ VMI แบบร่างแล้ว")} />;
+      case "receiving-delay":
+        return (
+          <ReceivingDelayPage
+            requests={requests}
+            receiptDelayLogs={receiptDelayLogs}
+            supplierOfferData={editableSupplierOffers}
+            onSave={addReceiptDelayLog}
+          />
+        );
       case "budget-settings":
         return (
           <BudgetSettingsPage
@@ -1212,11 +1443,14 @@ function AppLayout({
     { id: "dashboard", label: "แดชบอร์ด", icon: BarChart3 },
     { id: "inventory", label: "คลังพัสดุ", icon: Boxes },
     { id: "usage", label: "การใช้ SKU", icon: BarChart3 },
+    { id: "transfer", label: "โอน/ยืมพัสดุ", icon: ArrowRightLeft },
+    { id: "stock-intelligence", label: "วิเคราะห์สต็อก", icon: Archive },
     { id: "supplier", label: "ซัพพลายเออร์", icon: Truck },
     { id: "request", label: "คำขอซื้อ", icon: FileText },
     { id: "approval", label: "อนุมัติ", icon: ClipboardCheck },
     { id: "history", label: "ประวัติ", icon: History },
     { id: "vmi", label: "VMI", icon: Workflow },
+    { id: "receiving-delay", label: "รับของ/Delay", icon: PackageCheck },
     { id: "budget-settings", label: "งบประมาณ", icon: Landmark },
     { id: "settings", label: "ตั้งค่า", icon: Settings },
   ] as const;
@@ -1474,17 +1708,25 @@ function filterWarehouseUsageRows(rows: WarehouseUsageRow[], selectedSkuId: stri
 function DashboardPage({
   openSku,
   requests,
+  transferRequests,
+  receiptDelayLogs,
   supplierOfferData,
   formulaPolicy,
   aiFeedbackLogs,
   budgetSettings,
+  onOpenTransfer,
+  onOpenStockIntelligence,
 }: {
   openSku: (skuId: string) => void;
   requests: PurchaseRequest[];
+  transferRequests: TransferRequest[];
+  receiptDelayLogs: ReceiptDelayLog[];
   supplierOfferData: SupplierOffer[];
   formulaPolicy: FormulaPolicyState;
   aiFeedbackLogs: AiSuggestionFeedback[];
   budgetSettings: BudgetSettingsState;
+  onOpenTransfer: () => void;
+  onOpenStockIntelligence: () => void;
 }) {
   const [selectedRegionCode, setSelectedRegionCode] = useState("all");
   const [selectedWarehouseId, setSelectedWarehouseId] = useState("all");
@@ -1534,6 +1776,12 @@ function DashboardPage({
   );
   const regionalBudgetTotal = budgetRegionKeys.reduce((sum, region) => sum + (budgetSettings.regionalBudgets[region] ?? 0), 0);
   const regionalBudgetHelper = budgetRegionKeys.length > 0 ? budgetRegionKeys.map((region) => regionLabels[region]).join(", ") : "ไม่มีเขตงบประมาณในตัวกรอง";
+  const transferSuggestions = buildTransferSuggestions(supplierOfferData, formulaPolicy);
+  const stockIntelligenceRows = buildStockIntelligenceRows();
+  const dashboardDeadStockCount = stockIntelligenceRows.filter((row) => row.status === "Dead Stock Candidate").length;
+  const dashboardStockoutForecastCount = stockIntelligenceRows.filter((row) => row.status === "Stockout Risk").length;
+  const openTransferCount = transferRequests.filter((request) => request.status === "Requested" || request.status === "Approved").length;
+  const delayImpactTotal = receiptDelayLogs.reduce((sum, log) => sum + log.impactDemand, 0);
 
   return (
     <>
@@ -1658,6 +1906,46 @@ function DashboardPage({
           formula={`นับ relationship record ที่ VMI Score ≥ 80 ตามตัวกรอง = ${vmiCandidateCount} รายการ`}
           changes="เลือก filter ใหม่ หรือข้อมูล demand stability, lead time และ stock coverage เปลี่ยน"
         />
+      </div>
+
+      <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          label="Transfer Candidate"
+          value={String(transferSuggestions.length)}
+          helper={`${openTransferCount} คำขอเปิดอยู่`}
+          tone="blue"
+          formula={`นับ SKU/คลังที่ปลายทางต่ำกว่า ROP และมีคลังต้นทางเหลือเกิน buffer 0.25 รอบ = ${transferSuggestions.length}`}
+          changes="Stock, ROP, usage, Transfer request หรือ relationship analysis เปลี่ยน"
+        />
+        <MetricCard
+          label="Dead/Slow Stock"
+          value={String(dashboardDeadStockCount)}
+          helper="stock cover ≥ 1.5 รอบ"
+          tone="purple"
+          formula={`นับ stock intelligence row ที่ stock cover ≥ 1.5 รอบ หรือ active period ต่ำ = ${dashboardDeadStockCount}`}
+          changes="ข้อมูล stock/usage หรือ threshold dead stock เปลี่ยน"
+        />
+        <MetricCard
+          label="เสี่ยงขาดตาม Season"
+          value={String(dashboardStockoutForecastCount)}
+          helper="seasonal stockout risk"
+          tone="red"
+          formula={`นับรายการที่ stock cover ต่ำกว่า 0.25 รอบ หรือ forecast หลัง season สูงสุดติดลบ = ${dashboardStockoutForecastCount}`}
+          changes="usage ตาม season, stock หรือ filter เปลี่ยน"
+        />
+        <MetricCard
+          label="Delay Impact"
+          value={formatNumber(delayImpactTotal, 0)}
+          helper={`${receiptDelayLogs.length} receiving logs`}
+          tone="yellow"
+          formula={`รวม impact demand จาก Delay Logs = Σ(Average Daily Demand × Delay Days) = ${formatNumber(delayImpactTotal, 0)}`}
+          changes="บันทึกข้อมูลรับของเข้าคลังหรือสาเหตุ Delay ใหม่"
+        />
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Button variant="secondary" onClick={onOpenTransfer}><ArrowRightLeft className="h-4 w-4" /> ดูคำแนะนำโอน/ยืมก่อนซื้อ</Button>
+        <Button variant="secondary" onClick={onOpenStockIntelligence}><Archive className="h-4 w-4" /> วิเคราะห์สต็อกและ Dead Stock</Button>
       </div>
 
       <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -2129,6 +2417,455 @@ function WarehouseSkuUsagePage() {
   );
 }
 
+function TransferCenterPage({
+  selectedSkuId,
+  transferRequests,
+  supplierOfferData,
+  formulaPolicy,
+  onOpenSku,
+  onCreateTransfer,
+  onUpdateTransfer,
+}: {
+  selectedSkuId: string;
+  transferRequests: TransferRequest[];
+  supplierOfferData: SupplierOffer[];
+  formulaPolicy: FormulaPolicyState;
+  onOpenSku: (skuId: string) => void;
+  onCreateTransfer: (suggestion: TransferSuggestion, type: TransferType) => void;
+  onUpdateTransfer: (id: string, status: TransferStatus, action: string, note?: string) => void;
+}) {
+  const [selectedPeaSkuId, setSelectedPeaSkuId] = useState(resolvePeaSkuId(selectedSkuId));
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState("all");
+  const [search, setSearch] = useState("");
+  const keyword = search.trim().toLowerCase();
+  const suggestions = buildTransferSuggestions(supplierOfferData, formulaPolicy)
+    .filter((item) => selectedPeaSkuId === "all" || resolvePeaSkuId(item.skuId) === selectedPeaSkuId || item.skuId === selectedPeaSkuId)
+    .filter((item) => selectedWarehouseId === "all" || item.destinationWarehouseId === selectedWarehouseId || item.sourceWarehouseId === selectedWarehouseId)
+    .filter((item) => !keyword || `${item.skuId} ${item.skuName} ${item.sourceWarehouseId} ${item.destinationWarehouseId}`.toLowerCase().includes(keyword));
+  const openTransfers = transferRequests.filter((request) => request.status === "Requested" || request.status === "Approved");
+  const transferQuantityTotal = transferRequests.reduce((sum, request) => sum + request.quantity, 0);
+  const topSuggestion = suggestions[0];
+
+  return (
+    <>
+      <PageTitle
+        eyebrow="โอนย้าย / ยืมพัสดุ"
+        title="Transfer & Borrow Center"
+        subtitle="ตรวจว่าควรโอนหรือยืมจากคลังอื่นก่อนสร้างคำขอซื้อใหม่ ลด overstock และลดความเสี่ยงขาดสต็อกตาม season"
+      />
+
+      <Card className="mb-5 p-4">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <Field label="SKU">
+            <select className={inputClass} value={selectedPeaSkuId} onChange={(event) => setSelectedPeaSkuId(event.target.value)}>
+              <option value="all">ทุก SKU ที่มีข้อมูลเปรียบเทียบ</option>
+              {getSharedUsageSkuOptions().map((sku) => (
+                <option key={sku.skuId} value={sku.skuId}>{sku.skuId} · {sku.skuName}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="คลังต้นทาง/ปลายทาง">
+            <select className={inputClass} value={selectedWarehouseId} onChange={(event) => setSelectedWarehouseId(event.target.value)}>
+              <option value="all">ทุกคลัง</option>
+              {getSharedUsageWarehouseOptions().map((warehouse) => (
+                <option key={warehouse.warehouseId} value={warehouse.warehouseId}>{warehouse.warehouseId} · {warehouse.warehouseName}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="ค้นหา">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" />
+              <input className={`${inputClass} pl-9`} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="ค้นหา SKU / คลัง" />
+            </div>
+          </Field>
+        </div>
+      </Card>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+        <MetricCard
+          label="Transfer Candidate"
+          value={String(suggestions.length)}
+          helper="รายการที่ควรตรวจ"
+          tone="blue"
+          formula={`นับรายการที่ปลายทางต่ำกว่า Reorder Point และมีคลังอื่นที่มี stock เหลือมากกว่า buffer ขั้นต่ำ = ${suggestions.length}`}
+          changes="Stock, usage, Reorder Point, filter หรือ relationship analysis เปลี่ยน"
+        />
+        <MetricCard
+          label="คำขอโอน/ยืมที่เปิดอยู่"
+          value={String(openTransfers.length)}
+          helper="Requested/Approved"
+          tone="yellow"
+          formula={`นับ transfer request ที่สถานะ Requested หรือ Approved = ${openTransfers.length}`}
+          changes="สร้างคำขอโอนใหม่ อนุมัติ ปิดงาน หรือไม่อนุมัติ"
+        />
+        <MetricCard
+          label="ปริมาณใน Transfer Log"
+          value={formatNumber(transferQuantityTotal, 0)}
+          helper="รวมทุกคำขอ"
+          tone="green"
+          formula={`ผลรวมจำนวนใน transfer history = ${formatNumber(transferQuantityTotal, 0)}`}
+          changes="สร้างหรือแก้สถานะคำขอโอน/ยืม"
+        />
+        <MetricCard
+          label="คำแนะนำหลัก"
+          value={topSuggestion ? `${topSuggestion.sourceWarehouseId} → ${topSuggestion.destinationWarehouseId}` : "-"}
+          helper={topSuggestion ? `${formatNumber(topSuggestion.suggestedQuantity)} ${topSuggestion.unit}` : "ยังไม่มี candidate"}
+          tone="purple"
+          formula={topSuggestion ? `เลือก candidate แรกจาก shortage ${formatNumber(topSuggestion.destinationShortage)} และ source excess ${formatNumber(topSuggestion.sourceExcess)} = ${formatNumber(topSuggestion.suggestedQuantity)} ${topSuggestion.unit}` : "ไม่มีรายการที่ผ่านเงื่อนไข"}
+          changes="filter หรือข้อมูล stock/usage/ROP เปลี่ยน"
+        />
+      </div>
+
+      <Card className="mt-5">
+        <SectionHeader
+          title="คำแนะนำโอนหรือยืมก่อนซื้อ"
+          subtitle="Suggested Transfer = min(จำนวนที่ระบบแนะนำเติม, source excess) โดย source excess คำนวณจาก stock ต้นทางหลังกัน buffer usage อย่างน้อย 0.25 รอบ"
+        />
+        <DataTable columns={["SKU", "คลังปลายทาง", "ขาดเทียบ ROP", "คลังต้นทาง", "Stock ต้นทาง", "แนะนำโอน/ยืม", "Season", "เหตุผล", "ดำเนินการ"]} empty={suggestions.length === 0}>
+          {suggestions.map((suggestion) => (
+            <tr key={`${suggestion.skuId}-${suggestion.sourceWarehouseId}-${suggestion.destinationWarehouseId}`} className="hover:bg-slate-50">
+              <td className="px-4 py-3 font-semibold text-slate-900">{suggestion.skuId}<br /><span className="text-xs font-normal text-slate-500">{suggestion.skuName}</span></td>
+              <td className="px-4 py-3">{suggestion.destinationWarehouseId}<br /><span className="text-xs text-slate-500">Stock {formatNumber(suggestion.destinationStock)} / ROP {formatNumber(suggestion.destinationReorderPoint)}</span></td>
+              <td className="px-4 py-3 text-red-700">{formatNumber(suggestion.destinationShortage)} {suggestion.unit}</td>
+              <td className="px-4 py-3">{suggestion.sourceWarehouseId}<br /><span className="text-xs text-slate-500">Cover {formatNumber(suggestion.sourceStockCoverPeriods, 2)} รอบ</span></td>
+              <td className="px-4 py-3">{formatNumber(suggestion.sourceStock)} {suggestion.unit}</td>
+              <td className="px-4 py-3 font-semibold text-blue-700">{formatNumber(suggestion.suggestedQuantity)} {suggestion.unit}</td>
+              <td className="px-4 py-3">{suggestion.peakSeasonLabel}</td>
+              <td className="min-w-80 px-4 py-3 text-sm leading-6 text-slate-600">{suggestion.decisionBasis}</td>
+              <td className="px-4 py-3">
+                <div className="grid min-w-36 gap-2">
+                  <Button onClick={() => onCreateTransfer(suggestion, "Transfer")}>สร้างคำขอโอน</Button>
+                  <Button variant="secondary" onClick={() => onCreateTransfer(suggestion, "Borrow")}>สร้างคำขอยืม</Button>
+                  <Button variant="ghost" onClick={() => onOpenSku(suggestion.skuId)}>ดู SKU</Button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </DataTable>
+      </Card>
+
+      <Card className="mt-5">
+        <SectionHeader title="ประวัติคำขอโอน/ยืม" subtitle="ทุกคำขอถูกเก็บเป็น persistent JSON state เพื่อใช้ตรวจสอบย้อนหลังใน PoC" />
+        <DataTable columns={["Request", "ประเภท", "SKU", "เส้นทาง", "จำนวน", "สถานะ", "เหตุผล", "Timeline", "Action"]} empty={transferRequests.length === 0}>
+          {transferRequests.map((request) => (
+            <tr key={request.id} className="hover:bg-slate-50">
+              <td className="px-4 py-3 font-semibold text-slate-900">{request.id}<br /><span className="text-xs font-normal text-slate-500">{request.createdAt}</span></td>
+              <td className="px-4 py-3">{getTransferTypeLabel(request.type)}</td>
+              <td className="px-4 py-3">{request.skuId}<br /><span className="text-xs text-slate-500">{request.skuName}</span></td>
+              <td className="px-4 py-3">{request.sourceWarehouseId} → {request.destinationWarehouseId}</td>
+              <td className="px-4 py-3">{formatNumber(request.quantity)} {request.unit}</td>
+              <td className="px-4 py-3"><TransferStatusBadge status={request.status} /></td>
+              <td className="min-w-72 px-4 py-3 text-sm leading-6 text-slate-600">{request.decisionBasis}</td>
+              <td className="min-w-72 px-4 py-3 text-xs leading-5 text-slate-500">
+                {request.timeline.map((item) => `${item.date}: ${item.action}`).join(" / ")}
+              </td>
+              <td className="px-4 py-3">
+                <div className="grid min-w-36 gap-2">
+                  <Button variant="secondary" disabled={request.status !== "Requested"} onClick={() => onUpdateTransfer(request.id, "Approved", "อนุมัติคำขอโอน/ยืม")}>อนุมัติ</Button>
+                  <Button disabled={request.status !== "Approved"} onClick={() => onUpdateTransfer(request.id, "Completed", "ปิดงานและรับเข้าคลังปลายทาง")}>ปิดงาน</Button>
+                  <Button variant="danger" disabled={request.status === "Completed" || request.status === "Rejected"} onClick={() => onUpdateTransfer(request.id, "Rejected", "ไม่อนุมัติคำขอ")}>ไม่อนุมัติ</Button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </DataTable>
+      </Card>
+    </>
+  );
+}
+
+function StockIntelligencePage({
+  aiFeedbackLogs,
+  receiptDelayLogs,
+  onOpenSku,
+}: {
+  aiFeedbackLogs: AiSuggestionFeedback[];
+  receiptDelayLogs: ReceiptDelayLog[];
+  onOpenSku: (skuId: string) => void;
+}) {
+  const [selectedRegionCode, setSelectedRegionCode] = useState("all");
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState("all");
+  const [selectedSkuId, setSelectedSkuId] = useState("all");
+  const [search, setSearch] = useState("");
+  const keyword = search.trim().toLowerCase();
+  const warehouseIds = new Set(getSelectedUsageWarehouseIds(selectedRegionCode, selectedWarehouseId));
+  const rows = buildStockIntelligenceRows()
+    .filter((row) => warehouseIds.has(row.warehouseId))
+    .filter((row) => selectedSkuId === "all" || row.skuId === selectedSkuId)
+    .filter((row) => !keyword || `${row.skuId} ${row.skuName} ${row.category} ${row.warehouseId}`.toLowerCase().includes(keyword));
+  const stockoutCount = rows.filter((row) => row.status === "Stockout Risk").length;
+  const transferSourceCount = rows.filter((row) => row.status === "Transfer Source").length;
+  const deadStockCount = rows.filter((row) => row.status === "Dead Stock Candidate").length;
+  const projectedImpactTotal = rows.filter((row) => row.projectedAfterPeakSeason < 0).reduce((sum, row) => sum + Math.abs(row.projectedAfterPeakSeason), 0);
+  const aiStats = buildAiFeedbackStats(aiFeedbackLogs);
+  const avgDelay = receiptDelayLogs.length > 0 ? receiptDelayLogs.reduce((sum, log) => sum + log.delayDays, 0) / receiptDelayLogs.length : 0;
+
+  return (
+    <>
+      <PageTitle
+        eyebrow="วิเคราะห์สต็อก"
+        title="Stock & Season Intelligence"
+        subtitle="เทียบสต็อก SKU รายคลัง ดู Dead/Slow Stock และคาดการณ์ขาดสต็อกตาม season เพื่อช่วยตัดสินใจโอน ยืม หรือสั่งซื้อ"
+      />
+
+      <Card className="mb-5 p-4">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+          <Field label="เขตจากชีต WH">
+            <select className={inputClass} value={selectedRegionCode} onChange={(event) => { setSelectedRegionCode(event.target.value); setSelectedWarehouseId("all"); }}>
+              <option value="all">ทุกเขต</option>
+              {getSharedUsageRegionOptions().map((regionCode) => <option key={regionCode} value={regionCode}>{formatPeaRegionCode(regionCode)}</option>)}
+            </select>
+          </Field>
+          <Field label="WH Id">
+            <select className={inputClass} value={selectedWarehouseId} onChange={(event) => setSelectedWarehouseId(event.target.value)}>
+              <option value="all">ทุกคลัง</option>
+              {getFilteredUsageWarehouseOptions(selectedRegionCode).map((warehouse) => (
+                <option key={warehouse.warehouseId} value={warehouse.warehouseId}>{warehouse.warehouseId} · {warehouse.warehouseName}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="SKU">
+            <select className={inputClass} value={selectedSkuId} onChange={(event) => setSelectedSkuId(event.target.value)}>
+              <option value="all">ทุก SKU</option>
+              {getSharedUsageSkuOptions().map((sku) => <option key={sku.skuId} value={sku.skuId}>{sku.skuId} · {sku.skuName}</option>)}
+            </select>
+          </Field>
+          <Field label="ค้นหา">
+            <input className={inputClass} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="ค้นหา SKU / รายการ / คลัง" />
+          </Field>
+        </div>
+      </Card>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <MetricCard
+          label="เสี่ยงขาดตาม Season"
+          value={String(stockoutCount)}
+          helper="Stockout Risk"
+          tone="red"
+          formula={`นับรายการที่ stock cover ต่ำกว่า 0.25 รอบ หรือ stock หลังหัก demand season สูงสุดติดลบ = ${stockoutCount}`}
+          changes="stock, usage season หรือ filter เปลี่ยน"
+        />
+        <MetricCard
+          label="คลังต้นทางที่ช่วยโอนได้"
+          value={String(transferSourceCount)}
+          helper="Transfer Source"
+          tone="blue"
+          formula={`นับรายการที่ stock ยังเกิน buffer 0.25 รอบและเหมาะพิจารณาเป็นต้นทางโอน = ${transferSourceCount}`}
+          changes="stock หรือ average usage เปลี่ยน"
+        />
+        <MetricCard
+          label="Dead/Slow Stock"
+          value={String(deadStockCount)}
+          helper="stock cover ≥ 1.5 รอบ"
+          tone="purple"
+          formula={`นับรายการที่ stock cover ≥ 1.5 รอบ หรือ active period ต่ำมาก = ${deadStockCount}`}
+          changes="stock, usage หรือเกณฑ์ dead stock เปลี่ยน"
+        />
+        <MetricCard
+          label="ผลกระทบ forecast shortage"
+          value={formatNumber(projectedImpactTotal, 0)}
+          helper="หน่วยรวมตาม SKU"
+          tone="yellow"
+          formula={`รวม absolute shortage หลังหัก demand ของ season สูงสุดจากทุกรายการ = ${formatNumber(projectedImpactTotal, 0)}`}
+          changes="season demand หรือ stock เปลี่ยน"
+        />
+        <MetricCard
+          label="Forecast Error / Delay"
+          value={aiStats.count > 0 ? `${formatNumber(aiStats.meanAbsoluteErrorPercent, 1)}%` : `${formatNumber(avgDelay, 1)} วัน`}
+          helper={aiStats.count > 0 ? "MAE จาก AI Feedback" : "Avg delay จากรับของ"}
+          tone="green"
+          formula={aiStats.count > 0 ? `เฉลี่ย |error percent| จาก feedback ${aiStats.count} รายการ = ${formatNumber(aiStats.meanAbsoluteErrorPercent, 1)}%` : `เฉลี่ย Delay จาก log รับของ ${receiptDelayLogs.length} รายการ = ${formatNumber(avgDelay, 1)} วัน`}
+          changes="บันทึก AI Feedback หรือ Receiving Delay ใหม่"
+        />
+      </div>
+
+      <Card className="mt-5">
+        <SectionHeader title="ตารางเทียบ Stock / Season / Dead Stock รายคลัง" subtitle="ใช้ตัดสินใจว่าควรยืม/โอนจากคลังใด หรือควรสร้างคำขอซื้อใหม่" />
+        <DataTable columns={["เขต", "คลัง", "SKU", "Stock", "Avg Usage/เดือน", "Stock Cover", "Season สูงสุด", "คาดการณ์หลัง Season", "สถานะ", "ดำเนินการ"]} empty={rows.length === 0}>
+          {rows.map((row) => (
+            <tr key={`${row.warehouseId}-${row.skuId}`} className="hover:bg-slate-50">
+              <td className="px-4 py-3">{row.regionLabel}</td>
+              <td className="px-4 py-3 font-semibold text-slate-900">{row.warehouseId}</td>
+              <td className="px-4 py-3">{row.skuId}<br /><span className="text-xs text-slate-500">{row.skuName}</span></td>
+              <td className="px-4 py-3">{formatNumber(row.stockQty)} {row.unit}</td>
+              <td className="px-4 py-3">{formatNumber(row.averageMonthlyUsage)} {row.unit}</td>
+              <td className="px-4 py-3">{formatNumber(row.stockCoverPeriods, 2)} รอบ</td>
+              <td className="px-4 py-3">{row.peakSeasonLabel}<br /><span className="text-xs text-slate-500">Demand {formatNumber(row.peakSeasonDemand)}</span></td>
+              <td className={`px-4 py-3 font-semibold ${row.projectedAfterPeakSeason < 0 ? "text-red-700" : "text-emerald-700"}`}>{formatNumber(row.projectedAfterPeakSeason)} {row.unit}</td>
+              <td className="px-4 py-3"><StockIntelligenceStatusBadge status={row.status} /></td>
+              <td className="px-4 py-3"><Button variant="secondary" onClick={() => onOpenSku(getShortSkuIdFromPeaSku(row.skuId))}>ดู SKU</Button></td>
+            </tr>
+          ))}
+        </DataTable>
+      </Card>
+    </>
+  );
+}
+
+function ReceivingDelayPage({
+  requests,
+  receiptDelayLogs,
+  supplierOfferData,
+  onSave,
+}: {
+  requests: PurchaseRequest[];
+  receiptDelayLogs: ReceiptDelayLog[];
+  supplierOfferData: SupplierOffer[];
+  onSave: (log: ReceiptDelayLog) => void;
+}) {
+  const defaultRequest = requests[0];
+  const [relatedRequestId, setRelatedRequestId] = useState(defaultRequest?.id ?? "");
+  const selectedRequest = relatedRequestId ? requests.find((request) => request.id === relatedRequestId) : undefined;
+  const [skuId, setSkuId] = useState(selectedRequest?.skuId ?? "C01");
+  const [warehouseId, setWarehouseId] = useState(selectedRequest?.warehouseId ?? "I010");
+  const [supplierId, setSupplierId] = useState(selectedRequest?.supplierId ?? "S001");
+  const [plannedReceiveDate, setPlannedReceiveDate] = useState(getDateInputValue());
+  const [actualReceiveDate, setActualReceiveDate] = useState(getDateInputValue());
+  const [reasonCategory, setReasonCategory] = useState(delayReasonOptions[0]);
+  const [note, setNote] = useState("บันทึกผลรับของเข้าคลังและสาเหตุ Delay เพื่อปรับการคำนวณรอบถัดไป");
+  const delayDays = calculateDateDiffDays(plannedReceiveDate, actualReceiveDate);
+  const impactDemand = calculateDelayImpactDemand(skuId, supplierId, supplierOfferData, Math.max(delayDays, 0));
+  const delayedLogs = receiptDelayLogs.filter((log) => log.delayDays > 0);
+  const totalImpactDemand = receiptDelayLogs.reduce((sum, log) => sum + log.impactDemand, 0);
+
+  useEffect(() => {
+    if (!selectedRequest) return;
+    setSkuId(selectedRequest.skuId);
+    setWarehouseId(selectedRequest.warehouseId);
+    setSupplierId(selectedRequest.supplierId);
+  }, [selectedRequest]);
+
+  const saveLog = () => {
+    onSave({
+      id: `RCV-${Date.now().toString().slice(-6)}`,
+      skuId,
+      warehouseId,
+      supplierId,
+      relatedRequestId: relatedRequestId || undefined,
+      plannedReceiveDate,
+      actualReceiveDate,
+      delayDays,
+      reasonCategory,
+      note,
+      impactDemand,
+      createdAt: getCurrentDateTimeLabel(),
+    });
+  };
+
+  return (
+    <>
+      <PageTitle
+        eyebrow="รับของ / Delay"
+        title="Receiving & Delay Log"
+        subtitle="บันทึกรับของเข้าคลังและสาเหตุ Delay เพื่อใช้ประเมิน shortage impact, supplier lead time และ seasonal risk ในรอบถัดไป"
+      />
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+        <MetricCard
+          label="Receiving Log"
+          value={String(receiptDelayLogs.length)}
+          helper="รายการทั้งหมด"
+          formula={`นับ Receiving/Delay log ที่บันทึกใน persistent JSON state = ${receiptDelayLogs.length}`}
+          changes="บันทึกรับของหรือ Delay ใหม่"
+        />
+        <MetricCard
+          label="รายการ Delay"
+          value={String(delayedLogs.length)}
+          helper="delayDays > 0"
+          tone="red"
+          formula={`นับ log ที่ actual date มากกว่า planned date = ${delayedLogs.length}`}
+          changes="บันทึกวันที่รับจริงหรือวันที่คาดว่าจะได้รับใหม่"
+        />
+        <MetricCard
+          label="Impact Demand รวม"
+          value={formatNumber(totalImpactDemand, 0)}
+          helper="หน่วยรวมตาม SKU"
+          tone="yellow"
+          formula={`ผลรวม Average Daily Demand × Delay Days ของทุก log = ${formatNumber(totalImpactDemand, 0)}`}
+          changes="เพิ่ม log delay หรือแก้ค่า demand/lead time"
+        />
+        <MetricCard
+          label="Impact รอบนี้"
+          value={formatNumber(impactDemand, 2)}
+          helper={`Delay ${delayDays} วัน`}
+          tone={delayDays > 0 ? "yellow" : "green"}
+          formula={`Average Daily Demand ของ ${skuId} × max(${delayDays}, 0) วัน = ${formatNumber(impactDemand, 2)}`}
+          changes="เลือก SKU/Request หรือวันที่รับจริงเปลี่ยน"
+        />
+      </div>
+
+      <Card className="mt-5">
+        <SectionHeader title="บันทึกรับของเข้าคลังและสาเหตุ Delay" subtitle="ข้อมูลนี้เป็น feedback loop ให้สูตรคำนวณ Lead Time และการคาดการณ์ขาดสต็อกตามฤดูกาล" />
+        <div className="grid grid-cols-1 gap-4 p-5 md:grid-cols-2 xl:grid-cols-3">
+          <Field label="อ้างอิงคำขอซื้อ">
+            <select className={inputClass} value={relatedRequestId} onChange={(event) => setRelatedRequestId(event.target.value)}>
+              <option value="">ไม่ผูกกับคำขอซื้อ</option>
+              {requests.map((request) => <option key={request.id} value={request.id}>{request.id} · {request.skuId} · {request.status}</option>)}
+            </select>
+          </Field>
+          <Field label="SKU">
+            <select className={inputClass} value={skuId} onChange={(event) => setSkuId(event.target.value)}>
+              {skus.map((sku) => <option key={sku.id} value={sku.id}>{sku.id} · {sku.name}</option>)}
+            </select>
+          </Field>
+          <Field label="คลังรับเข้า">
+            <select className={inputClass} value={warehouseId} onChange={(event) => setWarehouseId(event.target.value)}>
+              {warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.id} · {warehouse.name}</option>)}
+            </select>
+          </Field>
+          <Field label="ซัพพลายเออร์">
+            <select className={inputClass} value={supplierId} onChange={(event) => setSupplierId(event.target.value)}>
+              {suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.id} · {supplier.name}</option>)}
+            </select>
+          </Field>
+          <Field label="วันที่คาดว่าจะได้รับ">
+            <input className={inputClass} type="date" value={plannedReceiveDate} onChange={(event) => setPlannedReceiveDate(event.target.value)} />
+          </Field>
+          <Field label="วันที่รับจริง">
+            <input className={inputClass} type="date" value={actualReceiveDate} onChange={(event) => setActualReceiveDate(event.target.value)} />
+          </Field>
+          <Field label="สาเหตุ Delay">
+            <select className={inputClass} value={reasonCategory} onChange={(event) => setReasonCategory(event.target.value)}>
+              {delayReasonOptions.map((reason) => <option key={reason}>{reason}</option>)}
+            </select>
+          </Field>
+          <div className="md:col-span-2">
+            <Field label="หมายเหตุ">
+              <textarea className={textareaClass} value={note} onChange={(event) => setNote(event.target.value)} />
+            </Field>
+          </div>
+          <div className="flex items-end">
+            <Button className="w-full" onClick={saveLog}>
+              <PackageCheck className="h-4 w-4" />
+              บันทึกรับของ / Delay
+            </Button>
+          </div>
+        </div>
+      </Card>
+
+      <Card className="mt-5">
+        <SectionHeader title="Receiving & Delay History" subtitle="ใช้ย้อนดูว่า Supplier หรือกระบวนการใดทำให้ส่งช้า และกระทบ demand ระหว่างรอของเท่าไร" />
+        <DataTable columns={["วันที่บันทึก", "SKU", "คลัง", "Supplier", "Plan", "Actual", "Delay", "Impact Demand", "สาเหตุ", "หมายเหตุ"]} empty={receiptDelayLogs.length === 0}>
+          {receiptDelayLogs.map((log) => (
+            <tr key={log.id} className="hover:bg-slate-50">
+              <td className="px-4 py-3 font-semibold text-slate-900">{log.id}<br /><span className="text-xs font-normal text-slate-500">{log.createdAt}</span></td>
+              <td className="px-4 py-3">{log.skuId}</td>
+              <td className="px-4 py-3">{log.warehouseId}</td>
+              <td className="px-4 py-3">{log.supplierId}</td>
+              <td className="px-4 py-3">{log.plannedReceiveDate}</td>
+              <td className="px-4 py-3">{log.actualReceiveDate}</td>
+              <td className={`px-4 py-3 font-semibold ${log.delayDays > 0 ? "text-red-700" : "text-emerald-700"}`}>{log.delayDays} วัน</td>
+              <td className="px-4 py-3">{formatNumber(log.impactDemand, 2)}</td>
+              <td className="px-4 py-3">{log.reasonCategory}</td>
+              <td className="min-w-72 px-4 py-3 text-sm leading-6 text-slate-600">{log.note}</td>
+            </tr>
+          ))}
+        </DataTable>
+      </Card>
+    </>
+  );
+}
+
 type WarehouseUsageRow = {
   warehouseId: string;
   warehouseLabel: string;
@@ -2253,6 +2990,159 @@ function buildSeasonAverages(monthly: number[]): Record<string, number> {
   }, {});
 }
 
+function buildStockIntelligenceRows(): StockIntelligenceRow[] {
+  return peaRiskCoverageRecords.map((record) => {
+    const sku = peaSkuMaster.find((item) => item.skuId === record.skuId);
+    const monthly = Array.from({ length: 12 }, (_, index) =>
+      peaMonthlyUsage
+        .filter((usage) => usage.warehouseId === record.plantId && usage.skuId === record.skuId && usage.usageMonth === index + 1)
+        .reduce((sum, usage) => sum + usage.usageQty, 0),
+    );
+    const seasonAverages = buildSeasonAverages(monthly);
+    const peakSeason = usageSeasons.reduce((best, season) => (seasonAverages[season.id] > seasonAverages[best.id] ? season : best), usageSeasons[0]);
+    const peakSeasonDemand = seasonAverages[peakSeason.id] * peakSeason.months.length;
+    const projectedAfterPeakSeason = record.stockQty - peakSeasonDemand;
+    const sourceExcess = calculateSourceExcess(record.stockQty, record.avgPeriodUsage);
+    const status: StockIntelligenceRow["status"] =
+      record.stockCoverPeriods >= 1.5 || record.activePeriods <= 3
+        ? "Dead Stock Candidate"
+        : record.stockCoverPeriods < 0.25 || projectedAfterPeakSeason < 0
+          ? "Stockout Risk"
+          : sourceExcess > 0
+            ? "Transfer Source"
+            : "Balanced";
+
+    return {
+      skuId: record.skuId,
+      skuName: sku?.skuName ?? getShortSkuIdFromPeaSku(record.skuId),
+      category: sku?.category ?? "-",
+      warehouseId: record.plantId,
+      regionLabel: formatPeaRegionCode(record.regionCode),
+      unit: record.unit ?? sku?.unit ?? "-",
+      stockQty: record.stockQty,
+      averageMonthlyUsage: record.avgPeriodUsage,
+      stockCoverPeriods: record.stockCoverPeriods,
+      peakSeasonLabel: `${peakSeason.label} (${formatNumber(seasonAverages[peakSeason.id])})`,
+      peakSeasonDemand,
+      projectedAfterPeakSeason,
+      status,
+    };
+  });
+}
+
+function buildTransferSuggestions(supplierOfferData: SupplierOffer[], formulaPolicy: FormulaPolicyState): TransferSuggestion[] {
+  return inventoryRecords
+    .map((inventory) => {
+      const effectiveInventory = applyFormulaPolicy(inventory, formulaPolicy);
+      const supplier = getSupplierSkuRecord(getDefaultOffer(inventory.skuId, supplierOfferData).supplierId, inventory.skuId, supplierOfferData);
+      const recommendation = calculateInventoryRecommendation({
+        inventory: effectiveInventory,
+        supplier,
+        formulaVersion: formulaPolicy.formulaVersion,
+      });
+      const destinationShortage = Math.max(0, recommendation.reorderPoint - effectiveInventory.currentStock);
+      const peaSkuId = resolvePeaSkuId(inventory.skuId);
+      const destinationRelationship = peaRiskCoverageRecords.find((record) => record.skuId === peaSkuId && record.plantId === inventory.warehouseId);
+      const sourceCandidates = peaRiskCoverageRecords
+        .filter((record) => record.skuId === peaSkuId && record.plantId !== inventory.warehouseId)
+        .map((record) => ({ record, sourceExcess: calculateSourceExcess(record.stockQty, record.avgPeriodUsage) }))
+        .filter((item) => item.sourceExcess > 0)
+        .sort((a, b) => b.sourceExcess - a.sourceExcess);
+      const bestSource = sourceCandidates[0];
+
+      if (!bestSource || destinationShortage <= 0 || recommendation.suggestedQuantity <= 0) return null;
+
+      const stockRow = buildStockIntelligenceRows().find((row) => row.skuId === peaSkuId && row.warehouseId === bestSource.record.plantId);
+      const suggestedQuantity = Math.max(1, Math.min(Math.ceil(bestSource.sourceExcess), recommendation.suggestedQuantity));
+      const shortSkuId = getShortSkuIdFromPeaSku(peaSkuId);
+      const sku = getSku(shortSkuId);
+
+      return {
+        skuId: shortSkuId,
+        skuName: sku.name,
+        unit: sku.unit,
+        sourceWarehouseId: bestSource.record.plantId,
+        destinationWarehouseId: inventory.warehouseId,
+        sourceStock: bestSource.record.stockQty,
+        destinationStock: effectiveInventory.currentStock,
+        destinationReorderPoint: recommendation.reorderPoint,
+        destinationShortage,
+        sourceExcess: bestSource.sourceExcess,
+        suggestedQuantity,
+        sourceStockCoverPeriods: bestSource.record.stockCoverPeriods,
+        destinationStockCoverPeriods: destinationRelationship?.stockCoverPeriods ?? 0,
+        peakSeasonLabel: stockRow?.peakSeasonLabel ?? "ไม่พบ season",
+        decisionBasis: `ปลายทาง ${inventory.warehouseId} ต่ำกว่า ROP ${formatNumber(destinationShortage)} ${sku.unit}; ต้นทาง ${bestSource.record.plantId} มี stock ${formatNumber(bestSource.record.stockQty)} ${bestSource.record.unit} และกัน buffer usage 0.25 รอบแล้วยังเหลือ ${formatNumber(bestSource.sourceExcess)} ${bestSource.record.unit}`,
+      } satisfies TransferSuggestion;
+    })
+    .filter((item): item is TransferSuggestion => Boolean(item))
+    .sort((a, b) => b.destinationShortage - a.destinationShortage);
+}
+
+function calculateSourceExcess(stockQty: number, averageMonthlyUsage: number) {
+  // ใช้ buffer ขั้นต่ำ 0.25 รอบ usage เพื่อไม่แนะนำให้คลังต้นทางโอนจนเสี่ยงขาดเอง
+  return Math.max(0, stockQty - averageMonthlyUsage * 0.25);
+}
+
+function getShortSkuIdFromPeaSku(peaSkuId: string) {
+  return skus.find((sku) => resolvePeaSkuId(sku.id) === peaSkuId)?.id ?? peaSkuId;
+}
+
+function TransferStatusBadge({ status }: { status: TransferStatus }) {
+  const className: Record<TransferStatus, string> = {
+    Requested: "bg-blue-50 text-blue-700 ring-blue-200",
+    Approved: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+    Completed: "bg-slate-100 text-slate-700 ring-slate-200",
+    Rejected: "bg-red-50 text-red-700 ring-red-200",
+  };
+  const label: Record<TransferStatus, string> = {
+    Requested: "รออนุมัติ",
+    Approved: "อนุมัติแล้ว",
+    Completed: "ปิดงานแล้ว",
+    Rejected: "ไม่อนุมัติ",
+  };
+
+  return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${className[status]}`}>{label[status]}</span>;
+}
+
+function StockIntelligenceStatusBadge({ status }: { status: StockIntelligenceRow["status"] }) {
+  const className: Record<StockIntelligenceRow["status"], string> = {
+    "Stockout Risk": "bg-red-50 text-red-700 ring-red-200",
+    "Transfer Source": "bg-blue-50 text-blue-700 ring-blue-200",
+    "Dead Stock Candidate": "bg-violet-50 text-violet-700 ring-violet-200",
+    Balanced: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  };
+  const label: Record<StockIntelligenceRow["status"], string> = {
+    "Stockout Risk": "เสี่ยงขาด",
+    "Transfer Source": "ต้นทางโอนได้",
+    "Dead Stock Candidate": "Dead/Slow Stock",
+    Balanced: "สมดุล",
+  };
+
+  return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${className[status]}`}>{label[status]}</span>;
+}
+
+function getTransferTypeLabel(type: TransferType) {
+  return type === "Borrow" ? "ยืมชั่วคราว" : "โอนย้าย";
+}
+
+function calculateDateDiffDays(startDate: string, endDate: string) {
+  const start = new Date(`${startDate}T00:00:00`);
+  const end = new Date(`${endDate}T00:00:00`);
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0;
+
+  return Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function calculateDelayImpactDemand(skuId: string, supplierId: string, supplierOfferData: SupplierOffer[], delayDays: number) {
+  const inventory = inventoryRecords.find((record) => record.skuId === skuId) ?? inventoryRecords[0];
+  const supplier = getSupplierSkuRecord(supplierId, skuId, supplierOfferData);
+  const recommendation = calculateInventoryRecommendation({ inventory, supplier, formulaVersion });
+
+  return recommendation.averageDailyDemand * delayDays;
+}
+
 function MonthlyUsageBars({ monthlyTotals }: { monthlyTotals: number[] }) {
   const maxValue = Math.max(...monthlyTotals, 1);
 
@@ -2289,6 +3179,7 @@ function SkuDetailPage({
   onCalculation,
   onCreateRequest,
   onSupplier,
+  onTransfer,
   onVmi,
 }: {
   skuId: string;
@@ -2299,6 +3190,7 @@ function SkuDetailPage({
   onCalculation: () => void;
   onCreateRequest: (supplierId: string) => void;
   onSupplier: (supplierId: string) => void;
+  onTransfer: () => void;
   onVmi: () => void;
 }) {
   const sku = getSku(skuId);
@@ -2317,6 +3209,7 @@ function SkuDetailPage({
   const [showExplanation, setShowExplanation] = useState(false);
   const reorderPointRaw = recommendation.demandDuringLeadTime + recommendation.safetyStock;
   const rawSuggestedQuantity = recommendation.targetStockLevel - record.currentStock;
+  const transferSuggestion = buildTransferSuggestions(supplierOfferData, formulaPolicy).find((suggestion) => suggestion.skuId === sku.id && suggestion.destinationWarehouseId === record.warehouseId);
 
   return (
     <>
@@ -2402,6 +3295,26 @@ function SkuDetailPage({
           supplierLeadTimeDays={primarySupplierRecord.leadTimeDays}
         />
       </div>
+      {transferSuggestion ? (
+        <Card className="mt-4 border-blue-200 bg-blue-50">
+          <SectionHeader
+            title="คำแนะนำก่อนสั่งซื้อ: ตรวจโอน/ยืมจากคลังอื่น"
+            subtitle="ระบบพบคลังที่อาจช่วยเติม stock ได้ก่อนสร้างคำขอซื้อใหม่"
+            action={<Button onClick={onTransfer}><ArrowRightLeft className="h-4 w-4" /> เปิด Transfer Center</Button>}
+          />
+          <div className="grid grid-cols-1 gap-3 p-5 md:grid-cols-4">
+            <ReviewMetric label="คลังต้นทางที่แนะนำ" value={`${transferSuggestion.sourceWarehouseId} → ${transferSuggestion.destinationWarehouseId}`} />
+            <ReviewMetric label="จำนวนที่ควรโอน/ยืม" value={`${formatNumber(transferSuggestion.suggestedQuantity)} ${transferSuggestion.unit}`} />
+            <ReviewMetric label="ปลายทางขาดเทียบ ROP" value={`${formatNumber(transferSuggestion.destinationShortage)} ${transferSuggestion.unit}`} />
+            <ReviewMetric label="Season ที่ต้องระวัง" value={transferSuggestion.peakSeasonLabel} />
+          </div>
+          <div className="border-t border-blue-200 px-5 py-4 text-sm leading-6 text-blue-900">
+            <span className="font-semibold">คำนวณจริงจาก:</span> {transferSuggestion.decisionBasis}
+            <br />
+            <span className="font-semibold">เปลี่ยนเมื่อ:</span> Stock ต้นทาง/ปลายทาง, usage, ROP, MOQ หรือ relationship analysis เปลี่ยน
+          </div>
+        </Card>
+      ) : null}
       <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card>
           <SectionHeader
@@ -3440,6 +4353,7 @@ function CreatePurchaseRequestPage({
     (!quantityDiffers || Boolean(reasonCategory)) &&
     (!quantityDiffers || !highVariance || Boolean(reasonText.trim()));
   const submitLabel = recommendedLayer === "Local" ? "ส่งอนุมัติระดับคลัง" : recommendedLayer === "Regional" ? "ส่งอนุมัติระดับเขต" : "ส่งอนุมัติส่วนกลาง";
+  const transferSuggestion = buildTransferSuggestions(supplierOfferData, formulaPolicy).find((suggestion) => suggestion.skuId === sku.id && suggestion.destinationWarehouseId === record.warehouseId);
 
   const buildSnapshot = (requestId: string, createdAt: string): PurchaseRequestCalculationSnapshot => ({
     requestId,
@@ -3519,6 +4433,14 @@ function CreatePurchaseRequestPage({
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card className="p-5">
+          {transferSuggestion ? (
+            <div className="mb-5">
+              <InlineAlert tone="info">
+                ก่อนสั่งซื้อ ระบบพบทางเลือกโอน/ยืม {formatNumber(transferSuggestion.suggestedQuantity)} {transferSuggestion.unit} จากคลัง {transferSuggestion.sourceWarehouseId} ไป {transferSuggestion.destinationWarehouseId}
+                เพื่อช่วยลดการซื้อใหม่และลด Dead Stock ฝั่งต้นทาง แต่ยังสามารถสร้าง PR ได้หากโอนไม่พอหรือมีเหตุผลเฉพาะ
+              </InlineAlert>
+            </div>
+          ) : null}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Field label="SKU">
               <input className={inputClass} value={`${sku.id} · ${sku.name}`} readOnly />

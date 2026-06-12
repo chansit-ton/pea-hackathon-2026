@@ -26,6 +26,9 @@ Open the local Vite URL shown in the terminal.
 - หากไม่เข้าใจ data source, สูตร หรือ business rule ต้องถามผู้ใช้ก่อน ห้ามเดาหรือสร้างข้อมูลเอง.
 - ถ้า AI Suggest ไม่ตรงกับค่าจริง ให้บันทึก feedback ใน Request History เพื่อเก็บ error และใช้ปรับสูตรเวอร์ชันถัดไปโดยไม่แก้ Calculation Snapshot เดิมย้อนหลัง.
 - การส่ง PO feedback ไป Google Sheet เป็น optional endpoint ดูวิธีตั้งค่าใน `GOOGLE_SHEET_ENDPOINT.md`.
+- เมนู `โอน/ยืมพัสดุ` ใช้ตรวจทางเลือก Transfer/Borrow ก่อนสร้างคำขอซื้อ โดยเก็บคำขอและ timeline เป็น persistent JSON state.
+- เมนู `วิเคราะห์สต็อก` ใช้เทียบ stock รายคลัง, Stock Cover, Dead/Slow Stock Candidate, Stockout Forecast ตาม season และ Forecast Error/Delay.
+- เมนู `รับของ/Delay` ใช้บันทึกรับของเข้าคลังและสาเหตุส่งช้า โดยคำนวณ Impact Demand = Average Daily Demand × Delay Days สำหรับ feedback รอบถัดไป.
 - New PEA data model seed lives in `src/data/peaDataModel.ts` and separates `WH Id`, `Factory / Plant Id`, and `Supplier / Vendor`.
 - Database setup and future schema notes are in `database-setup.md`.
 - Project progress and change history must be recorded in `PROJECT_UPDATES.md`.

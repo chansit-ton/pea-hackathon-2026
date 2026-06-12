@@ -105,3 +105,14 @@
 - ทุกช่องกรอกตัวเลขที่ผู้ใช้แก้ไขได้ เช่น จำนวนที่ต้องการขอ, ราคาต่อหน่วย, Lead Time, MOQ, Reliability, ค่าจริงสำหรับ AI Feedback และค่าตั้งค่าสูตร ต้องยอมให้ผู้ใช้ลบค่าระหว่างพิมพ์จนช่องว่างได้
 - ห้ามใช้ pattern `Number(event.target.value)` กับ controlled input โดยตรง เพราะ `Number("")` จะกลายเป็น `0` และทำให้เกิดค่าผิดรูปแบบ เช่น `016`
 - หากต้องใช้ค่าตัวเลขระหว่างพิมพ์ ให้เก็บ draft เป็น string หรือใช้ component กลางที่รองรับค่าว่าง แล้วค่อยส่งค่าตัวเลขกลับเมื่อ input เป็นตัวเลขที่ถูกต้อง
+
+## กฎเพิ่มเติม: Transfer, Dead Stock, Stockout Forecast และ Delay
+
+- ก่อนสร้างคำขอซื้อใหม่ ระบบควรตรวจทางเลือกโอนย้ายหรือยืม SKU จากคลังอื่นก่อนเสมอ หากมีข้อมูล stock/usage เพียงพอ
+- Transfer/Borrow workflow ต้องเก็บ `Transfer Request`, สถานะ, จำนวน, คลังต้นทาง, คลังปลายทาง, เหตุผลการตัดสินใจ และ timeline เป็น persistent JSON state
+- การเทียบ stock รายคลังต้องแสดงสูตรใกล้ตัวเลข เช่น `Stock Cover = Stock ปัจจุบัน / Average Monthly Usage` และบอกว่าเปลี่ยนเมื่อ stock หรือ usage เปลี่ยน
+- Dead Stock ใน PoC ให้ใช้เป็น Dead/Slow Stock Candidate ไม่ใช่ข้อสรุปทางบัญชีถาวร ต้องแสดงเกณฑ์ที่ใช้ เช่น stock cover สูงกว่า threshold หรือ usage ต่ำมาก
+- Stockout Forecast ตาม Season ต้องคำนวณจาก stock ปัจจุบันเทียบกับ seasonal demand และต้องบอกผลกระทบว่าเหลือติดลบหรือเหลือเหนือ safety buffer เท่าไร
+- Receiving/Delay log ต้องเก็บวันที่คาดว่าจะได้รับ, วันที่รับจริง, delay days, สาเหตุ delay, note และ impact demand
+- Impact Demand จาก Delay ใช้สูตร `Average Daily Demand × Delay Days` และใช้เป็น feedback สำหรับปรับ lead time / seasonal shortage risk ในการคำนวณครั้งถัดไป
+- ห้ามแก้ Calculation Snapshot เดิมย้อนหลังจาก Transfer, Receiving หรือ Delay log ใหม่ ให้ใช้ log ใหม่กับ preview หรือคำขอใหม่เท่านั้น
