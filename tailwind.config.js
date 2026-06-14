@@ -46,6 +46,7 @@ export default {
       backgroundImage: {
         "sidebar-violet": "linear-gradient(168deg, #4A148C 0%, #330C66 52%, #2A0A52 100%)",
         "brand-violet": "linear-gradient(140deg, #8B2FE6 0%, #B51C9E 52%, #E84AA0 100%)",
+        "kpi-violet": "linear-gradient(140deg, #5B21B6 0%, #A41CA8 100%)",
       },
     },
   },

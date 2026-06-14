@@ -38,14 +38,72 @@ textarea:focus-visible {
 
 /* Numbers / codes read better in the design's mono face */
 .font-mono,
-.tabular {
+.tabular,
+.mono {
   font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
   font-feature-settings: "tnum" 1;
+}
+
+/* Pulsing status dot + table-row hover (ported from the HTML design) */
+@keyframes pdot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.8); }
+}
+
+/* Landing page animations (ported from PEA Landing design) */
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}
+@keyframes floaty {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+/* Landing page dark scrollbar (scoped to the dark landing takeover) */
+.landing-root {
+  scrollbar-width: thin;
+  scrollbar-color: #3a3152 transparent;
+}
+.landing-root::-webkit-scrollbar {
+  width: 10px;
+}
+.landing-root::-webkit-scrollbar-track {
+  background: transparent;
+}
+.landing-root::-webkit-scrollbar-thumb {
+  background: #3a3152;
+  border-radius: 99px;
+  border: 2px solid #0e0a1a;
+}
+.dash-row {
+  transition: background 0.12s;
+}
+.dash-row:hover {
+  background: #fbfafe;
 }
 
 /* Deep-violet sidebar gradient from the design */
 .sidebar-violet {
   background: linear-gradient(168deg, #4a148c 0%, #330c66 52%, #2a0a52 100%);
+  /* Thin, theme-matched scrollbar (Firefox) instead of the default fat light bar */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+}
+/* Thin, translucent scrollbar on the violet sidebar (WebKit/Chromium) */
+.sidebar-violet::-webkit-scrollbar {
+  width: 6px;
+}
+.sidebar-violet::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar-violet::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 99px;
+  border: 0;
+}
+.sidebar-violet::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.34);
 }
 
 /* Frosted, sticky top bar */
