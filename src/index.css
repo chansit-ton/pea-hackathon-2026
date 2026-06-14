@@ -9,8 +9,10 @@
 body {
   margin: 0;
   min-width: 0;
-  background: #f4f7fb;
-  color: #172033;
+  background: #f4f2fa;
+  color: #1c1830;
+  font-family: "Kanit", "Noto Sans Thai", Inter, Tahoma, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
 button,
@@ -25,11 +27,30 @@ a:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: 2px solid #2563eb;
+  outline: 2px solid #6d28d9;
   outline-offset: 2px;
 }
 
 .table-scroll {
   scrollbar-width: thin;
-  scrollbar-color: #cbd5e1 transparent;
+  scrollbar-color: #cfc8e0 transparent;
+}
+
+/* Numbers / codes read better in the design's mono face */
+.font-mono,
+.tabular {
+  font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Deep-violet sidebar gradient from the design */
+.sidebar-violet {
+  background: linear-gradient(168deg, #4a148c 0%, #330c66 52%, #2a0a52 100%);
+}
+
+/* Frosted, sticky top bar */
+.app-header {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: saturate(1.4) blur(10px);
+  -webkit-backdrop-filter: saturate(1.4) blur(10px);
 }

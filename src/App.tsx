@@ -1923,13 +1923,14 @@ function AppLayout({
         <div className={`border-b border-white/10 ${collapsed ? "px-3 py-5" : "px-5 py-5"}`}>
           <div className={`flex items-center ${collapsed ? "justify-center" : "justify-between gap-3"}`}>
             <div className={`flex min-w-0 items-center ${collapsed ? "justify-center" : "gap-3"}`}>
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-500">
-                <Sparkles className="h-5 w-5" />
+              <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-violet shadow-soft">
+                <Sparkles className="h-5 w-5 text-white" />
+                <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full border-2 border-[#330C66] bg-[#FFD057]" />
               </div>
               {!collapsed ? (
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-bold">PEA AI Inventory</p>
-                  <p className="truncate text-xs text-slate-400">แพลตฟอร์มจัดซื้อ</p>
+                  <p className="truncate text-sm font-bold tracking-tight">วางแผนพัสดุ &amp; จัดซื้อ</p>
+                  <p className="truncate text-xs text-white/45">Hackathon 2026 · by ThaiCloud</p>
                 </div>
               ) : null}
             </div>
@@ -1950,7 +1951,7 @@ function AppLayout({
           {navSections.map((section, sectionIndex) => (
             <div key={section.title} className={collapsed ? "" : sectionIndex > 0 ? "mt-4" : ""}>
               {!collapsed ? (
-                <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-500">{section.title}</p>
+                <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-white/40">{section.title}</p>
               ) : sectionIndex > 0 ? (
                 <div className="mx-2 my-2 border-t border-white/10" />
               ) : null}
@@ -1963,9 +1964,9 @@ function AppLayout({
                       key={item.id}
                       onClick={() => handleNavigate(item.id)}
                       title={collapsed ? item.label : undefined}
-                      className={`flex h-10 w-full items-center rounded-md text-sm font-medium transition ${
+                      className={`flex h-10 w-full items-center rounded-[10px] text-sm transition ${
                         collapsed ? "justify-center px-0" : "gap-3 px-3 text-left"
-                      } ${active ? "bg-blue-600 text-white" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}
+                      } ${active ? "bg-white/15 font-semibold text-white shadow-soft" : "font-normal text-white/65 hover:bg-white/10 hover:text-white"}`}
                     >
                       <Icon className="h-4 w-4 shrink-0" />
                       {!collapsed ? <span className="truncate">{item.label}</span> : null}
@@ -1992,7 +1993,7 @@ function AppLayout({
       ) : null}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-72 transform border-r border-slate-800 bg-slate-950 text-white shadow-2xl transition-transform duration-200 lg:hidden ${
+        className={`sidebar-violet fixed inset-y-0 left-0 z-50 w-72 transform border-r border-white/10 text-white shadow-2xl transition-transform duration-200 lg:hidden ${
           mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -2000,7 +2001,7 @@ function AppLayout({
       </aside>
 
       <aside
-        className={`hidden shrink-0 border-r border-slate-900 bg-slate-950 text-white transition-[width] duration-200 lg:block ${
+        className={`sidebar-violet hidden shrink-0 border-r border-white/10 text-white transition-[width] duration-200 lg:block lg:sticky lg:top-0 lg:h-screen lg:self-start ${
           sidebarCollapsed ? "w-20" : "w-64"
         }`}
       >
@@ -2008,7 +2009,7 @@ function AppLayout({
       </aside>
 
       <main className="min-w-0 flex-1">
-        <header className="border-b border-slate-200 bg-white px-4 py-4 md:px-7">
+        <header className="app-header sticky top-0 z-30 border-b border-slate-200 px-4 py-4 md:px-7">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 items-start gap-3">
               <button
@@ -3377,20 +3378,20 @@ function DeadStockExchangeBanner({ onOpenTransfer, onOpenAudit }: { onOpenTransf
   if (listings.length === 0) return null;
 
   return (
-    <Card className="overflow-hidden border-amber-300 ring-1 ring-amber-200">
-      <div className="grid grid-cols-1 gap-4 bg-gradient-to-r from-amber-500 to-orange-500 px-5 py-4 text-white sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+    <Card className="overflow-hidden border-violet-200 ring-1 ring-violet-200">
+      <div className="grid grid-cols-1 gap-4 bg-brand-violet px-5 py-4 text-white sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
         <div className="flex items-start gap-3">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/20">
             <Megaphone className="h-6 w-6" />
           </span>
           <div className="min-w-0">
             <p className="text-lg font-bold leading-tight">ตลาดนัดเคลียร์ของจม · Dead Stock Exchange</p>
-            <p className="mt-0.5 text-sm text-amber-50">ของพร้อมแบ่งปันจากคลังเพื่อนบ้าน — ยืม/แลกก่อนตั้งงบซื้อใหม่ · ยืม/แลกได้ทันที {borrowableCount} รายการ</p>
+            <p className="mt-0.5 text-sm text-white/80">ของพร้อมแบ่งปันจากคลังเพื่อนบ้าน — ยืม/แลกก่อนตั้งงบซื้อใหม่ · ยืม/แลกได้ทันที {borrowableCount} รายการ</p>
           </div>
         </div>
         <div className="flex items-center gap-4 sm:flex-col sm:items-end sm:gap-0">
           <div className="text-right">
-            <p className="text-xs font-medium uppercase tracking-wide text-amber-50">ทุนจมรวมที่เคลียร์ได้</p>
+            <p className="text-xs font-medium uppercase tracking-wide text-white/80">ทุนจมรวมที่เคลียร์ได้</p>
             <p className="text-2xl font-extrabold leading-none">{formatTHB(totalValue)}</p>
           </div>
         </div>

@@ -22,7 +22,7 @@ export function formatNumber(value: number, decimals = 2) {
 }
 
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <section className={`rounded-lg border border-slate-200 bg-white shadow-sm ${className}`}>{children}</section>;
+  return <section className={`rounded-2xl border border-slate-200 bg-white shadow-soft ${className}`}>{children}</section>;
 }
 
 export function SectionHeader({
@@ -66,7 +66,7 @@ export function Button({
   return (
     <button
       {...props}
-      className={`inline-flex h-9 items-center justify-center gap-2 rounded-md border px-3 text-sm font-medium transition disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400 ${variants[variant]} ${className}`}
+      className={`inline-flex h-9 items-center justify-center gap-2 rounded-lg border px-3.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400 ${variants[variant]} ${className}`}
     >
       {children}
     </button>
@@ -97,7 +97,7 @@ export function MetricCard({
     yellow: "border-amber-200 bg-amber-50 text-amber-800",
   };
   return (
-    <div className={`min-w-0 rounded-lg border p-4 shadow-sm ${tones[tone]}`}>
+    <div className={`min-w-0 rounded-2xl border p-4 shadow-soft ${tones[tone]}`}>
       <p className="min-w-0 break-words text-sm font-medium leading-5 text-slate-500">{label}</p>
       <div className="mt-3 min-w-0 space-y-1">
         <p className="min-w-0 break-words text-2xl font-semibold leading-tight tracking-normal [overflow-wrap:anywhere]">{value}</p>
@@ -219,10 +219,10 @@ export function Field({
 }
 
 export const inputClass =
-  "h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm transition placeholder:text-slate-400 focus:border-blue-600";
+  "h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 transition placeholder:text-slate-400 focus:border-blue-600 focus:bg-white";
 
 export const textareaClass =
-  "min-h-24 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition placeholder:text-slate-400 focus:border-blue-600";
+  "min-h-24 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 transition placeholder:text-slate-400 focus:border-blue-600 focus:bg-white";
 
 export function BudgetCheckCard({
   label,
