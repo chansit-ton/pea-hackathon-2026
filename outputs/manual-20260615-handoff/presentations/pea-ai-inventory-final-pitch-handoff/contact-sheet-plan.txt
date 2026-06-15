@@ -1,0 +1,19 @@
+Slide rhythms:
+1. Cover / thesis / metric rail
+2. Problem split-screen
+3. Persona and pain/outcome layout
+4. Decision tree
+5. Workflow pipeline
+6. Formula chain
+7. Audit flag proof board
+8. Impact matrix
+9. Technical stack
+10. Demo storyboard
+11. Roadmap timeline
+12. Closing statement with judge-fit checklist
+
+Rules:
+- No more than two card-grid slides
+- No three consecutive slides share same layout
+- Proof object dominates each slide
+- No fabricated logos; use text-only identity labels

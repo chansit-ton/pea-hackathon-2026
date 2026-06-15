@@ -1,0 +1,30 @@
+Task mode: create
+Primary deck-profile: product-platform
+Secondary gates: engineering-platform, strategy-leadership
+
+Required proof objects:
+- Product workflow architecture: Dashboard -> SKU Detail -> Calculation -> Dead Stock Guard -> PR -> Approval -> Audit -> VMI
+- Use-case journey: เจ้าหน้าที่พัสดุ creates PR with AI suggestion and guardrail
+- Product-to-financial linkage: reduce repeated purchase, dead stock, manual effort, stockout opportunity loss
+- Implementation architecture: data layer / calculation layer / workflow layer / audit layer
+- Roadmap: sandbox -> regional pilot -> enterprise integration
+
+Source/asset requirements:
+- Source facts come from README.md, PRODUCT_SPEC.md, DATA_POLICY.md, src/utils/inventoryCalculations.ts, src/utils/procurementAnalysis.ts, src/data/procurementHistory.ts, src/data/peaCatalog.ts
+- User-provided screenshots inform judging criteria and track assumptions
+- Do not fabricate PEA, RISE, or Hackathon logos. Use text-only brand cues and palette inspired by supplied screenshots.
+
+Brand authenticity constraints:
+- No unofficial logo recreation
+- Use PEA/Hackathon names as text only
+- Dark purple and orange palette allowed as event visual cue
+
+Profile-specific QA gates:
+- Product system must be visible, not only feature cards
+- Each capability must connect to impact or implementation
+- Technical labels must be specific: Calculation Snapshot, Safety Stock, ROP, MOQ, Approval Routing, Dead Stock Exchange
+
+Known missing inputs:
+- Exact final pitch time and slide template are not provided
+- No official PPTX template provided
+- No official logo files provided

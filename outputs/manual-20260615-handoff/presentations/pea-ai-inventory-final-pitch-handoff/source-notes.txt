@@ -1,0 +1,17 @@
+Sources used:
+- README.md: prototype scope, persistent JSON state, demo flow, feature list, optional integrations
+- PRODUCT_SPEC.md: personas, pain points, feature taxonomy, flow definitions, pitch prompt, PEA research alignment notes
+- DATA_POLICY.md: no hardcoded calculation policy, snapshot rules, feedback rules, transfer/dead-stock/procurement-audit guardrails
+- src/utils/inventoryCalculations.ts: formula chain and approval routing
+- src/utils/procurementAnalysis.ts: dead stock value, procurement flags, threshold logic
+- src/data/procurementHistory.ts: budget request history and dead stock seed examples
+- src/data/peaCatalog.ts: realistic electrical-material SKU catalog and deterministic data generation
+- User screenshots: judging criteria, judge focus areas, pitch deck guideline, track assumptions, problem/persona framing
+
+Identity assets:
+- No official logos embedded. Deck uses text labels only for PEA Hackathon / PEA / RISE.
+
+Metric notes:
+- ฿8.6M appears in the app intro as demo KPI.
+- Dead-stock examples in seed include 320 poles, 300m cable, 1,150 breakers, 3 transformers.
+- Seed dead-stock subtotal from listed examples = 4,605,000 THB, but deck uses it as sample evidence rather than total enterprise claim.
