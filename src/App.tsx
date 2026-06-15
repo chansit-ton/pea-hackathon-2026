@@ -31,6 +31,7 @@ import {
   UploadCloud,
   Hand,
   HandCoins,
+  Home,
   Lock,
   RefreshCcw,
   Repeat2,
@@ -467,11 +468,15 @@ type AuthUser = {
   username: string;
   password: string;
   role: UserRole;
+  // ตำแหน่ง/บทบาทที่เลือกตอนสมัคร (เดโม) — ใช้แสดงผล ไม่กระทบสิทธิ์จริง
+  title?: string;
 };
 type SessionUser = {
   name: string;
   username: string;
   role: UserRole;
+  // ป้ายบทบาทที่แสดงผล (เดโม): เจ้าหน้าที่คลัง / ผอ.เขต / นักวิเคราะห์ / God Mode — ไม่กระทบสิทธิ์จริง (role เป็นตัวคุม)
+  title?: string;
 };
 
 // บัญชี admin ในตัวสำหรับสิทธิ์ลบ (admin/admin) — รหัสยืนยันการลบ
@@ -809,6 +814,7 @@ function App() {
     return 0;
   });
   const [view, setView] = useState<View>("dashboard");
+  const [showIntro, setShowIntro] = useState(true);
   const [showLanding, setShowLanding] = useState(true);
   const [selectedSkuId, setSelectedSkuId] = useState("1CC0CG0002");
   const [selectedSupplierId, setSelectedSupplierId] = useState("S001");
@@ -902,7 +908,7 @@ function App() {
   };
 
   // ── Auth (PoC localStorage) ────────────────────────────────────────────────
-  const registerUser = (name: string, username: string, password: string): boolean => {
+  const registerUser = (name: string, username: string, password: string, title?: string): boolean => {
     const cleanName = name.trim();
     const cleanUsername = username.trim().toLowerCase();
     if (!cleanName || !cleanUsername || !password) {
@@ -913,9 +919,9 @@ function App() {
       notify("username นี้ถูกใช้แล้ว");
       return false;
     }
-    const newUser: AuthUser = { name: cleanName, username: cleanUsername, password, role: "user" };
+    const newUser: AuthUser = { name: cleanName, username: cleanUsername, password, role: "user", title };
     setAuthUsers((current) => [...current, newUser]);
-    setCurrentUser({ name: cleanName, username: cleanUsername, role: "user" });
+    setCurrentUser({ name: cleanName, username: cleanUsername, role: "user", title });
     notify(`สมัครและเข้าสู่ระบบเป็น ${cleanName} แล้ว`);
     return true;
   };
@@ -936,9 +942,14 @@ function App() {
       notify("username หรือรหัสผ่านไม่ถูกต้อง");
       return false;
     }
-    setCurrentUser({ name: found.name, username: found.username, role: found.role });
+    setCurrentUser({ name: found.name, username: found.username, role: found.role, title: found.title });
     notify(`เข้าสู่ระบบเป็น ${found.name} แล้ว`);
     return true;
+  };
+  // เข้าเล่นเดโมตามบทบาท (bypass login) — สร้าง session ผู้ใช้จำลองแล้วเข้าแอปทันที God Mode = สิทธิ์ admin
+  const demoLoginAs = (user: SessionUser) => {
+    setCurrentUser(user);
+    notify(`เข้าเล่นเดโมเป็น ${user.title ?? user.name} แล้ว`);
   };
   const logoutUser = () => {
     setCurrentUser(null);
@@ -1674,10 +1685,15 @@ function App() {
     }
   })();
 
+  if (showIntro) {
+    return <IntroPage onEnter={() => setShowIntro(false)} />;
+  }
+
   if (showLanding) {
     return (
       <LandingPage
         currentUser={currentUser}
+        onBackToIntro={() => setShowIntro(true)}
         onEnter={() => setShowLanding(false)}
         onLogin={() => {
           setShowLanding(false);
@@ -1691,16 +1707,17 @@ function App() {
     return (
       <AuthPage
         onLogin={(u, p) => { const ok = loginUser(u, p); if (ok) setView("dashboard"); return ok; }}
-        onRegister={(n, u, p) => { const ok = registerUser(n, u, p); if (ok) setView("dashboard"); return ok; }}
+        onRegister={(n, u, p, title) => { const ok = registerUser(n, u, p, title); if (ok) setView("dashboard"); return ok; }}
         onResetPassword={resetPassword}
         onGoogleLogin={(profile) => { loginWithGoogle(profile); setView("dashboard"); }}
+        onDemoLogin={(user) => { demoLoginAs(user); setView("dashboard"); }}
         onBack={() => setShowLanding(true)}
       />
     );
   }
 
   return (
-    <AppLayout view={view} formulaPolicy={formulaPolicy} onNavigate={setView} noteCount={procurementNotes.length} onAddNote={addPoNote} currentUser={currentUser} onLogout={logoutUser}>
+    <AppLayout view={view} formulaPolicy={formulaPolicy} onNavigate={setView} noteCount={procurementNotes.length} onAddNote={addPoNote} currentUser={currentUser} onLogout={logoutUser} onExitToLanding={() => setShowLanding(true)}>
       {toast ? (
         <div className="fixed right-6 top-5 z-30 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 shadow-soft">
           {toast}
@@ -1784,7 +1801,99 @@ function SubmitConfirmationModal({
   );
 }
 
-function LandingPage({ currentUser, onEnter, onLogin }: { currentUser: SessionUser | null; onEnter: () => void; onLogin: () => void }) {
+// หน้า Intro / splash — แสดงก่อน landing พร้อมแอนิเมชัน เข้าหน้าแรกอัตโนมัติใน ~10 วิ หรือกดข้าม (พอร์ตจาก PEA Intro design)
+function IntroPage({ onEnter }: { onEnter: () => void }) {
+  useEffect(() => {
+    const t = setTimeout(onEnter, 18000);
+    return () => clearTimeout(t);
+  }, [onEnter]);
+
+  const stats: { value: string; label: string; color: string; delay: string }[] = [
+    { value: "฿8.6M", label: "ทุนจมที่ดักได้", color: "#F472B6", delay: ".9s" },
+    { value: "87%", label: "ความแม่นยำ AI", color: "#C77DFF", delay: "1.05s" },
+    { value: "3 ชั้น", label: "อนุมัติงบ + Audit", color: "#FFD057", delay: "1.2s" },
+  ];
+
+  return (
+    <div style={s("position:relative;width:100vw;height:100vh;overflow:hidden;font-family:Kanit,sans-serif;background:radial-gradient(120% 90% at 50% 8%,#23123F 0%,#160C2B 42%,#0B0717 100%);display:flex;flex-direction:column;align-items:center;")}>
+      {/* animated grid floor */}
+      <div style={s("position:absolute;inset:0;background-image:linear-gradient(rgba(168,85,247,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(168,85,247,.07) 1px,transparent 1px);background-size:52px 52px;mask-image:linear-gradient(180deg,transparent,#000 55%,#000 78%,transparent);-webkit-mask-image:linear-gradient(180deg,transparent,#000 55%,#000 78%,transparent);animation:gridFloat 6s linear infinite;")} />
+
+      {/* ambient glows */}
+      <div style={s("position:absolute;top:-160px;left:50%;transform:translateX(-50%);width:760px;height:560px;border-radius:50%;background:radial-gradient(circle,rgba(192,36,155,.34),transparent 62%);filter:blur(36px);animation:glowPulse 5.5s ease-in-out infinite;pointer-events:none;")} />
+      <div style={s("position:absolute;bottom:-200px;left:18%;width:460px;height:460px;border-radius:50%;background:radial-gradient(circle,rgba(124,45,224,.26),transparent 64%);filter:blur(40px);animation:glowPulse 7s ease-in-out infinite;pointer-events:none;")} />
+      <div style={s("position:absolute;top:30%;right:8%;width:340px;height:340px;border-radius:50%;background:radial-gradient(circle,rgba(232,74,160,.18),transparent 66%);filter:blur(38px);animation:glowPulse 6.2s ease-in-out infinite .8s;pointer-events:none;")} />
+
+      {/* orbiting accent ring */}
+      <div style={s("position:absolute;top:50%;left:50%;width:680px;height:680px;margin:-340px 0 0 -340px;animation:orbit 26s linear infinite;pointer-events:none;opacity:.5;")}>
+        <span style={s("position:absolute;top:0;left:50%;width:8px;height:8px;margin-left:-4px;border-radius:50%;background:#E84AA0;box-shadow:0 0 14px 3px rgba(232,74,160,.8);")} />
+        <span style={s("position:absolute;bottom:6%;right:14%;width:5px;height:5px;border-radius:50%;background:#C77DFF;box-shadow:0 0 12px 2px rgba(199,125,255,.8);")} />
+        <span style={s("position:absolute;top:24%;left:4%;width:6px;height:6px;border-radius:50%;background:#FFD057;box-shadow:0 0 12px 2px rgba(255,208,87,.8);")} />
+      </div>
+
+      {/* CENTER STAGE */}
+      <div style={s("position:relative;z-index:5;flex:1;min-height:0;width:100%;max-width:880px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:28px 32px;")}>
+        <div style={s("animation:scaleIn .8s cubic-bezier(.2,.8,.25,1) both;margin-bottom:16px;")}>
+          <div style={s("position:relative;width:72px;height:72px;border-radius:22px;background:linear-gradient(140deg,#8B2FE6 0%,#B51C9E 52%,#E84AA0 100%);display:flex;align-items:center;justify-content:center;box-shadow:0 22px 60px -16px rgba(184,40,170,.85),inset 0 1px 0 rgba(255,255,255,.32);animation:floatY 5s ease-in-out infinite;")}>
+            <div style={s("position:absolute;top:-18px;left:-18px;width:54px;height:54px;border-radius:50%;background:rgba(255,255,255,.28);filter:blur(13px);")} />
+            <div style={s("position:absolute;bottom:-22px;right:-12px;width:48px;height:48px;border-radius:50%;background:rgba(124,45,224,.6);filter:blur(15px);")} />
+            <Boxes style={s("position:relative;width:38px;height:38px;color:#fff;")} />
+            <span style={s("position:absolute;top:11px;right:11px;width:11px;height:11px;border-radius:50%;background:#FFD057;box-shadow:0 0 12px 2px rgba(255,208,87,.9);animation:blink 1.8s ease-in-out infinite;")} />
+          </div>
+        </div>
+
+        <div style={s("display:inline-flex;align-items:center;gap:9px;padding:6px 15px;border-radius:99px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);margin-bottom:16px;animation:riseUpSm .7s ease .15s both;backdrop-filter:blur(6px);")}>
+          <span style={s("width:7px;height:7px;border-radius:50%;background:#4ADE80;box-shadow:0 0 10px 2px rgba(74,222,128,.8);animation:blink 2s infinite;")} />
+          <span style={s("font-size:12px;font-weight:500;letter-spacing:.5px;color:rgba(255,255,255,.72);")}>PEA × ThaiCloud Hackathon 2026 · Track 2</span>
+        </div>
+
+        <h1 style={s("margin:0 0 5px;font-size:46px;line-height:1.05;font-weight:600;letter-spacing:-1px;color:#fff;animation:riseUp .8s ease .28s both;")}>
+          Inventory <span style={s("background:linear-gradient(100deg,#E84AA0,#C77DFF 60%,#8B6CFF);-webkit-background-clip:text;background-clip:text;color:transparent;")}>AI</span>
+        </h1>
+        <div style={s("font-size:15px;font-weight:300;color:rgba(255,255,255,.6);letter-spacing:2.5px;text-transform:uppercase;margin-bottom:16px;animation:riseUp .8s ease .4s both;")}>วางแผนพัสดุ & จัดซื้ออัจฉริยะ</div>
+
+        <p style={s("margin:0 0 22px;font-size:16.5px;line-height:1.5;font-weight:300;color:rgba(255,255,255,.82);max-width:640px;animation:riseUp .8s ease .52s both;")}>
+          ระบบที่ถามก่อนว่า <span style={s("font-weight:500;color:#fff;")}>“จำเป็นต้องซื้อจริงไหม”</span><br />
+          ดักของจมก่อนเปิดคำขอ — เห็นทั้งของขาดและของเกินทั้งองค์กร
+        </p>
+
+        <div style={s("display:flex;align-items:stretch;gap:14px;margin-bottom:22px;animation:riseUp .8s ease .64s both;")}>
+          {stats.map((st, i) => (
+            <div key={st.label} style={s(`position:relative;padding:13px 20px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(8px);${i === 0 ? "overflow:hidden;" : ""}`)}>
+              {i === 0 ? <div style={s("position:absolute;inset:0;background:linear-gradient(110deg,transparent,rgba(232,74,160,.16),transparent);animation:sweep 3.4s ease-in-out infinite;")} /> : null}
+              <div style={s(`position:relative;font-size:24px;font-weight:700;color:${st.color};line-height:1;animation:countUp .6s ease ${st.delay} both;`)}>{st.value}</div>
+              <div style={s("position:relative;font-size:11.5px;color:rgba(255,255,255,.55);margin-top:6px;")}>{st.label}</div>
+            </div>
+          ))}
+        </div>
+
+        <div style={s("display:flex;align-items:center;gap:16px;animation:riseUp .8s ease .78s both;")}>
+          <button onClick={onEnter} style={s("position:relative;display:inline-flex;align-items:center;gap:11px;height:56px;padding:0 30px;border:0;border-radius:16px;background:linear-gradient(135deg,#7C2DE0,#C0249B);color:#fff;font-family:inherit;font-size:16px;font-weight:600;cursor:pointer;box-shadow:0 20px 44px -14px rgba(184,40,170,.9);overflow:hidden;")}>
+            <span style={s("position:absolute;inset:0;background:linear-gradient(110deg,transparent,rgba(255,255,255,.28),transparent);animation:sweep 2.8s ease-in-out infinite 1.4s;")} />
+            <Play style={s("position:relative;width:19px;height:19px;")} />
+            <span style={s("position:relative;")}>เริ่มนำเสนอ</span>
+          </button>
+          <button onClick={onEnter} style={s("display:inline-flex;align-items:center;gap:8px;height:56px;padding:0 22px;border:1px solid rgba(255,255,255,.18);border-radius:16px;background:rgba(255,255,255,.04);color:rgba(255,255,255,.86);font-family:inherit;font-size:15px;font-weight:500;cursor:pointer;backdrop-filter:blur(6px);")}>
+            ข้ามไปหน้าแรก <ArrowRight style={s("width:17px;height:17px;")} />
+          </button>
+        </div>
+
+        <div style={s("margin-top:18px;display:flex;align-items:center;gap:10px;animation:fadeIn 1s ease 1.2s both;")}>
+          <div style={s("position:relative;width:150px;height:3px;border-radius:99px;background:rgba(255,255,255,.1);overflow:hidden;")}>
+            <div style={s("position:absolute;left:0;top:0;height:100%;border-radius:99px;background:linear-gradient(90deg,#7C2DE0,#E84AA0);width:0;animation:loadbar 17s linear .8s forwards;")} />
+          </div>
+          <span style={s("font-size:11.5px;color:rgba(255,255,255,.4);")}>เข้าสู่หน้าแรกอัตโนมัติ</span>
+        </div>
+      </div>
+
+      <div style={s("position:relative;z-index:5;flex:none;text-align:center;padding-bottom:20px;animation:fadeIn 1s ease 1.5s both;")}>
+        <span className="mono" style={s("font-size:10.5px;color:rgba(255,255,255,.32);letter-spacing:.5px;")}>PROTOTYPE · re-model 2026</span>
+      </div>
+    </div>
+  );
+}
+
+function LandingPage({ currentUser, onEnter, onLogin, onBackToIntro }: { currentUser: SessionUser | null; onEnter: () => void; onLogin: () => void; onBackToIntro: () => void }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [showFab, setShowFab] = useState(false);
   const scrollTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1820,15 +1929,17 @@ function LandingPage({ currentUser, onEnter, onLogin }: { currentUser: SessionUs
 
       {/* TOPBAR */}
       <header style={s("position:relative;z-index:5;max-width:1240px;margin:0 auto;padding:22px 40px;display:flex;align-items:center;gap:14px;")}>
-        <div style={s("position:relative;width:42px;height:42px;border-radius:13px;background:linear-gradient(140deg,#8B2FE6 0%,#B51C9E 52%,#E84AA0 100%);display:flex;align-items:center;justify-content:center;box-shadow:0 9px 22px -6px rgba(184,40,170,.8),inset 0 1px 0 rgba(255,255,255,.3);overflow:hidden;flex:none;")}>
-          <div style={s("position:absolute;top:-10px;left:-10px;width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.28);filter:blur(7px);")} />
-          <Boxes style={s("position:relative;width:23px;height:23px;color:#fff;")} />
-          <span style={s("position:absolute;top:6px;right:6px;width:7px;height:7px;border-radius:50%;background:#FFD057;box-shadow:0 0 7px 1px rgba(255,208,87,.85);animation:pulseDot 1.9s infinite;")} />
-        </div>
-        <div>
-          <div style={s("font-size:15px;font-weight:600;color:#fff;line-height:1.1;")}>PEA Inventory AI</div>
-          <div style={s("font-size:10.5px;color:rgba(255,255,255,.45);")}>วางแผนพัสดุ & จัดซื้ออัจฉริยะ</div>
-        </div>
+        <button onClick={onBackToIntro} title="กลับไปหน้า Intro" style={s("display:flex;align-items:center;gap:14px;border:0;background:transparent;cursor:pointer;padding:0;text-align:left;")}>
+          <span style={s("position:relative;width:42px;height:42px;border-radius:13px;background:linear-gradient(140deg,#8B2FE6 0%,#B51C9E 52%,#E84AA0 100%);display:flex;align-items:center;justify-content:center;box-shadow:0 9px 22px -6px rgba(184,40,170,.8),inset 0 1px 0 rgba(255,255,255,.3);overflow:hidden;flex:none;")}>
+            <span style={s("position:absolute;top:-10px;left:-10px;width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.28);filter:blur(7px);")} />
+            <Boxes style={s("position:relative;width:23px;height:23px;color:#fff;")} />
+            <span style={s("position:absolute;top:6px;right:6px;width:7px;height:7px;border-radius:50%;background:#FFD057;box-shadow:0 0 7px 1px rgba(255,208,87,.85);animation:pulseDot 1.9s infinite;")} />
+          </span>
+          <span>
+            <span style={s("display:block;font-size:15px;font-weight:600;color:#fff;line-height:1.1;")}>PEA Inventory AI</span>
+            <span style={s("display:block;font-size:10.5px;color:rgba(255,255,255,.45);")}>วางแผนพัสดุ & จัดซื้ออัจฉริยะ</span>
+          </span>
+        </button>
         <nav style={s("flex:1;display:flex;justify-content:center;gap:30px;")}>
           <span onClick={() => scrollTo("sec-problem")} style={navItem}>ปัญหา</span>
           <span onClick={() => scrollTo("sec-solution")} style={navItem}>โซลูชัน</span>
@@ -2103,6 +2214,7 @@ function AppLayout({
   onAddNote,
   currentUser,
   onLogout,
+  onExitToLanding,
   children,
 }: {
   view: View;
@@ -2112,6 +2224,7 @@ function AppLayout({
   onAddNote: (text: string, context: string) => void;
   currentUser: SessionUser | null;
   onLogout: () => void;
+  onExitToLanding: () => void;
   children: ReactNode;
 }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -2171,7 +2284,7 @@ function AppLayout({
     const initials = currentUser
       ? currentUser.name.trim().split(/\s+/).slice(0, 2).map((w) => w[0] ?? "").join("") || currentUser.name.slice(0, 2)
       : "";
-    const roleLabel = currentUser?.role === "admin" ? "ผู้ดูแลระบบ" : "เจ้าหน้าที่คลัง";
+    const roleLabel = currentUser?.title ?? (currentUser?.role === "admin" ? "ผู้ดูแลระบบ" : "เจ้าหน้าที่คลัง");
 
     return (
       <div className="flex min-h-full flex-col">
@@ -2336,6 +2449,14 @@ function AppLayout({
               </div>
             </div>
             <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto">
+              <button
+                type="button"
+                onClick={onExitToLanding}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+                title="กลับหน้าแรก (Landing)"
+              >
+                <Home className="h-4 w-4 text-violet-600" /> หน้าแรก
+              </button>
               <div className="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600">
                 <ShieldCheck className="h-4 w-4 text-emerald-600" />
                 <span className="truncate">สูตร {formulaPolicy.formulaVersion} · ระดับความมั่นใจ {formatPercent(formulaPolicy.serviceLevel * 100).replace("+", "")}</span>
@@ -4085,12 +4206,14 @@ function AuthPage({
   onRegister,
   onResetPassword,
   onGoogleLogin,
+  onDemoLogin,
   onBack,
 }: {
   onLogin: (username: string, password: string) => boolean;
-  onRegister: (name: string, username: string, password: string) => boolean;
+  onRegister: (name: string, username: string, password: string, title?: string) => boolean;
   onResetPassword: (username: string, newPassword: string) => boolean;
   onGoogleLogin: (profile: GoogleProfile) => void;
+  onDemoLogin: (user: SessionUser) => void;
   onBack: () => void;
 }) {
   const [mode, setMode] = useState<AuthMode>("login");
@@ -4100,7 +4223,9 @@ function AuthPage({
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [showPw, setShowPw] = useState(false);
-  const [role, setRole] = useState<"warehouse" | "region" | "analyst">("warehouse");
+  // ตำแหน่งที่เลือกตอนสมัคร (เดโม)
+  const registerPositions = ["เจ้าหน้าที่คลัง", "ผอ.เขต", "ส่วนกลาง", "นักวิเคราะห์"];
+  const [position, setPosition] = useState(registerPositions[0]);
 
   const reset = () => { setName(""); setUsername(""); setPassword(""); setConfirmPassword(""); setError(""); };
   const switchMode = (next: AuthMode) => { reset(); setMode(next); };
@@ -4114,7 +4239,7 @@ function AuthPage({
     }
     if (mode === "register") {
       if (password !== confirmPassword) { setError("รหัสผ่านยืนยันไม่ตรงกัน"); return; }
-      if (onRegister(name, username, password)) reset();
+      if (onRegister(name, username, password, position)) reset();
       else setError("สมัครไม่สำเร็จ — username อาจถูกใช้แล้ว หรือกรอกไม่ครบ");
       return;
     }
@@ -4135,10 +4260,13 @@ function AuthPage({
   const labelStyle = s("display:block;font-size:12.5px;font-weight:500;color:#3B3654;margin-bottom:7px;");
   const inputStyle = (pad: string) => s(`width:100%;height:48px;border:1px solid #E0DAEF;border-radius:12px;background:#fff;padding:${pad};font-family:inherit;font-size:14px;color:#1C1830;outline:none;`);
   const iconStyle = s("position:absolute;left:13px;top:50%;transform:translateY(-50%);width:17px;height:17px;color:#9B95B0;");
-  const roles: { id: "warehouse" | "region" | "analyst"; label: string; icon: typeof WarehouseIcon }[] = [
-    { id: "warehouse", label: "จนท.คลัง", icon: WarehouseIcon },
-    { id: "region", label: "ผอ.เขต", icon: Building2 },
-    { id: "analyst", label: "Analyst", icon: LineChart },
+  // เข้าเล่นเดโมตามบทบาท — กดการ์ดเพื่อ bypass login เข้าแอปทันที (God Mode = สิทธิ์ admin เต็ม)
+  const demoRoles: { label: string; sub: string; icon: typeof WarehouseIcon; user: SessionUser; god?: boolean }[] = [
+    { label: "จนท.คลัง", sub: "คลัง I010", icon: WarehouseIcon, user: { name: "จนท.คลัง", username: "demo-warehouse", role: "user", title: "เดโม · คลัง I010" } },
+    { label: "ผอ.เขต", sub: "เขต A", icon: Building2, user: { name: "ผอ.เขต", username: "demo-region", role: "user", title: "เดโม · เขต A" } },
+    { label: "ส่วนกลาง", sub: "อนุมัติงบกลาง", icon: Landmark, user: { name: "ส่วนกลาง", username: "demo-central", role: "user", title: "เดโม · ส่วนกลาง" } },
+    { label: "Analyst", sub: "ทีมวิเคราะห์", icon: LineChart, user: { name: "Analyst", username: "demo-analyst", role: "user", title: "เดโม · ทีมวิเคราะห์" } },
+    { label: "God Mode", sub: "ทุกสิทธิ์ · admin", icon: Sparkles, god: true, user: { name: "God Mode", username: "god", role: "admin", title: "ทุกสิทธิ์ · admin" } },
   ];
 
   return (
@@ -4179,6 +4307,7 @@ function AuthPage({
       {/* RIGHT FORM */}
       <div style={s("flex:1;background:#F4F2FA;display:flex;align-items:center;justify-content:center;padding:40px;")}>
         <div style={s("width:100%;max-width:396px;")}>
+          <button onClick={onBack} style={s("display:inline-flex;align-items:center;gap:6px;margin-bottom:18px;border:0;background:transparent;color:#7B7591;font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer;padding:0;")}><ArrowLeft style={s("width:15px;height:15px;")} /> กลับหน้าแรก</button>
           <div style={s("margin-bottom:26px;")}>
             <h2 style={s("margin:0 0 6px;font-size:24px;font-weight:600;color:#1C1830;letter-spacing:-.2px;")}>{title}</h2>
             <p style={s("margin:0;font-size:13.5px;color:#7B7591;")}>{subtitle}</p>
@@ -4228,16 +4357,16 @@ function AuthPage({
             </div>
           ) : null}
 
-          {mode === "login" ? (
+          {mode === "register" ? (
             <div style={s("margin-bottom:18px;")}>
-              <label style={s("display:block;font-size:12.5px;font-weight:500;color:#3B3654;margin-bottom:8px;")}>เข้าใช้ในบทบาท</label>
-              <div style={s("display:grid;grid-template-columns:repeat(3,1fr);gap:8px;")}>
-                {roles.map((r) => {
-                  const Icon = r.icon;
-                  const on = role === r.id;
+              <label style={labelStyle}>ตำแหน่ง / บทบาท</label>
+              <div style={s("display:grid;grid-template-columns:repeat(2,1fr);gap:8px;")}>
+                {registerPositions.map((p) => {
+                  const on = position === p;
                   return (
-                    <button key={r.id} type="button" onClick={() => setRole(r.id)} style={s(`display:flex;flex-direction:column;align-items:center;gap:6px;padding:11px 6px;border-radius:11px;cursor:pointer;font-family:inherit;transition:all .15s;border:1.5px solid ${on ? "#C9B0F2" : "#E5E1F0"};background:${on ? "#F4EEFE" : "#fff"};color:${on ? "#6D28D9" : "#7B7591"};`)}>
-                      <Icon style={s("width:17px;height:17px;")} /><span style={s("font-size:11.5px;font-weight:500;")}>{r.label}</span>
+                    <button key={p} type="button" onClick={() => setPosition(p)} style={s(`display:flex;align-items:center;gap:7px;padding:10px 11px;border-radius:11px;cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:500;text-align:left;transition:all .15s;border:1.5px solid ${on ? "#C9B0F2" : "#E5E1F0"};background:${on ? "#F4EEFE" : "#fff"};color:${on ? "#6D28D9" : "#5A5470"};`)}>
+                      <span style={s(`width:16px;height:16px;border-radius:50%;border:2px solid ${on ? "#7C3AED" : "#CFC8E0"};display:flex;align-items:center;justify-content:center;flex:none;`)}>{on ? <span style={s("width:7px;height:7px;border-radius:50%;background:#7C3AED;")} /> : null}</span>
+                      {p}
                     </button>
                   );
                 })}
@@ -4250,6 +4379,43 @@ function AuthPage({
           <button onClick={submit} disabled={!canSubmit} style={s(`display:flex;width:100%;align-items:center;justify-content:center;gap:8px;height:50px;border:0;border-radius:13px;background:linear-gradient(135deg,#7C2DE0,#C0249B);color:#fff;font-family:inherit;font-size:15px;font-weight:600;box-shadow:0 16px 34px -12px rgba(184,40,170,.8);cursor:pointer;${canSubmit ? "" : "opacity:.5;cursor:not-allowed;"}`)}>
             {mode === "login" ? "เข้าสู่ระบบ" : mode === "register" ? "สมัครและเข้าสู่ระบบ" : "ตั้งรหัสผ่านใหม่"} <ArrowRight style={s("width:18px;height:18px;")} />
           </button>
+
+          {mode === "login" ? (
+            <div style={s("margin-top:20px;")}>
+              <div style={s("display:flex;align-items:center;gap:14px;margin-bottom:13px;")}><div style={s("flex:1;height:1px;background:#E5E1F0;")} /><span style={s("font-size:11px;color:#9B95B0;white-space:nowrap;")}>หรือเข้าเล่นเดโมตามบทบาท (กดเข้าเลย)</span><div style={s("flex:1;height:1px;background:#E5E1F0;")} /></div>
+              <div style={s("display:grid;grid-template-columns:repeat(2,1fr);gap:9px;margin-bottom:9px;")}>
+                {demoRoles.filter((r) => !r.god).map((r) => {
+                  const Icon = r.icon;
+                  return (
+                    <button
+                      key={r.label}
+                      type="button"
+                      onClick={() => onDemoLogin(r.user)}
+                      style={s("display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:12px;cursor:pointer;font-family:inherit;text-align:left;transition:all .15s;border:1px solid #E5E1F0;background:#fff;")}
+                    >
+                      <span style={s("width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex:none;background:#F4EEFE;color:#7C3AED;")}><Icon style={s("width:17px;height:17px;")} /></span>
+                      <span style={s("min-width:0;")}><span style={s("display:block;font-size:12.5px;font-weight:600;color:#1C1830;")}>{r.label}</span><span style={s("display:block;font-size:10.5px;color:#9B95B0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;")}>{r.sub}</span></span>
+                    </button>
+                  );
+                })}
+              </div>
+              {demoRoles.filter((r) => r.god).map((r) => {
+                const Icon = r.icon;
+                return (
+                  <button
+                    key={r.label}
+                    type="button"
+                    onClick={() => onDemoLogin(r.user)}
+                    style={s("display:flex;align-items:center;gap:11px;width:100%;padding:12px 14px;border-radius:12px;cursor:pointer;font-family:inherit;text-align:left;transition:all .15s;border:1.5px solid #C9B0F2;background:linear-gradient(135deg,#F4EEFE,#FBEAF6);box-shadow:0 8px 20px -14px rgba(124,45,224,.7);")}
+                  >
+                    <span style={s("width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex:none;background:linear-gradient(140deg,#7C2DE0,#C0249B);color:#fff;")}><Icon style={s("width:17px;height:17px;")} /></span>
+                    <span style={s("flex:1;min-width:0;")}><span style={s("display:block;font-size:13px;font-weight:700;color:#6D28D9;")}>{r.label}</span><span style={s("display:block;font-size:10.5px;color:#9B6FCF;")}>{r.sub}</span></span>
+                    <ArrowRight style={s("width:16px;height:16px;color:#7C3AED;flex:none;")} />
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
 
           {mode === "login" ? (
             <>
