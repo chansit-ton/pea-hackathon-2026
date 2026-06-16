@@ -9,8 +9,10 @@
 body {
   margin: 0;
   min-width: 0;
-  background: #f4f7fb;
-  color: #172033;
+  background: #f4f2fa;
+  color: #1c1830;
+  font-family: "Kanit", "Noto Sans Thai", Inter, Tahoma, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
 button,
@@ -25,11 +27,159 @@ a:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: 2px solid #2563eb;
+  outline: 2px solid #6d28d9;
   outline-offset: 2px;
 }
 
 .table-scroll {
   scrollbar-width: thin;
-  scrollbar-color: #cbd5e1 transparent;
+  scrollbar-color: #cfc8e0 transparent;
 }
+
+/* Numbers / codes read better in the design's mono face */
+.font-mono,
+.tabular,
+.mono {
+  font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Pulsing status dot + table-row hover (ported from the HTML design) */
+@keyframes pdot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.8); }
+}
+
+/* Landing page animations (ported from PEA Landing design) */
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}
+@keyframes floaty {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+/* Intro / splash screen animations (ported from PEA Intro design) */
+@keyframes riseUp { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes riseUpSm { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes scaleIn { from { opacity: 0; transform: scale(.78); } to { opacity: 1; transform: scale(1); } }
+@keyframes glowPulse { 0%, 100% { opacity: .55; transform: scale(1); } 50% { opacity: .9; transform: scale(1.08); } }
+@keyframes floatY { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
+@keyframes sweep { 0% { transform: translateX(-120%); } 100% { transform: translateX(120%); } }
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+@keyframes orbit { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes gridFloat { from { background-position: 0 0; } to { background-position: 0 -52px; } }
+@keyframes countUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes loadbar { from { width: 0; } to { width: 100%; } }
+
+/* Landing page dark scrollbar (scoped to the dark landing takeover) */
+.landing-root {
+  scrollbar-width: thin;
+  scrollbar-color: #3a3152 transparent;
+}
+.landing-root::-webkit-scrollbar {
+  width: 10px;
+}
+.landing-root::-webkit-scrollbar-track {
+  background: transparent;
+}
+.landing-root::-webkit-scrollbar-thumb {
+  background: #3a3152;
+  border-radius: 99px;
+  border: 2px solid #0e0a1a;
+}
+.dash-row {
+  transition: background 0.12s;
+}
+.dash-row:hover {
+  background: #fbfafe;
+}
+
+/* Deep-violet sidebar gradient from the design */
+.sidebar-violet {
+  background: linear-gradient(168deg, #4a148c 0%, #330c66 52%, #2a0a52 100%);
+  /* Thin, theme-matched scrollbar (Firefox) instead of the default fat light bar */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+}
+/* Thin, translucent scrollbar on the violet sidebar (WebKit/Chromium) */
+.sidebar-violet::-webkit-scrollbar {
+  width: 6px;
+}
+.sidebar-violet::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar-violet::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 99px;
+  border: 0;
+}
+.sidebar-violet::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.34);
+}
+
+/* Frosted, sticky top bar */
+.app-header {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: saturate(1.4) blur(10px);
+  -webkit-backdrop-filter: saturate(1.4) blur(10px);
+}
+
+/* ===== DARK THEME =====
+   Two strategies combined:
+   1) Match React-serialized rgb() inline styles (s() helper) — browsers serialize
+      hex inline colors to rgb(), so [style*="rgb(...)"] catches them.
+   2) Override common Tailwind utility classes used by the app shell + <Card>. */
+[data-theme="dark"] {
+  background: #120e1c !important;
+}
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: #3a3152;
+  border-color: #120e1c;
+}
+/* inline-styled surfaces */
+[data-theme="dark"] [style*="rgb(255, 255, 255)"] { background: #211a30 !important; }
+[data-theme="dark"] [style*="rgb(250, 249, 253)"],
+[data-theme="dark"] [style*="rgb(247, 245, 252)"] { background: #181323 !important; }
+[data-theme="dark"] [style*="rgb(251, 250, 254)"] { background: #2a2240 !important; }
+[data-theme="dark"] [style*="rgb(240, 237, 247)"] { background: #33294b !important; }
+[data-theme="dark"] [style*="rgba(255, 255, 255, 0.85)"] { background: rgba(22, 16, 34, 0.9) !important; }
+[data-theme="dark"] [style*="rgb(251, 248, 255)"],
+[data-theme="dark"] [style*="rgb(251, 244, 255)"],
+[data-theme="dark"] [style*="rgb(251, 247, 255)"],
+[data-theme="dark"] [style*="rgb(252, 233, 245)"],
+[data-theme="dark"] [style*="rgb(244, 238, 254)"],
+[data-theme="dark"] [style*="rgb(241, 235, 254)"] { background: #271c3c !important; }
+/* inline text colors */
+[data-theme="dark"] [style*="rgb(28, 24, 48)"] { color: #f1edf8 !important; }
+[data-theme="dark"] [style*="rgb(59, 54, 84)"] { color: #d2cbe4 !important; }
+[data-theme="dark"] [style*="rgb(90, 84, 112)"] { color: #bcb3d2 !important; }
+[data-theme="dark"] [style*="rgb(46, 42, 69)"] { color: #e6e1f2 !important; }
+[data-theme="dark"] [style*="rgb(123, 117, 145)"] { color: #9b93b0 !important; }
+[data-theme="dark"] [style*="rgb(155, 149, 176)"] { color: #8b84a0 !important; }
+/* inline borders */
+[data-theme="dark"] [style*="rgb(235, 231, 245)"],
+[data-theme="dark"] [style*="rgb(233, 231, 241)"],
+[data-theme="dark"] [style*="rgb(229, 225, 240)"],
+[data-theme="dark"] [style*="rgb(232, 229, 242)"],
+[data-theme="dark"] [style*="rgb(228, 215, 251)"],
+[data-theme="dark"] [style*="rgb(230, 216, 251)"] { border-color: #372e50 !important; }
+[data-theme="dark"] [style*="rgb(241, 238, 248)"],
+[data-theme="dark"] [style*="rgb(244, 242, 250)"],
+[data-theme="dark"] [style*="rgb(246, 244, 251)"] { border-color: #2a2240 !important; }
+/* Tailwind utility classes used by the app shell + Card component */
+[data-theme="dark"] .app-header { background: rgba(22, 16, 34, 0.9) !important; }
+[data-theme="dark"] .bg-white { background-color: #211a30 !important; }
+[data-theme="dark"] .bg-slate-50 { background-color: #181323 !important; }
+[data-theme="dark"] .bg-slate-100 { background-color: #120e1c !important; }
+[data-theme="dark"] .border-slate-200 { border-color: #372e50 !important; }
+[data-theme="dark"] .border-slate-100 { border-color: #2a2240 !important; }
+[data-theme="dark"] .text-slate-950,
+[data-theme="dark"] .text-slate-900,
+[data-theme="dark"] .text-slate-800 { color: #f1edf8 !important; }
+[data-theme="dark"] .text-slate-700,
+[data-theme="dark"] .text-slate-600 { color: #d2cbe4 !important; }
+[data-theme="dark"] .text-slate-500,
+[data-theme="dark"] .text-slate-400 { color: #bcb3d2 !important; }

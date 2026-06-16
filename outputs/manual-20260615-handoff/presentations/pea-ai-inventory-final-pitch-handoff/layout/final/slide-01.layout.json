@@ -1,0 +1,740 @@
+{
+  "schema": "openai.presentation.layout/v4",
+  "unit": "px",
+  "slide": {
+    "aid": "sl/1ey4vl",
+    "id": "1ey4vl",
+    "slide": 1,
+    "layoutId": "5ca7e17a-de8a-4c7e-a83e-9706758f5496",
+    "layoutName": "Title Slide",
+    "layoutType": "title",
+    "masterLayoutId": "f836bb89-c51b-4298-a4f7-12448b8e2c6b",
+    "masterLayoutName": "Master",
+    "backgroundColor": "#13091F",
+    "frame": {
+      "left": 0,
+      "top": 0,
+      "width": 1280,
+      "height": 720
+    }
+  },
+  "theme": {
+    "colorSchemeName": "ChatGPT",
+    "colors": {
+      "accent1": "#156082",
+      "accent2": "#E97132",
+      "accent3": "#196B24",
+      "accent4": "#0F9ED5",
+      "accent5": "#A02B93",
+      "accent6": "#4EA72E",
+      "bg1": "#FFFFFF",
+      "bg2": "#000000",
+      "tx1": "#1F1F1F",
+      "tx2": "#FFFFFF",
+      "dk1": "#000000",
+      "lt1": "#FFFFFF",
+      "dk2": "#0E2841",
+      "lt2": "#E8E8E8",
+      "hlink": "#467886",
+      "folHlink": "#96607D"
+    },
+    "typefaces": [
+      "Tahoma"
+    ]
+  },
+  "inheritedLayers": [
+    {
+      "scope": "layout",
+      "id": "5ca7e17a-de8a-4c7e-a83e-9706758f5496",
+      "name": "Title Slide",
+      "type": "title",
+      "parentLayoutId": "f836bb89-c51b-4298-a4f7-12448b8e2c6b",
+      "elements": []
+    },
+    {
+      "scope": "master",
+      "id": "f836bb89-c51b-4298-a4f7-12448b8e2c6b",
+      "name": "Master",
+      "type": "master",
+      "elements": []
+    }
+  ],
+  "elements": [
+    {
+      "order": 1,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/xobm58z2",
+      "id": "1",
+      "bbox": [
+        0,
+        0,
+        1280,
+        720
+      ],
+      "geometry": "rect",
+      "fillColor": "#13091F"
+    },
+    {
+      "order": 2,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/qxs72x4n",
+      "id": "2",
+      "bbox": [
+        0,
+        0,
+        1280,
+        8
+      ],
+      "geometry": "rect",
+      "fillColor": "#FF6A2B"
+    },
+    {
+      "order": 3,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/fil0rqd4",
+      "id": "3",
+      "bbox": [
+        0,
+        145,
+        1280,
+        1
+      ],
+      "geometry": "rect",
+      "fillColor": "#241044"
+    },
+    {
+      "order": 4,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/4fu18jqh",
+      "id": "4",
+      "bbox": [
+        0,
+        515,
+        280,
+        205
+      ],
+      "geometry": "rect",
+      "fillColor": "#241044"
+    },
+    {
+      "order": 5,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/x0nuxc3y",
+      "id": "5",
+      "bbox": [
+        58,
+        34,
+        780,
+        28
+      ],
+      "geometry": "rect",
+      "text": "PEA HACKATHON 2026 | Track #2 Inventory & Safety Stock Optimization",
+      "textPreview": "PEA HACKATHON 2026 | Track #2 Inventory & Safety Stock Optimization",
+      "resolvedFontSize": 15,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 15,
+        "typeface": "Tahoma",
+        "color": "#D8C8FF",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "PEA HACKATHON 2026 | Track #2 Inventory & Safety Stock Optimization"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "PEA HACKATHON 2026 | Track #2 Inventory & Safety Stock Optimization",
+          "resolvedTextStyle": {
+            "anchor": 1,
+            "fontSize": 15,
+            "typeface": "Tahoma",
+            "color": "#D8C8FF",
+            "alignment": "left",
+            "verticalAlignment": "top",
+            "insets": {
+              "top": 0,
+              "right": 0,
+              "bottom": 0,
+              "left": 0
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "PEA HACKATHON 2026 | Track #2 Inventory & Safety Stock Optimization",
+              "fontSize": 15,
+              "typeface": "Tahoma",
+              "color": "#D8C8FF"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 6,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/m94fu18j",
+      "id": "6",
+      "bbox": [
+        58,
+        92,
+        760,
+        70
+      ],
+      "geometry": "rect",
+      "text": "Inventory AI",
+      "textPreview": "Inventory AI",
+      "resolvedFontSize": 54,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 54,
+        "typeface": "Tahoma",
+        "color": "#FFFFFF",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Inventory AI"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Inventory AI",
+          "resolvedTextStyle": {
+            "anchor": 1,
+            "fontSize": 54,
+            "typeface": "Tahoma",
+            "color": "#FFFFFF",
+            "alignment": "left",
+            "verticalAlignment": "top",
+            "insets": {
+              "top": 0,
+              "right": 0,
+              "bottom": 0,
+              "left": 0
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Inventory AI",
+              "fontSize": 54,
+              "typeface": "Tahoma",
+              "color": "#FFFFFF"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 7,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/fu18jqh0",
+      "id": "7",
+      "bbox": [
+        62,
+        168,
+        920,
+        42
+      ],
+      "geometry": "rect",
+      "text": "Stop buying blind: know whether to buy, transfer, borrow, or wait.",
+      "textPreview": "Stop buying blind: know whether to buy, transfer, borrow, or wait.",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "anchor": 1,
+        "fontSize": 24,
+        "typeface": "Tahoma",
+        "color": "#FF6A2B",
+        "alignment": "left",
+        "verticalAlignment": "top",
+        "wrap": "square",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Stop buying blind: know whether to buy, transfer, borrow, or wait."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Stop buying blind: know whether to buy, transfer, borrow, or wait.",
+          "resolvedTextStyle": {
+            "anchor": 1,
+            "fontSize": 24,
+            "typeface": "Tahoma",
+            "color": "#FF6A2B",
+            "alignment": "left",
+            "verticalAlignment": "top",
+            "insets": {
+              "top": 0,
+              "right": 0,
+              "bottom": 0,
+              "left": 0
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Stop buying blind: know whether to buy, transfer, borrow, or wait.",
+              "fontSize": 24,
+              "typeface": "Tahoma",
+              "color": "#FF6A2B"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ]
+    },
+    {
+      "order": 8,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/4r65wjud",
+      "id": "8",
+      "bbox": [
+        58,
+        254,
+        1088,
+        150
+      ],
+      "geometry": "roundRect",
+      "text": "Before opening a purchase request, PEA should know whether the item is truly missing or simply sitting as dead stock in another warehouse.",
+      "textPreview": "Before opening a purchase request, PEA should know whether the item is truly missing or simply sitting as dead stock in another warehouse.",
+      "resolvedFontSize": 31,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 31,
+        "typeface": "Tahoma",
+        "color": "#FFFFFF",
+        "alignment": "center",
+        "verticalAlignment": "middle",
+        "wrap": "square",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "insets": {
+          "top": 14,
+          "right": 18,
+          "bottom": 14,
+          "left": 18
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Before opening a purchase request, PEA should know whether the item is"
+          },
+          {
+            "index": 2,
+            "text": "truly missing or simply sitting as dead stock in another warehouse."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Before opening a purchase request, PEA should know whether the item is truly missing or simply sitting as dead stock in another warehouse.",
+          "resolvedTextStyle": {
+            "anchor": 2,
+            "fontSize": 31,
+            "typeface": "Tahoma",
+            "color": "#FFFFFF",
+            "alignment": "center",
+            "verticalAlignment": "middle",
+            "insets": {
+              "top": 14,
+              "right": 18,
+              "bottom": 14,
+              "left": 18
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Before opening a purchase request, PEA should know whether the item is truly missing or simply sitting as dead stock in another warehouse.",
+              "fontSize": 31,
+              "typeface": "Tahoma",
+              "color": "#FFFFFF"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "#322057"
+    },
+    {
+      "order": 9,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/xc3ylc7u",
+      "id": "9",
+      "bbox": [
+        72,
+        462,
+        300,
+        94
+      ],
+      "geometry": "roundRect",
+      "text": "฿8.6M\ndemo trapped-capital signal",
+      "textPreview": "฿8.6M | demo trapped-capital signal",
+      "resolvedFontSize": 21,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 21,
+        "typeface": "Tahoma",
+        "color": "#FF6A2B",
+        "alignment": "center",
+        "verticalAlignment": "middle",
+        "wrap": "square",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "insets": {
+          "top": 12,
+          "right": 10,
+          "bottom": 8,
+          "left": 10
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "฿8.6M"
+          },
+          {
+            "index": 2,
+            "text": "demo trapped-capital signal"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "฿8.6M",
+          "resolvedTextStyle": {
+            "anchor": 2,
+            "fontSize": 21,
+            "typeface": "Tahoma",
+            "color": "#FF6A2B",
+            "alignment": "center",
+            "verticalAlignment": "middle",
+            "insets": {
+              "top": 12,
+              "right": 10,
+              "bottom": 8,
+              "left": 10
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "฿8.6M",
+              "fontSize": 21,
+              "typeface": "Tahoma",
+              "color": "#FF6A2B"
+            }
+          ],
+          "marginLeft": 0
+        },
+        {
+          "index": 2,
+          "text": "demo trapped-capital signal",
+          "resolvedTextStyle": {
+            "anchor": 2,
+            "fontSize": 21,
+            "typeface": "Tahoma",
+            "color": "#FF6A2B",
+            "alignment": "center",
+            "verticalAlignment": "middle",
+            "insets": {
+              "top": 12,
+              "right": 10,
+              "bottom": 8,
+              "left": 10
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "demo trapped-capital signal",
+              "fontSize": 21,
+              "typeface": "Tahoma",
+              "color": "#FF6A2B"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "#241044"
+    },
+    {
+      "order": 10,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/9cvixcze",
+      "id": "10",
+      "bbox": [
+        404,
+        462,
+        360,
+        94
+      ],
+      "geometry": "roundRect",
+      "text": "Safety Stock + ROP\nexplainable formula engine",
+      "textPreview": "Safety Stock + ROP | explainable formula engine",
+      "resolvedFontSize": 21,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 21,
+        "typeface": "Tahoma",
+        "color": "#31D07F",
+        "alignment": "center",
+        "verticalAlignment": "middle",
+        "wrap": "square",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "insets": {
+          "top": 12,
+          "right": 10,
+          "bottom": 8,
+          "left": 10
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Safety Stock + ROP"
+          },
+          {
+            "index": 2,
+            "text": "explainable formula engine"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Safety Stock + ROP",
+          "resolvedTextStyle": {
+            "anchor": 2,
+            "fontSize": 21,
+            "typeface": "Tahoma",
+            "color": "#31D07F",
+            "alignment": "center",
+            "verticalAlignment": "middle",
+            "insets": {
+              "top": 12,
+              "right": 10,
+              "bottom": 8,
+              "left": 10
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Safety Stock + ROP",
+              "fontSize": 21,
+              "typeface": "Tahoma",
+              "color": "#31D07F"
+            }
+          ],
+          "marginLeft": 0
+        },
+        {
+          "index": 2,
+          "text": "explainable formula engine",
+          "resolvedTextStyle": {
+            "anchor": 2,
+            "fontSize": 21,
+            "typeface": "Tahoma",
+            "color": "#31D07F",
+            "alignment": "center",
+            "verticalAlignment": "middle",
+            "insets": {
+              "top": 12,
+              "right": 10,
+              "bottom": 8,
+              "left": 10
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "explainable formula engine",
+              "fontSize": 21,
+              "typeface": "Tahoma",
+              "color": "#31D07F"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "#241044"
+    },
+    {
+      "order": 11,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/gr2p8nqx",
+      "id": "11",
+      "bbox": [
+        796,
+        462,
+        350,
+        94
+      ],
+      "geometry": "roundRect",
+      "text": "Local / Regional / Central\ngoverned approval layers",
+      "textPreview": "Local / Regional / Central | governed approval layers",
+      "resolvedFontSize": 21,
+      "resolvedTextStyle": {
+        "anchor": 2,
+        "fontSize": 21,
+        "typeface": "Tahoma",
+        "color": "#9B5CFF",
+        "alignment": "center",
+        "verticalAlignment": "middle",
+        "wrap": "square",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "insets": {
+          "top": 12,
+          "right": 10,
+          "bottom": 8,
+          "left": 10
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Local / Regional / Central"
+          },
+          {
+            "index": 2,
+            "text": "governed approval layers"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Local / Regional / Central",
+          "resolvedTextStyle": {
+            "anchor": 2,
+            "fontSize": 21,
+            "typeface": "Tahoma",
+            "color": "#9B5CFF",
+            "alignment": "center",
+            "verticalAlignment": "middle",
+            "insets": {
+              "top": 12,
+              "right": 10,
+              "bottom": 8,
+              "left": 10
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "Local / Regional / Central",
+              "fontSize": 21,
+              "typeface": "Tahoma",
+              "color": "#9B5CFF"
+            }
+          ],
+          "marginLeft": 0
+        },
+        {
+          "index": 2,
+          "text": "governed approval layers",
+          "resolvedTextStyle": {
+            "anchor": 2,
+            "fontSize": 21,
+            "typeface": "Tahoma",
+            "color": "#9B5CFF",
+            "alignment": "center",
+            "verticalAlignment": "middle",
+            "insets": {
+              "top": 12,
+              "right": 10,
+              "bottom": 8,
+              "left": 10
+            }
+          },
+          "runs": [
+            {
+              "index": 1,
+              "text": "governed approval layers",
+              "fontSize": 21,
+              "typeface": "Tahoma",
+              "color": "#9B5CFF"
+            }
+          ],
+          "marginLeft": 0
+        }
+      ],
+      "fillColor": "#241044"
+    }
+  ],
+  "composeRuns": []
+}

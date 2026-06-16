@@ -1,0 +1,29 @@
+PEA Inventory AI - Pitch Deck QA Scorecard
+Date: 2026-06-15
+
+Deliverables checked:
+- output/pea-ai-inventory-final-pitch-handoff.md
+- output/pea-ai-inventory-final-pitch-handoff.pptx
+- preview/contact-sheet.png
+
+Checks:
+- Slide count: 12/12
+- PPTX generated: yes
+- Preview PNGs generated: yes, slide-01 through slide-12
+- Layout quality checker: 0 errors, 0 warnings
+- Visual contact sheet review: pass
+- Thai handoff Markdown encoding: valid UTF-8; PowerShell console may render Thai as mojibake, Node/modern editors read correctly
+
+Content coverage:
+- Problem, persona, pain point: covered
+- Decision workflow: covered
+- Safety Stock / ROP / suggested quantity logic: covered
+- Dead stock and repeat-purchase guard: covered
+- Impact story aligned to judging criteria: covered
+- Feasibility and pilot roadmap: covered
+- Demo path and Q&A prep: covered in handoff document
+
+Caveats:
+- Deck is intentionally concise and mostly English for slide readability; the detailed handoff and pitch script are Thai.
+- Official PEA/RISE logos were not recreated; deck uses plain text labels to avoid using unverified brand assets.
+- Built-in Python contact-sheet helper could not run because Python is unavailable in this environment; contact sheet was generated with Node/skia-canvas instead.

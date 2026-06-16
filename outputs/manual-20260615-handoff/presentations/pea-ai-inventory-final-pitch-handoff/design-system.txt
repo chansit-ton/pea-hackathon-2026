@@ -1,0 +1,49 @@
+Slide size: 1280x720
+
+Background:
+- Deep purple/ink base (#13091F, #241044)
+- Subtle radial orange/violet accents
+
+Typography:
+- Use common sans-serif fallback; Kanit-like Thai-friendly hierarchy when rendered locally
+- Claims: 34-48px
+- Section/kicker: 12-16px uppercase or short Thai label
+- Body: 18-24px
+- Footers: 10-12px
+
+Palette:
+- Ink: #13091F
+- Panel: #241044
+- Panel light: #322057
+- Violet: #9B5CFF
+- Orange: #FF6A2B
+- Red/orange warning: #FF4D3D
+- Green success: #31D07F
+- White: #FFFFFF
+- Muted lavender: #D8C8FF
+
+Chart/diagram grammar:
+- Orange = problem / cost / risk
+- Green = impact / validation / feasible action
+- Violet = product layer / AI workflow
+- White hairlines = structure
+- Arrows only when showing sequence or routing
+
+Layout families:
+- Cover with metric rail
+- Split pain map
+- Persona + right-side outcome rail
+- Decision tree
+- Horizontal workflow
+- Formula chain
+- Impact matrix
+- Architecture stack
+- Demo timeline
+- Roadmap
+- Closing checklist
+
+Banned motifs:
+- Fake official logos
+- Decorative icons that imitate official marks
+- Generic feature grid with no workflow
+- Overloaded paragraphs

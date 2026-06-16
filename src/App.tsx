@@ -1,42 +1,111 @@
-﻿import { useState, useRef, type ReactNode } from "react";
+﻿import { useState, useRef, Fragment, type ReactNode, type CSSProperties } from "react";
 import { useEffect, type InputHTMLAttributes } from "react";
 import {
+  Activity,
+  AlertOctagon,
+  AlertTriangle,
   ArrowLeft,
+  BadgeCheck,
+  Bell,
+  ChevronRight,
+  Clock,
+  CloudLightning,
+  FlaskConical,
+  FunctionSquare,
+  GitCommitHorizontal,
+  GitCompareArrows,
+  GitMerge,
+  Lightbulb,
+  Percent,
+  Shield,
+  TrendingUp,
   ArrowDown,
+  ArrowDownUp,
   ArrowRight,
   ArrowUp,
   ArrowRightLeft,
   Archive,
+  Building2,
+  Cable,
+  Camera,
+  Check,
+  Construction,
+  Database,
+  Download,
+  Eye,
+  EyeOff,
+  FileDown,
+  FileSpreadsheet,
+  Flag,
+  GitBranch,
+  GitCommit,
+  GitCompare,
+  Import as ImportIcon,
+  Plug,
+  UploadCloud,
+  Hand,
+  HandCoins,
+  Home,
+  Inbox,
+  Lock,
+  RefreshCcw,
+  Repeat2,
+  Route,
+  Save,
+  ShoppingCart,
+  SearchCheck,
+  Target,
+  Warehouse as WarehouseIcon,
   BarChart3,
   Boxes,
+  BrainCircuit,
   Calculator,
   CheckCircle2,
+  ChevronDown,
   ClipboardCheck,
   FileText,
   History,
   Landmark,
+  LayoutDashboard,
+  LineChart,
   Mail,
   Megaphone,
+  MapPin,
   Menu,
   MessageSquare,
   Minus,
+  Moon,
+  Navigation,
+  Package,
   PackageCheck,
   PanelLeftClose,
   PanelLeftOpen,
   Phone,
+  Play,
   Plus,
+  Quote,
+  Radar,
   Recycle,
   Scale,
+  ScrollText,
+  Satellite,
   Search,
   Send,
   Settings,
+  ShieldAlert,
   ShieldCheck,
+  Siren,
+  Repeat,
+  Timer,
   Sparkles,
+  Star,
+  Sun,
   Truck,
   User,
   LogOut,
   Workflow,
   X,
+  Zap,
 } from "lucide-react";
 import {
   centralBudgetRemaining,
@@ -96,6 +165,10 @@ import {
   MetricCard,
   SectionHeader,
   StatusBadge,
+  StatCard,
+  Segmented,
+  RailCard,
+  s,
   SupplierContactCard,
   formatNumber,
   formatTHB,
@@ -126,6 +199,7 @@ import type {
   PurchaseRequest,
   PurchaseRequestCalculationSnapshot,
   Region,
+  RequestStatus,
   Sku,
   StockStatus,
   Supplier,
@@ -154,6 +228,11 @@ type View =
   | "vmi"
   | "vmi-simulation"
   | "receiving-delay"
+  | "data"
+  | "diff"
+  | "brain"
+  | "mobilize"
+  | "disaster"
   | "budget-settings"
   | "settings";
 
@@ -178,6 +257,11 @@ const viewLabels: Record<View, string> = {
   vmi: "VMI",
   "vmi-simulation": "จำลอง VMI",
   "receiving-delay": "รับของ/Delay",
+  data: "นำเข้าข้อมูล",
+  diff: "เฝ้าระวัง Diff",
+  brain: "สมองกลางพัสดุ",
+  mobilize: "คำขอระดม (รับ)",
+  disaster: "ศูนย์ระดมพัสดุฉุกเฉิน",
   "budget-settings": "งบประมาณ",
   settings: "ตั้งค่า",
 };
@@ -416,11 +500,15 @@ type AuthUser = {
   username: string;
   password: string;
   role: UserRole;
+  // ตำแหน่ง/บทบาทที่เลือกตอนสมัคร (เดโม) — ใช้แสดงผล ไม่กระทบสิทธิ์จริง
+  title?: string;
 };
 type SessionUser = {
   name: string;
   username: string;
   role: UserRole;
+  // ป้ายบทบาทที่แสดงผล (เดโม): เจ้าหน้าที่คลัง / ผอ.เขต / นักวิเคราะห์ / God Mode — ไม่กระทบสิทธิ์จริง (role เป็นตัวคุม)
+  title?: string;
 };
 
 // บัญชี admin ในตัวสำหรับสิทธิ์ลบ (admin/admin) — รหัสยืนยันการลบ
@@ -758,7 +846,9 @@ function App() {
     return 0;
   });
   const [view, setView] = useState<View>("dashboard");
+  const [showIntro, setShowIntro] = useState(true);
   const [showLanding, setShowLanding] = useState(true);
+  const [showFormulas, setShowFormulas] = useState(false);
   const [selectedSkuId, setSelectedSkuId] = useState("1CC0CG0002");
   const [selectedSupplierId, setSelectedSupplierId] = useState("S001");
   const [selectedRequestId, setSelectedRequestId] = useState("REQ-002");
@@ -851,7 +941,7 @@ function App() {
   };
 
   // ── Auth (PoC localStorage) ────────────────────────────────────────────────
-  const registerUser = (name: string, username: string, password: string): boolean => {
+  const registerUser = (name: string, username: string, password: string, title?: string): boolean => {
     const cleanName = name.trim();
     const cleanUsername = username.trim().toLowerCase();
     if (!cleanName || !cleanUsername || !password) {
@@ -862,9 +952,9 @@ function App() {
       notify("username นี้ถูกใช้แล้ว");
       return false;
     }
-    const newUser: AuthUser = { name: cleanName, username: cleanUsername, password, role: "user" };
+    const newUser: AuthUser = { name: cleanName, username: cleanUsername, password, role: "user", title };
     setAuthUsers((current) => [...current, newUser]);
-    setCurrentUser({ name: cleanName, username: cleanUsername, role: "user" });
+    setCurrentUser({ name: cleanName, username: cleanUsername, role: "user", title });
     notify(`สมัครและเข้าสู่ระบบเป็น ${cleanName} แล้ว`);
     return true;
   };
@@ -885,9 +975,14 @@ function App() {
       notify("username หรือรหัสผ่านไม่ถูกต้อง");
       return false;
     }
-    setCurrentUser({ name: found.name, username: found.username, role: found.role });
+    setCurrentUser({ name: found.name, username: found.username, role: found.role, title: found.title });
     notify(`เข้าสู่ระบบเป็น ${found.name} แล้ว`);
     return true;
+  };
+  // เข้าเล่นเดโมตามบทบาท (bypass login) — สร้าง session ผู้ใช้จำลองแล้วเข้าแอปทันที God Mode = สิทธิ์ admin
+  const demoLoginAs = (user: SessionUser) => {
+    setCurrentUser(user);
+    notify(`เข้าเล่นเดโมเป็น ${user.title ?? user.name} แล้ว`);
   };
   const logoutUser = () => {
     setCurrentUser(null);
@@ -1385,6 +1480,16 @@ function App() {
     setApprovalTab("regional");
     notify("ล้างประวัติทดสอบและรีเซ็ต log แล้ว");
   };
+  // รีเซ็ตข้อมูลทั้งหมดกลับค่าเริ่มต้นจากโรงงาน — ล้าง localStorage ทุก key ของแอป (รวม Supplier/SKU/งบ/สูตร) แล้วโหลดใหม่เพื่อ re-seed
+  const factoryResetAll = () => {
+    const ok = window.confirm("รีเซ็ตข้อมูลทั้งหมดกลับค่าเริ่มต้น? จะลบทุกอย่างที่บันทึกไว้ (Supplier, SKU, งบประมาณ, สูตร, ประวัติ, บัญชีที่สมัคร) แล้วโหลดข้อมูลตั้งต้นใหม่ — ย้อนกลับไม่ได้");
+    if (!ok) return;
+    try {
+      Object.keys(localStorage).filter((k) => k.startsWith("pea-ai-inventory:")).forEach((k) => localStorage.removeItem(k));
+      localStorage.removeItem("pea-theme");
+    } catch { /* ignore */ }
+    window.location.reload();
+  };
 
   const page = (() => {
     switch (view) {
@@ -1406,6 +1511,9 @@ function App() {
             }}
             onOpenStockIntelligence={() => setView("stock-intelligence")}
             onOpenAudit={() => setView("procurement-audit")}
+            onOpenApproval={() => setView("approval")}
+            onOpenHistory={() => setView("history")}
+            onOpenRequest={() => setView("request")}
           />
         );
       case "inventory":
@@ -1452,17 +1560,7 @@ function App() {
           />
         );
       case "auth":
-        return (
-          <AuthPage
-            currentUser={currentUser}
-            onLogin={loginUser}
-            onRegister={registerUser}
-            onResetPassword={resetPassword}
-            onGoogleLogin={loginWithGoogle}
-            onLogout={logoutUser}
-            onOpenFeedback={() => setView("feedback")}
-          />
-        );
+        return null;
       case "sku-detail":
         return (
           <SkuDetailPage
@@ -1619,17 +1717,38 @@ function App() {
             changeLogs={changeLogs}
             onSaveFormulaPolicy={saveFormulaPolicy}
             onClearDemoHistory={clearDemoHistory}
+            onFactoryReset={factoryResetAll}
           />
         );
+      case "data":
+        return <DataImportPage onBack={() => setView("dashboard")} />;
+      case "diff":
+        return <DiffMonitorPage onBack={() => setView("dashboard")} onOpenHistory={() => setView("history")} />;
+      case "brain":
+        return <MaterialsBrainPage onBack={() => setView("dashboard")} onOpenHistory={() => setView("history")} />;
+      case "mobilize":
+        return <MobilizeInboxPage onBack={() => setView("dashboard")} />;
+      case "disaster":
+        return <DisasterCenterPage onBack={() => setView("dashboard")} onOpenMobilize={() => setView("mobilize")} />;
       default:
         return null;
     }
   })();
 
+  if (showFormulas) {
+    return <FormulasPage onBack={() => setShowFormulas(false)} onEnter={() => { setShowFormulas(false); setShowLanding(false); setShowIntro(false); }} />;
+  }
+
+  if (showIntro) {
+    return <IntroPage onEnter={() => setShowIntro(false)} />;
+  }
+
   if (showLanding) {
     return (
       <LandingPage
         currentUser={currentUser}
+        onBackToIntro={() => setShowIntro(true)}
+        onOpenFormulas={() => setShowFormulas(true)}
         onEnter={() => setShowLanding(false)}
         onLogin={() => {
           setShowLanding(false);
@@ -1639,8 +1758,21 @@ function App() {
     );
   }
 
+  if (view === "auth" && !currentUser) {
+    return (
+      <AuthPage
+        onLogin={(u, p) => { const ok = loginUser(u, p); if (ok) setView("dashboard"); return ok; }}
+        onRegister={(n, u, p, title) => { const ok = registerUser(n, u, p, title); if (ok) setView("dashboard"); return ok; }}
+        onResetPassword={resetPassword}
+        onGoogleLogin={(profile) => { loginWithGoogle(profile); setView("dashboard"); }}
+        onDemoLogin={(user) => { demoLoginAs(user); setView("dashboard"); }}
+        onBack={() => setShowLanding(true)}
+      />
+    );
+  }
+
   return (
-    <AppLayout view={view} formulaPolicy={formulaPolicy} onNavigate={setView} noteCount={procurementNotes.length} onAddNote={addPoNote} currentUser={currentUser}>
+    <AppLayout view={view} formulaPolicy={formulaPolicy} onNavigate={setView} noteCount={procurementNotes.length} onAddNote={addPoNote} currentUser={currentUser} onLogout={logoutUser} onExitToLanding={() => setShowLanding(true)}>
       {toast ? (
         <div className="fixed right-6 top-5 z-30 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 shadow-soft">
           {toast}
@@ -1724,122 +1856,825 @@ function SubmitConfirmationModal({
   );
 }
 
-function LandingPage({ currentUser, onEnter, onLogin }: { currentUser: SessionUser | null; onEnter: () => void; onLogin: () => void }) {
-  const features = [
-    { icon: Calculator, title: "AI แนะนำ + อธิบายได้", desc: "ทุกตัวเลขบอก ‘คำนวณจริงจาก’ และ ‘เปลี่ยนเมื่อ’ ตรวจสอบย้อนหลังได้ ไม่ใช่ตัวเลขลอย ๆ" },
-    { icon: Megaphone, title: "ตลาดนัดเคลียร์ของจม", desc: "ประกาศของจมที่ยืม/แลกได้ พร้อมมูลค่าทุนจมและ aging — ลด overstock" },
-    { icon: Scale, title: "ตรวจซื้อซ้ำ-ของจม", desc: "จับเคสของบซื้อทั้งที่ของยังจม และเร่งใช้งบให้หมดปลายปี" },
-    { icon: ArrowRightLeft, title: "โอน/ยืม/แลกก่อนซื้อ", desc: "เติมคลังที่ขาดจากคลังที่เหลือ มีเกณฑ์กันคลังต้นทางขาดเอง" },
-    { icon: ShieldCheck, title: "อนุมัติงบ 3 ชั้น", desc: "คลัง → เขต → ส่วนกลาง พร้อม Budget Check และ Calculation Snapshot" },
-    { icon: PackageCheck, title: "ตรวจรับ + Feedback loop", desc: "บันทึก delay/ค่าจริง → ปรับสูตรเวอร์ชันใหม่ให้แม่นขึ้นรอบถัดไป" },
-  ];
-  const problems = [
-    { p: "Forecast ไม่แม่น โดยเฉพาะงานซ่อมฉุกเฉิน", s: "AI Suggest + Demand Forecast + บันทึก damage history" },
-    { p: "จัดซื้อช้า / ตรวจรับช้า", s: "ตรวจรับ 7 ขั้น + Delay log + คะแนน reliability ของ supplier" },
-    { p: "ไม่มีเกณฑ์ยืมพัสดุข้ามคลัง", s: "Transfer/Borrow พร้อม buffer กันคลังต้นทางขาด" },
+// หน้า Intro / splash — แสดงก่อน landing พร้อมแอนิเมชัน เข้าหน้าแรกอัตโนมัติใน ~10 วิ หรือกดข้าม (พอร์ตจาก PEA Intro design)
+function IntroPage({ onEnter }: { onEnter: () => void }) {
+  useEffect(() => {
+    const t = setTimeout(onEnter, 18000);
+    return () => clearTimeout(t);
+  }, [onEnter]);
+
+  const stats: { value: string; label: string; color: string; delay: string }[] = [
+    { value: "฿8.6M", label: "ทุนจมที่ดักได้", color: "#F472B6", delay: ".9s" },
+    { value: "87%", label: "ความแม่นยำ AI", color: "#C77DFF", delay: "1.05s" },
+    { value: "3 ชั้น", label: "อนุมัติงบ + Audit", color: "#FFD057", delay: "1.2s" },
   ];
 
   return (
-    <div className="min-h-screen bg-white text-slate-900">
-      <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-3">
-          <div className="flex items-center gap-2.5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600 text-white"><Sparkles className="h-5 w-5" /></span>
-            <div className="leading-tight">
-              <p className="text-sm font-bold">PEA AI Inventory</p>
-              <p className="text-[11px] text-slate-500">แพลตฟอร์มวางแผนพัสดุ & จัดซื้อด้วย AI</p>
+    <div style={s("position:relative;width:100vw;height:100vh;overflow:hidden;font-family:Kanit,sans-serif;background:radial-gradient(120% 90% at 50% 8%,#23123F 0%,#160C2B 42%,#0B0717 100%);display:flex;flex-direction:column;align-items:center;")}>
+      {/* animated grid floor */}
+      <div style={s("position:absolute;inset:0;background-image:linear-gradient(rgba(168,85,247,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(168,85,247,.07) 1px,transparent 1px);background-size:52px 52px;mask-image:linear-gradient(180deg,transparent,#000 55%,#000 78%,transparent);-webkit-mask-image:linear-gradient(180deg,transparent,#000 55%,#000 78%,transparent);animation:gridFloat 6s linear infinite;")} />
+
+      {/* ambient glows */}
+      <div style={s("position:absolute;top:-160px;left:50%;transform:translateX(-50%);width:760px;height:560px;border-radius:50%;background:radial-gradient(circle,rgba(192,36,155,.34),transparent 62%);filter:blur(36px);animation:glowPulse 5.5s ease-in-out infinite;pointer-events:none;")} />
+      <div style={s("position:absolute;bottom:-200px;left:18%;width:460px;height:460px;border-radius:50%;background:radial-gradient(circle,rgba(124,45,224,.26),transparent 64%);filter:blur(40px);animation:glowPulse 7s ease-in-out infinite;pointer-events:none;")} />
+      <div style={s("position:absolute;top:30%;right:8%;width:340px;height:340px;border-radius:50%;background:radial-gradient(circle,rgba(232,74,160,.18),transparent 66%);filter:blur(38px);animation:glowPulse 6.2s ease-in-out infinite .8s;pointer-events:none;")} />
+
+      {/* orbiting accent ring */}
+      <div style={s("position:absolute;top:50%;left:50%;width:680px;height:680px;margin:-340px 0 0 -340px;animation:orbit 26s linear infinite;pointer-events:none;opacity:.5;")}>
+        <span style={s("position:absolute;top:0;left:50%;width:8px;height:8px;margin-left:-4px;border-radius:50%;background:#E84AA0;box-shadow:0 0 14px 3px rgba(232,74,160,.8);")} />
+        <span style={s("position:absolute;bottom:6%;right:14%;width:5px;height:5px;border-radius:50%;background:#C77DFF;box-shadow:0 0 12px 2px rgba(199,125,255,.8);")} />
+        <span style={s("position:absolute;top:24%;left:4%;width:6px;height:6px;border-radius:50%;background:#FFD057;box-shadow:0 0 12px 2px rgba(255,208,87,.8);")} />
+      </div>
+
+      {/* CENTER STAGE */}
+      <div style={s("position:relative;z-index:5;flex:1;min-height:0;width:100%;max-width:880px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:28px 32px;")}>
+        <div style={s("animation:scaleIn .8s cubic-bezier(.2,.8,.25,1) both;margin-bottom:16px;")}>
+          <div style={s("position:relative;width:72px;height:72px;border-radius:22px;background:linear-gradient(140deg,#8B2FE6 0%,#B51C9E 52%,#E84AA0 100%);display:flex;align-items:center;justify-content:center;box-shadow:0 22px 60px -16px rgba(184,40,170,.85),inset 0 1px 0 rgba(255,255,255,.32);animation:floatY 5s ease-in-out infinite;")}>
+            <div style={s("position:absolute;top:-18px;left:-18px;width:54px;height:54px;border-radius:50%;background:rgba(255,255,255,.28);filter:blur(13px);")} />
+            <div style={s("position:absolute;bottom:-22px;right:-12px;width:48px;height:48px;border-radius:50%;background:rgba(124,45,224,.6);filter:blur(15px);")} />
+            <Boxes style={s("position:relative;width:38px;height:38px;color:#fff;")} />
+            <span style={s("position:absolute;top:11px;right:11px;width:11px;height:11px;border-radius:50%;background:#FFD057;box-shadow:0 0 12px 2px rgba(255,208,87,.9);animation:blink 1.8s ease-in-out infinite;")} />
+          </div>
+        </div>
+
+        <div style={s("display:inline-flex;align-items:center;gap:9px;padding:6px 15px;border-radius:99px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);margin-bottom:16px;animation:riseUpSm .7s ease .15s both;backdrop-filter:blur(6px);")}>
+          <span style={s("width:7px;height:7px;border-radius:50%;background:#4ADE80;box-shadow:0 0 10px 2px rgba(74,222,128,.8);animation:blink 2s infinite;")} />
+          <span style={s("font-size:12px;font-weight:500;letter-spacing:.5px;color:rgba(255,255,255,.72);")}>PEA × ThaiCloud Hackathon 2026 · Track 2</span>
+        </div>
+
+        <h1 style={s("margin:0 0 5px;font-size:40px;line-height:1.05;font-weight:600;letter-spacing:-.6px;color:#fff;animation:riseUp .8s ease .28s both;")}>
+          PEA <span style={s("background:linear-gradient(100deg,#E84AA0,#C77DFF 60%,#8B6CFF);-webkit-background-clip:text;background-clip:text;color:transparent;")}>AI</span> Stock Intelligent
+        </h1>
+        <div style={s("font-size:14.5px;font-weight:300;color:rgba(255,255,255,.6);letter-spacing:1.5px;margin-bottom:16px;animation:riseUp .8s ease .4s both;")}>ระบบบริหารสต๊อคอัจฉริยะ</div>
+
+        <p style={s("margin:0 0 22px;font-size:16.5px;line-height:1.5;font-weight:300;color:rgba(255,255,255,.82);max-width:640px;animation:riseUp .8s ease .52s both;")}>
+          ระบบที่ถามก่อนว่า <span style={s("font-weight:500;color:#fff;")}>“จำเป็นต้องซื้อจริงไหม”</span><br />
+          ลดของค้างก่อนขอซื้อ — เห็นของขาดและของเกินทั้งองค์กร
+        </p>
+
+        <div style={s("display:flex;align-items:stretch;gap:14px;margin-bottom:22px;animation:riseUp .8s ease .64s both;")}>
+          {stats.map((st, i) => (
+            <div key={st.label} style={s(`position:relative;padding:13px 20px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(8px);${i === 0 ? "overflow:hidden;" : ""}`)}>
+              {i === 0 ? <div style={s("position:absolute;inset:0;background:linear-gradient(110deg,transparent,rgba(232,74,160,.16),transparent);animation:sweep 3.4s ease-in-out infinite;")} /> : null}
+              <div style={s(`position:relative;font-size:24px;font-weight:700;color:${st.color};line-height:1;animation:countUp .6s ease ${st.delay} both;`)}>{st.value}</div>
+              <div style={s("position:relative;font-size:11.5px;color:rgba(255,255,255,.55);margin-top:6px;")}>{st.label}</div>
             </div>
+          ))}
+        </div>
+
+        <div style={s("display:flex;align-items:center;gap:16px;animation:riseUp .8s ease .78s both;")}>
+          <button onClick={onEnter} style={s("position:relative;display:inline-flex;align-items:center;gap:11px;height:56px;padding:0 30px;border:0;border-radius:16px;background:linear-gradient(135deg,#7C2DE0,#C0249B);color:#fff;font-family:inherit;font-size:16px;font-weight:600;cursor:pointer;box-shadow:0 20px 44px -14px rgba(184,40,170,.9);overflow:hidden;")}>
+            <span style={s("position:absolute;inset:0;background:linear-gradient(110deg,transparent,rgba(255,255,255,.28),transparent);animation:sweep 2.8s ease-in-out infinite 1.4s;")} />
+            <Play style={s("position:relative;width:19px;height:19px;")} />
+            <span style={s("position:relative;")}>เริ่มนำเสนอ</span>
+          </button>
+          <button onClick={onEnter} style={s("display:inline-flex;align-items:center;gap:8px;height:56px;padding:0 22px;border:1px solid rgba(255,255,255,.18);border-radius:16px;background:rgba(255,255,255,.04);color:rgba(255,255,255,.86);font-family:inherit;font-size:15px;font-weight:500;cursor:pointer;backdrop-filter:blur(6px);")}>
+            ข้ามไปหน้าแรก <ArrowRight style={s("width:17px;height:17px;")} />
+          </button>
+        </div>
+
+        <div style={s("margin-top:18px;display:flex;align-items:center;gap:10px;animation:fadeIn 1s ease 1.2s both;")}>
+          <div style={s("position:relative;width:150px;height:3px;border-radius:99px;background:rgba(255,255,255,.1);overflow:hidden;")}>
+            <div style={s("position:absolute;left:0;top:0;height:100%;border-radius:99px;background:linear-gradient(90deg,#7C2DE0,#E84AA0);width:0;animation:loadbar 17s linear .8s forwards;")} />
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="secondary" onClick={onLogin}><User className="h-4 w-4" /> {currentUser ? currentUser.name : "เข้าสู่ระบบ"}</Button>
-            <Button onClick={onEnter}>เริ่มใช้งาน <ArrowRight className="h-4 w-4" /></Button>
-          </div>
+          <span style={s("font-size:11.5px;color:rgba(255,255,255,.4);")}>เข้าสู่หน้าแรกอัตโนมัติ</span>
+        </div>
+      </div>
+
+      <div style={s("position:relative;z-index:5;flex:none;text-align:center;padding-bottom:20px;animation:fadeIn 1s ease 1.5s both;")}>
+        <span className="mono" style={s("font-size:10.5px;color:rgba(255,255,255,.32);letter-spacing:.5px;")}>PROTOTYPE · re-model 2026</span>
+      </div>
+    </div>
+  );
+}
+
+// หน้าอ้างอิงสูตรการคำนวณ (Formula Reference) — full-screen ธีมมืด + side nav + 9 หมวดสูตร + ตัวอย่าง (พอร์ตจาก PEA Formulas design)
+function FormulasPage({ onBack, onEnter }: { onBack: () => void; onEnter: () => void }) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const scrollTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const navItems = [
+    { id: "f-chain", no: "00", label: "ลำดับ End-to-End" },
+    { id: "f-demand", no: "01", label: "ความต้องการใช้ & ผันผวน" },
+    { id: "f-zscore", no: "02", label: "ความมั่นใจ → Z" },
+    { id: "f-safety", no: "03", label: "รอของ & สต็อกสำรอง" },
+    { id: "f-reorder", no: "04", label: "จุดสั่งซื้อใหม่" },
+    { id: "f-suggest", no: "05", label: "จำนวนที่ควรซื้อ" },
+    { id: "f-budget", no: "06", label: "ส่วนต่าง & อนุมัติงบ" },
+    { id: "f-audit", no: "07", label: "ของค้าง & ตรวจสอบ" },
+    { id: "f-vmi", no: "08", label: "จำลอง VMI" },
+    { id: "f-feedback", no: "09", label: "ระบบเรียนรู้เอง" },
+  ];
+  const chain = [
+    { n: 1, t: "Average Daily Demand", f: "Usage Total ÷ Usage Days", d: "ที่ผ่านมาใช้ของวันละกี่หน่วยโดยเฉลี่ย", pink: false, gold: false },
+    { n: 2, t: "Demand Variability / day", f: "SD(period) ÷ √(days/period)", d: "การใช้แต่ละวันสวิงมากไหม — ยิ่งสวิงยิ่งต้องสำรอง", pink: false, gold: false },
+    { n: 3, t: "Adjusted Lead Time", f: "LT × Seasonal × Budget", d: "เวลารอของจริง เผื่อหน้าฝน/สั่งเยอะให้รอนานขึ้น", pink: false, gold: false },
+    { n: 4, t: "Safety Stock", f: "⌈ Z × σday × √LT ⌉", d: "ของสำรองกันเหนียว เผื่อช่วงรอของแล้วใช้เกินคาด", pink: false, gold: false },
+    { n: 5, t: "Reorder Point", f: "⌈ DemandLT + Safety ⌉", d: "ของเหลือถึงจุดนี้เมื่อไหร่ ต้องรีบสั่งซื้อใหม่", pink: false, gold: false },
+    { n: 6, t: "Target Stock Level", f: "Forecast + Safety / Policy", d: "ระดับของที่อยากให้มีหลังเติมเต็ม (เป้าหมาย)", pink: false, gold: false },
+    { n: 7, t: "Suggested Quantity", f: "MOQ⌈ Target − Stock ⌉", d: "ขาดเท่าไหร่ซื้อเท่านั้น ปัดให้ครบลอตขั้นต่ำ", pink: true, gold: false },
+    { n: 8, t: "Approval Layer + Snapshot", f: "Local / Regional / Central", d: "ส่งอนุมัติตามวงเงิน + เก็บ Snapshot ไว้ตรวจย้อนหลัง", pink: false, gold: true },
+  ];
+
+  const Code = ({ lines, pink }: { lines: { n: ReactNode; dim?: boolean }[]; pink?: boolean }) => (
+    <div className="mono" style={s(`font-size:12.5px;color:${pink ? "#F9A8D4" : "#A5B4FC"};background:rgba(0,0,0,.28);border:1px solid ${pink ? "rgba(232,74,160,.18)" : "rgba(255,255,255,.07)"};border-radius:10px;padding:12px 14px;line-height:1.7;`)}>
+      {lines.map((l, i) => <div key={i} style={l.dim ? s("color:rgba(255,255,255,.45);") : undefined}>{l.n}</div>)}
+    </div>
+  );
+  const Tip = ({ children }: { children: ReactNode }) => (
+    <div style={s("margin-top:11px;display:flex;align-items:flex-start;gap:9px;background:rgba(255,208,87,.08);border:1px solid rgba(255,208,87,.22);border-radius:10px;padding:9px 12px;")}><Lightbulb style={s("width:15px;height:15px;color:#FCD34D;margin-top:1px;")} /><span style={s("font-size:12.5px;color:rgba(255,255,255,.84);line-height:1.6;")}><b style={s("color:#FCD34D;")}>พูดง่ายๆ:</b> {children}</span></div>
+  );
+  const Card = ({ title, accent, children }: { title: string; accent?: boolean; children: ReactNode }) => (
+    <div style={s(`background:rgba(255,255,255,.03);border:1px solid ${accent ? "rgba(232,74,160,.28)" : "rgba(255,255,255,.09)"};border-radius:16px;padding:18px;`)}>
+      <div style={s("font-size:14px;font-weight:600;color:#fff;margin-bottom:10px;")}>{title}</div>
+      {children}
+    </div>
+  );
+  const Ex = ({ children }: { children: ReactNode }) => <p style={s("margin:10px 0 0;font-size:12px;color:rgba(255,255,255,.5);line-height:1.55;")}>{children}</p>;
+  const Section = ({ id, title, Icon, iconBg, iconColor, children }: { id: string; title: string; Icon: typeof Shield; iconBg: string; iconColor: string; children: ReactNode }) => (
+    <section id={id} style={s("scroll-margin-top:84px;margin-bottom:40px;")}>
+      <div style={s("display:flex;align-items:center;gap:11px;margin-bottom:18px;")}><span style={s(`width:34px;height:34px;border-radius:10px;background:${iconBg};color:${iconColor};display:flex;align-items:center;justify-content:center;flex:none;`)}><Icon style={s("width:18px;height:18px;")} /></span><h2 style={s("margin:0;font-size:21px;font-weight:600;color:#fff;")}>{title}</h2></div>
+      {children}
+    </section>
+  );
+  const grid2 = s("display:grid;grid-template-columns:1fr 1fr;gap:14px;");
+
+  return (
+    <div ref={rootRef} className="landing-root" style={s("position:relative;height:100vh;width:100%;overflow-y:auto;overflow-x:hidden;font-family:Kanit,sans-serif;color:#fff;background:radial-gradient(100% 60% at 50% -5%,#1E1036 0%,#140C28 45%,#0B0717 100%);")}>
+      {/* TOPBAR */}
+      <header style={s("position:sticky;top:0;z-index:30;background:rgba(11,7,23,.82);backdrop-filter:blur(12px);border-bottom:1px solid rgba(255,255,255,.07);")}>
+        <div style={s("max-width:1240px;margin:0 auto;padding:16px 36px;display:flex;align-items:center;gap:16px;")}>
+          <button onClick={onBack} style={s("text-decoration:none;display:inline-flex;align-items:center;gap:12px;border:0;background:transparent;cursor:pointer;padding:0;")}>
+            <div style={s("position:relative;width:40px;height:40px;border-radius:12px;background:linear-gradient(140deg,#8B2FE6 0%,#B51C9E 52%,#E84AA0 100%);display:flex;align-items:center;justify-content:center;box-shadow:0 9px 22px -6px rgba(184,40,170,.8),inset 0 1px 0 rgba(255,255,255,.3);overflow:hidden;")}><FunctionSquare style={s("position:relative;width:21px;height:21px;color:#fff;")} /><span style={s("position:absolute;top:6px;right:6px;width:6px;height:6px;border-radius:50%;background:#FFD057;box-shadow:0 0 7px 1px rgba(255,208,87,.85);animation:pulseDot 1.9s infinite;")} /></div>
+            <div style={s("text-align:left;")}><div style={s("font-size:14.5px;font-weight:600;color:#fff;line-height:1.1;")}>สูตรการคำนวณ</div><div style={s("font-size:10.5px;color:rgba(255,255,255,.45);")}>Calculation Formula Reference</div></div>
+          </button>
+          <div style={s("flex:1;")} />
+          <span className="mono" style={s("font-size:11px;color:#C77DFF;background:rgba(124,45,224,.16);border:1px solid rgba(124,45,224,.3);padding:5px 11px;border-radius:8px;")}>formula v1.0</span>
+          <button onClick={onBack} style={s("border:0;background:transparent;cursor:pointer;font-size:13px;color:rgba(255,255,255,.6);display:inline-flex;align-items:center;gap:6px;font-family:inherit;")}><ArrowLeft style={s("width:15px;height:15px;")} /> กลับหน้าแรก</button>
         </div>
       </header>
 
-      {/* Hero */}
-      <section className="relative overflow-hidden border-b border-slate-200 bg-gradient-to-b from-blue-50 to-white">
-        <div className="mx-auto max-w-6xl px-5 py-16 text-center sm:py-20">
-          <span className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white px-3 py-1 text-xs font-semibold text-blue-700">
-            <Sparkles className="h-3.5 w-3.5" /> AI-assisted decision support สำหรับการไฟฟ้า (PEA)
+      <div style={s("max-width:1240px;margin:0 auto;padding:0 36px;display:grid;grid-template-columns:222px 1fr;gap:36px;align-items:start;")}>
+        {/* SIDE NAV */}
+        <nav style={s("position:sticky;top:84px;padding:28px 0;display:flex;flex-direction:column;gap:2px;max-height:calc(100vh - 84px);overflow-y:auto;")} className="hidden lg:flex">
+          <div style={s("font-size:10.5px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,.35);padding:6px 12px;")}>หัวข้อสูตร</div>
+          {navItems.map((it) => (
+            <button key={it.id} onClick={() => scrollTo(it.id)} style={s("text-decoration:none;font-size:13px;color:rgba(255,255,255,.62);padding:8px 12px;border-radius:9px;display:flex;align-items:center;gap:9px;border:0;background:transparent;cursor:pointer;font-family:inherit;text-align:left;")}><span className="mono" style={s("font-size:10px;color:#C77DFF;")}>{it.no}</span> {it.label}</button>
+          ))}
+          <button onClick={() => scrollTo("f-example")} style={s("text-decoration:none;font-size:13px;color:#fff;padding:8px 12px;border-radius:9px;display:flex;align-items:center;gap:9px;background:rgba(232,74,160,.12);border:1px solid rgba(232,74,160,.25);margin-top:6px;cursor:pointer;font-family:inherit;text-align:left;")}><Play style={s("width:13px;height:13px;color:#F472B6;")} /> ตัวอย่างจริง</button>
+        </nav>
+
+        {/* CONTENT */}
+        <main style={s("padding:30px 0 70px;min-width:0;")}>
+          <div style={s("margin-bottom:30px;")}>
+            <div style={s("display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:99px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);margin-bottom:16px;")}><BadgeCheck style={s("width:14px;height:14px;color:#6EE7B7;")} /><span style={s("font-size:12px;color:rgba(255,255,255,.72);")}>ทุกตัวเลขอธิบายได้ — ไม่ใช่ AI กล่องดำ</span></div>
+            <h1 style={s("margin:0 0 12px;font-size:36px;font-weight:600;letter-spacing:-.6px;color:#fff;")}>สูตรการคำนวณโดยละเอียด</h1>
+            <p style={s("margin:0;font-size:15px;line-height:1.65;color:rgba(255,255,255,.6);max-width:680px;")}>อ้างอิงจากโค้ดจริง <span className="mono" style={s("font-size:13px;color:#C77DFF;")}>inventoryCalculations.ts</span> · <span className="mono" style={s("font-size:13px;color:#C77DFF;")}>procurementAnalysis.ts</span> — ระบบเริ่มจาก usage ย้อนหลัง คำนวณความผันผวน ปรับ lead time แล้วได้ Safety Stock, Reorder Point และจำนวนที่ควรซื้อ ก่อนตรวจงบ 3 ชั้น และเก็บ Snapshot</p>
+          </div>
+
+          {/* 00 END-TO-END */}
+          <Section id="f-chain" title="ลำดับการคำนวณ End-to-End" Icon={GitMerge} iconBg="linear-gradient(140deg,#7C2DE0,#C0249B)" iconColor="#fff">
+            <div style={s("background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.09);border-radius:18px;padding:10px 8px;")}>
+              <div style={s("display:grid;grid-template-columns:1fr 1fr;gap:2px;")}>
+                {chain.map((c) => (
+                  <div key={c.n} style={s("display:flex;align-items:flex-start;gap:13px;padding:13px 16px;")}>
+                    <span className="mono" style={s(`width:26px;height:26px;border-radius:7px;background:${c.pink ? "rgba(232,74,160,.22)" : c.gold ? "rgba(255,208,87,.2)" : "rgba(124,45,224,.2)"};color:${c.pink ? "#F472B6" : c.gold ? "#FCD34D" : "#C77DFF"};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex:none;`)}>{c.n}</span>
+                    <div><div style={s("font-size:13.5px;color:#fff;font-weight:500;")}>{c.t}</div><div className="mono" style={s("font-size:11px;color:rgba(255,255,255,.5);")}>{c.f}</div><div style={s("font-size:11px;color:rgba(255,255,255,.6);margin-top:4px;line-height:1.5;")}>{c.d}</div></div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Section>
+
+          {/* 01 DEMAND */}
+          <Section id="f-demand" title="01 · ความต้องการใช้ & ความผันผวน" Icon={TrendingUp} iconBg="rgba(124,45,224,.2)" iconColor="#C77DFF">
+            <div style={grid2}>
+              <Card title="Average Daily Demand">
+                <Code lines={[{ n: "Avg Daily Demand =" }, { n: "  Σ(usage) ÷ Σ(days)" }, { n: "ความต้องการเฉลี่ย/วัน =", dim: true }, { n: "  การใช้รวม ÷ จำนวนวันรวม", dim: true }]} />
+                <Ex>เช่น 600 ÷ 180 = <b style={s("color:#C77DFF;")}>3.33 หน่วย/วัน</b> · ถ้า days ≤ 0 ผลลัพธ์ = 0</Ex>
+                <Tip>ดูว่าที่ผ่านมาเราใช้ของชิ้นนี้วันละกี่หน่วยโดยเฉลี่ย — เอายอดใช้ทั้งหมดมาหารจำนวนวัน</Tip>
+              </Card>
+              <Card title="Demand Variability / Day">
+                <Code lines={[{ n: "σ_period = √( Σ(qᵢ−mean)² ÷ n )" }, { n: "σ_day = σ_period ÷ √(days/period)" }, { n: "σ_period = ความผันผวนราย period", dim: true }, { n: "σ_day = ความผันผวนต่อวัน", dim: true }]} />
+                <Ex>ใช้ population SD · ค่ายิ่งสูง = การใช้ยิ่งสวิง ต้องสำรองของมากขึ้น</Ex>
+                <Tip>ดูว่าการใช้แต่ละวันสวิงมากไหม ถ้าบางวันใช้เยอะบางวันใช้น้อย ต้องสำรองเผื่อมากขึ้น</Tip>
+              </Card>
+            </div>
+          </Section>
+
+          {/* 02 Z-SCORE */}
+          <Section id="f-zscore" title="02 · ความมั่นใจว่าของไม่ขาด (Service Level → Z)" Icon={Percent} iconBg="rgba(124,45,224,.2)" iconColor="#C77DFF">
+            <div style={s("display:grid;grid-template-columns:1.15fr 1fr;gap:14px;align-items:start;")}>
+              <div style={s("background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.09);border-radius:16px;padding:18px;")}>
+                <p style={s("margin:0 0 12px;font-size:13px;color:rgba(255,255,255,.6);line-height:1.6;")}>ผู้ใช้เลือก Service Level แล้ว derive Z-score อัตโนมัติ เพื่อไม่ให้ขัดกัน — ถ้าอยู่ระหว่างค่าในตารางใช้ linear interpolation</p>
+                <Code lines={[{ n: "Ratio = (SL − SL_low) ÷ (SL_high − SL_low)" }, { n: "Z = Z_low + Ratio × (Z_high − Z_low)" }, { n: "Z-score = ROUND(Z × 100) ÷ 100" }, { n: "เทียบสัดส่วนระหว่างค่าในตาราง แล้วเฉลี่ยหาค่า Z · ปัด 2 ตำแหน่ง", dim: true }]} />
+                <Tip>เราอยากมั่นใจกี่เปอร์เซ็นต์ว่าจะมีของพอไม่ขาดมือ ยิ่งมั่นใจมากยิ่งต้องสำรองมาก — ค่า Z คือตัวแปลงความมั่นใจนั้นให้เข้าสูตร</Tip>
+              </div>
+              <div style={s("background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.09);border-radius:16px;padding:8px 6px;overflow:hidden;")}>
+                <table style={s("width:100%;border-collapse:collapse;")}>
+                  <thead><tr><th style={s("text-align:left;font-size:10.5px;font-weight:600;color:rgba(255,255,255,.4);text-transform:uppercase;padding:8px 14px;")}>Service Level</th><th style={s("text-align:right;font-size:10.5px;font-weight:600;color:rgba(255,255,255,.4);text-transform:uppercase;padding:8px 14px;")}>Z-score</th></tr></thead>
+                  <tbody>
+                    {[{ sl: "0.900", z: "1.28", def: false }, { sl: "0.950", z: "1.65", def: true }, { sl: "0.975", z: "1.96", def: false }, { sl: "0.990", z: "2.33", def: false }, { sl: "0.995", z: "2.58", def: false }].map((r) => (
+                      <tr key={r.sl} style={r.def ? s("background:rgba(124,45,224,.12);") : undefined}>
+                        <td className="mono" style={s(`padding:6px 14px;font-size:12.5px;color:${r.def ? "#fff" : "rgba(255,255,255,.7)"};`)}>{r.sl}{r.def ? <span style={s("color:#C77DFF;font-size:10px;")}> · default</span> : null}</td>
+                        <td className="mono" style={s(`padding:6px 14px;font-size:12.5px;text-align:right;${r.def ? "color:#C77DFF;font-weight:600;" : "color:#fff;"}`)}>{r.z}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </Section>
+
+          {/* 03 SAFETY */}
+          <Section id="f-safety" title="03 · ระยะเวลารอของ & สต็อกสำรอง" Icon={Shield} iconBg="rgba(124,45,224,.2)" iconColor="#C77DFF">
+            <div style={grid2}>
+              <Card title="Adjusted Lead Time">
+                <Code lines={[{ n: "Adj LT = Supplier LT" }, { n: "  × Seasonal × Budget" }, { n: "Lead Time ปรับแล้ว = LT ซัพพลายเออร์ × ตัวคูณฤดูกาล × ตัวคูณงบ", dim: true }]} />
+                <Ex>25 × 1.20 × 1.00 = <b style={s("color:#C77DFF;")}>30 วัน</b> · ตัวคูณฤดูกาลเผื่อช่วงใช้เยอะ, ตัวคูณงบเผื่อรอบงบ/ความล่าช้า</Ex>
+                <Tip>ของไม่ได้มาทันทีที่สั่ง ต้องรอผู้ขายส่ง และเผื่อช่วงหน้าฝนหรือสั่งกันเยอะให้รอนานขึ้น</Tip>
+              </Card>
+              <Card title="Safety Stock">
+                <Code lines={[{ n: "Safety Stock =" }, { n: "  ⌈ Z × σ_day × √(Adj LT) ⌉" }, { n: "สต็อกสำรอง = ปัดขึ้น( Z × ผันผวน/วัน × √Lead Time )", dim: true }]} />
+                <Ex>1.65 × 2.4 × √30 ≈ 21.69 → ปัดขึ้น <b style={s("color:#C77DFF;")}>22 หน่วย</b></Ex>
+                <Tip>ของสำรองกันเหนียว เผื่อช่วงรอของแล้วคนใช้เยอะกว่าปกติ จะได้ไม่ขาดมือ</Tip>
+              </Card>
+            </div>
+          </Section>
+
+          {/* 04 REORDER */}
+          <Section id="f-reorder" title="04 · จุดสั่งซื้อใหม่ (Reorder Point) & สถานะสต็อก" Icon={GitCommitHorizontal} iconBg="rgba(124,45,224,.2)" iconColor="#C77DFF">
+            <div style={grid2}>
+              <Card title="Reorder Point">
+                <Code lines={[{ n: "Demand LT = Avg Daily × Adj LT" }, { n: "Reorder Point =" }, { n: "  ⌈ Demand LT + Safety Stock ⌉" }, { n: "ความต้องการระหว่างรอของ + สต็อกสำรอง = จุดสั่งซื้อใหม่ (ปัดขึ้น)", dim: true }]} />
+                <Ex>99.9 + 22 = 121.9 → <b style={s("color:#C77DFF;")}>122 หน่วย</b></Ex>
+                <Tip>เหมือนไฟเตือนน้ำมันรถ — พอของเหลือถึงจุดนี้ต้องรีบสั่งเพิ่ม ไม่งั้นของมาไม่ทันจะขาด</Tip>
+              </Card>
+              <Card title="สถานะสต็อก">
+                <div style={s("display:flex;flex-direction:column;gap:9px;")}>
+                  {[{ l: "Critical", c: "#FCA5A5", b: "rgba(220,38,38,.16)", t: "Stock ≤ Safety Stock" }, { l: "Near ROP", c: "#FCD34D", b: "rgba(217,119,6,.16)", t: "Stock ≤ Reorder Point" }, { l: "Normal", c: "#6EE7B7", b: "rgba(5,150,105,.18)", t: "มีของสำรองเพียงพอ" }].map((r) => (
+                    <div key={r.l} style={s("display:flex;align-items:center;gap:10px;")}><span style={s(`font-size:10.5px;font-weight:600;color:${r.c};background:${r.b};padding:3px 9px;border-radius:99px;flex:none;`)}>{r.l}</span><span className="mono" style={s("font-size:11.5px;color:rgba(255,255,255,.6);")}>{r.t}</span></div>
+                  ))}
+                </div>
+              </Card>
+            </div>
+          </Section>
+
+          {/* 05 SUGGEST */}
+          <Section id="f-suggest" title="05 · จำนวนที่ควรซื้อ (Suggested Quantity)" Icon={Sparkles} iconBg="linear-gradient(140deg,#B51C9E,#E84AA0)" iconColor="#fff">
+            <div style={grid2}>
+              <Card title="Target Stock & MOQ Rounding">
+                <Code lines={[{ n: "Target = Forecast + Safety" }, { n: "  (หรือ Policy Override)" }, { n: "RoundUpMOQ(q) = ⌈q÷MOQ⌉ × MOQ" }, { n: "สต็อกเป้าหมาย = คาดการณ์ + สต็อกสำรอง · ปัดจำนวนขึ้นให้ครบลอต MOQ", dim: true }]} />
+              </Card>
+              <Card title="Suggested Quantity" accent>
+                <Code pink lines={[{ n: "Raw = Target − Current Stock" }, { n: "Suggested =" }, { n: "  Raw ≤ 0 ? 0 : RoundUpMOQ(Raw)" }, { n: "จำนวนที่ขาด = เป้าหมาย − สต็อกปัจจุบัน · ถ้าขาด > 0 ปัดตาม MOQ = จำนวนแนะนำซื้อ", dim: true }]} />
+                <Ex>70 − 60 = 10 → <b style={s("color:#F472B6;")}>แนะนำซื้อ 10 หน่วย</b></Ex>
+                <Tip>ควรเติมของให้ถึงระดับเป้าหมาย ขาดอยู่เท่าไหร่ก็ซื้อเท่านั้น แล้วปัดให้ครบลอตขั้นต่ำที่ผู้ขายกำหนด (MOQ)</Tip>
+              </Card>
+            </div>
+          </Section>
+
+          {/* 06 BUDGET */}
+          <Section id="f-budget" title="06 · ส่วนต่าง & เส้นทางอนุมัติงบ" Icon={Route} iconBg="rgba(255,208,87,.2)" iconColor="#FCD34D">
+            <div style={grid2}>
+              <Card title="Variance vs AI Suggest">
+                <Code lines={[{ n: "Variance = Requested − Suggested" }, { n: "Variance% = Variance ÷ Suggested × 100" }, { n: "High Variance = |Variance%| ≥ 50%" }, { n: "ส่วนต่าง = จำนวนที่ขอ − จำนวนที่ AI แนะนำ · เบี่ยง ≥ 50% = ผิดปกติ", dim: true }]} />
+                <Ex>ถ้าจำนวนที่ขอ ≠ ที่ระบบแนะนำ ต้องใส่ <b style={s("color:#FCD34D;")}>เหตุผลกำกับ</b></Ex>
+                <Tip>ดูว่าคนขอซื้อต่างจากที่ระบบแนะนำมากไหม ถ้าต่างเกินครึ่ง (50%) ถือว่าผิดปกติ ต้องชี้แจงเหตุผลก่อน</Tip>
+              </Card>
+              <Card title="Approval Layer (3 ชั้น)">
+                <Code lines={[{ n: "Cost = Requested × Unit Price" }, { n: <>Cost ≤ Local → <span style={s("color:#6EE7B7;")}>Local</span></> }, { n: <>else ≤ Regional → <span style={s("color:#93C5FD;")}>Regional</span></> }, { n: <>else → <span style={s("color:#FCD34D;")}>Central</span></> }, { n: "มูลค่า = จำนวนที่ขอ × ราคา/หน่วย · งบพอชั้นไหน → อนุมัติชั้นนั้น", dim: true }]} />
+                <Tip>ยิ่งใช้เงินมาก ยิ่งต้องให้ระดับสูงขึ้นอนุมัติ — ของถูกคลังอนุมัติเองได้ ของแพงส่งเขตหรือส่วนกลาง</Tip>
+              </Card>
+            </div>
+          </Section>
+
+          {/* 07 AUDIT */}
+          <Section id="f-audit" title="07 · ของค้างสต็อก & ตรวจสอบการจัดซื้อ" Icon={SearchCheck} iconBg="rgba(220,38,38,.18)" iconColor="#FCA5A5">
+            <div style={grid2}>
+              <Card title="Audit Flags (จับ gotcha)">
+                <div style={s("display:flex;flex-direction:column;gap:11px;")}>
+                  {[{ k: "repeat-buy", c: "#FCA5A5", d: "ขอซื้อใหม่ ทั้งที่มีของแบบเดียวกันค้างสต็อกอยู่ในคลัง/เขตเดียวกัน" }, { k: "spend-to-keep", c: "#FCD34D", d: "ยังเร่งใช้งบซื้อเกือบเต็ม ทั้งที่ของค้างกลับเพิ่มขึ้น" }, { k: "over-peer", c: "#C77DFF", d: "ขอซื้อมากเกิน 1.5 เท่าของค่าเฉลี่ยคลังอื่นในหมวดเดียวกัน" }].map((f) => (
+                    <div key={f.k}><div style={s(`font-size:12.5px;font-weight:600;color:${f.c};margin-bottom:3px;`)}>{f.k}</div><div className="mono" style={s("font-size:11px;color:rgba(255,255,255,.55);line-height:1.5;")}>{f.d}</div></div>
+                  ))}
+                </div>
+              </Card>
+              <Card title="Dead Stock & Savings">
+                <Code lines={[{ n: "Dead Value = Dead Qty × Unit Cost" }, { n: "Trend% = (Latest − First) ÷ First × 100" }, { n: "Borrow Savings =" }, { n: "  MIN(Requested, DeadElsewhere) × Price" }, { n: "มูลค่าของจม = จำนวนจม × ต้นทุน/หน่วย · เงินที่ประหยัด = ยืมของจมคลังอื่นแทนซื้อ", dim: true }]} />
+                <Ex>MIN(20, 12) × 2,000 = <b style={s("color:#6EE7B7;")}>฿24,000</b> ที่ประหยัดได้</Ex>
+                <Tip>แทนที่จะซื้อใหม่ ลองยืมของแบบเดียวกันที่คลังอื่นค้างอยู่มาใช้ก่อน ประหยัดเงินได้ทันที</Tip>
+              </Card>
+            </div>
+          </Section>
+
+          {/* 08 VMI */}
+          <Section id="f-vmi" title="08 · จำลอง VMI — ให้ผู้ขายช่วยดูแลสต็อก" Icon={RefreshCcw} iconBg="rgba(37,99,235,.2)" iconColor="#93C5FD">
+            <div style={grid2}>
+              <Card title="VMI Safety / ROP / Impact">
+                <Code lines={[{ n: "VMI Safety = ⌈ Z × σ_day × √(VMI LT) ⌉" }, { n: "VMI ROP = ⌈ AvgDaily × VMI LT + Safety ⌉" }, { n: "Impact% = (New − Current) ÷ Current × 100" }, { n: "คำนวณสต็อกสำรอง/จุดสั่งใหม่แบบ VMI · %เปลี่ยน = (ใหม่ − เดิม) ÷ เดิม", dim: true }]} />
+                <Ex>180,000 vs 240,000 = <b style={s("color:#6EE7B7;")}>−25%</b> เงินจมลดลง</Ex>
+                <Tip>ลองคำนวณว่าถ้าให้ผู้ขายช่วยเติมของให้อัตโนมัติ จะลดของค้างและเงินจมได้แค่ไหน</Tip>
+              </Card>
+              <Card title="Suitability Score (0–100)">
+                <div style={s("display:flex;flex-direction:column;gap:8px;")}>
+                  {[{ s: "≥ 80", c: "#6EE7B7", b: "rgba(5,150,105,.18)", t: "เหมาะมากกับ VMI" }, { s: "≥ 60", c: "#93C5FD", b: "rgba(37,99,235,.18)", t: "ทดลอง VMI ได้" }, { s: "≥ 40", c: "#FCD34D", b: "rgba(217,119,6,.16)", t: "ศึกษาเพิ่มก่อน" }, { s: "< 40", c: "#FCA5A5", b: "rgba(220,38,38,.16)", t: "ยังไม่เหมาะ" }].map((r) => (
+                    <div key={r.s} style={s("display:flex;align-items:center;gap:10px;")}><span style={s(`font-size:10.5px;font-weight:600;color:${r.c};background:${r.b};padding:3px 9px;border-radius:99px;flex:none;width:54px;text-align:center;`)}>{r.s}</span><span style={s("font-size:12px;color:rgba(255,255,255,.6);")}>{r.t}</span></div>
+                  ))}
+                </div>
+              </Card>
+            </div>
+          </Section>
+
+          {/* 09 FEEDBACK */}
+          <Section id="f-feedback" title="09 · ระบบเรียนรู้-ปรับสูตรเอง (AI Feedback)" Icon={Repeat2} iconBg="rgba(5,150,105,.2)" iconColor="#6EE7B7">
+            <div style={grid2}>
+              <Card title="วัด Error จากค่าจริง">
+                <Code lines={[{ n: "Error% = (Actual − Suggested) ÷ Suggested × 100" }, { n: "MAE% = Σ|Error%| ÷ n" }, { n: "Bias% = Σ(Error%) ÷ n" }, { n: "ค่าคลาดเคลื่อน = (จริง − แนะนำ) ÷ แนะนำ · MAE = เฉลี่ยสัมบูรณ์ · Bias = เอนเอียง", dim: true }]} />
+                <Ex>Bias &gt; 0 = แนะนำน้อยไป · Bias &lt; 0 = แนะนำมากไป</Ex>
+                <Tip>เทียบสิ่งที่ระบบแนะนำกับที่ใช้จริง ถ้าพลาดไปทางไหนบ่อยๆ ระบบจะรู้ว่าต้องปรับสูตร</Tip>
+              </Card>
+              <Card title="Auto-tune Policy → version ใหม่">
+                <Code lines={[{ n: "Dir = Error% > 0 ? +1 : −1" }, { n: "SL' = clamp(SL + Dir×0.005, .8, .995)" }, { n: "Seasonal' = clamp(SF + Dir×0.02, .8, 1.8)" }, { n: "v1.0 → v1.1" }, { n: "ทิศปรับ: แนะน้อยไป→เพิ่ม, มากไป→ลด · ปรับ SL/ฤดูกาล → สูตรเวอร์ชันใหม่", dim: true }]} />
+                <Ex>snapshot เดิม <b style={s("color:#6EE7B7;")}>ไม่ถูกแก้</b> — ใช้สูตรใหม่รอบถัดไป</Ex>
+                <Tip>ระบบค่อยๆ ปรับตัวเองให้แม่นขึ้นทุกเวอร์ชัน โดยไม่ไปแก้ข้อมูลเก่าที่บันทึกไว้</Tip>
+              </Card>
+            </div>
+          </Section>
+
+          {/* WORKED EXAMPLE */}
+          <section id="f-example" style={s("scroll-margin-top:84px;")}>
+            <div style={s("display:flex;align-items:center;gap:11px;margin-bottom:18px;")}><span style={s("width:34px;height:34px;border-radius:10px;background:linear-gradient(140deg,#7C2DE0,#E84AA0);color:#fff;display:flex;align-items:center;justify-content:center;flex:none;")}><FlaskConical style={s("width:18px;height:18px;")} /></span><h2 style={s("margin:0;font-size:21px;font-weight:600;color:#fff;")}>ตัวอย่างจริง · สายเคเบิล XLPE 240</h2></div>
+            <div style={s("background:linear-gradient(135deg,#1B0F33,#241043 55%,#160C2B);border:1px solid rgba(199,125,255,.25);border-radius:20px;padding:24px 26px;")}>
+              <div style={s("display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px;")}>
+                {[{ l: "Usage 6 ด.", v: "600 / 180" }, { l: "Supplier LT", v: "25 วัน" }, { l: "Service Level", v: "95% → 1.65" }, { l: "MOQ · Stock", v: "10 · 60" }].map((b) => (
+                  <div key={b.l} style={s("background:rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:12px 14px;")}><div style={s("font-size:11px;color:rgba(255,255,255,.5);")}>{b.l}</div><div className="mono" style={s("font-size:15px;font-weight:600;color:#fff;margin-top:3px;")}>{b.v}</div></div>
+                ))}
+              </div>
+              <div style={s("display:flex;flex-direction:column;gap:9px;")}>
+                {[
+                  { k: "Avg Daily Demand", kc: "#C77DFF", n: <>600 ÷ 180 = <b style={s("color:#fff;")}>3.33 /วัน</b></> },
+                  { k: "Adjusted Lead Time", kc: "#C77DFF", n: <>25 × 1.20 = <b style={s("color:#fff;")}>30 วัน</b></> },
+                  { k: "Safety Stock", kc: "#C77DFF", n: <>⌈1.65 × σ × √30⌉ = <b style={s("color:#fff;")}>8 ม.</b></> },
+                  { k: "Reorder Point", kc: "#C77DFF", n: <>60 + 8 = <b style={s("color:#FCD34D;")}>68 ม.</b> → stock 60 &lt; 68 = <b style={s("color:#FCA5A5;")}>วิกฤต</b></> },
+                  { k: "Suggested Qty", kc: "#F472B6", n: <>Target 70 − 60 = 10 → MOQ → <b style={s("color:#F472B6;")}>ซื้อ 10 ม.</b></> },
+                  { k: "Estimated Cost", kc: "#FCD34D", n: <>20 × ฿2,000 = ฿40,000 → <b style={s("color:#FCD34D;")}>Regional</b></> },
+                ].map((r) => (
+                  <div key={r.k} style={s("display:flex;align-items:center;gap:13px;")}><span className="mono" style={s(`font-size:11px;color:${r.kc};width:130px;flex:none;`)}>{r.k}</span><span className="mono" style={s("font-size:12.5px;color:rgba(255,255,255,.65);")}>{r.n}</span></div>
+                ))}
+              </div>
+            </div>
+
+            <div style={s("margin-top:26px;display:flex;align-items:center;gap:16px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:20px 24px;")}>
+              <Quote style={s("width:22px;height:22px;color:#C77DFF;")} />
+              <p style={s("margin:0;font-size:14px;font-style:italic;line-height:1.6;color:rgba(255,255,255,.78);")}>“ระบบไม่ได้บอกแค่ว่าควรซื้อกี่ชิ้น แต่เริ่มจาก usage ย้อนหลัง วัดความผันผวน ปรับ lead time แล้วคำนวณ Safety Stock กับ Reorder Point ก่อนหาจำนวนเติมตาม MOQ ตรวจงบ 3 ชั้น และเก็บ Snapshot เพื่อ audit ทุกขั้น”</p>
+            </div>
+
+            <div style={s("margin-top:24px;display:flex;gap:12px;")}>
+              <button onClick={onBack} style={s("text-decoration:none;display:inline-flex;align-items:center;gap:8px;height:46px;padding:0 20px;border-radius:12px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.04);color:rgba(255,255,255,.86);font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;")}><ArrowLeft style={s("width:16px;height:16px;")} /> กลับหน้าแรก</button>
+              <button onClick={onEnter} style={s("display:inline-flex;align-items:center;gap:8px;height:46px;padding:0 22px;border:0;border-radius:12px;background:linear-gradient(135deg,#7C2DE0,#C0249B);color:#fff;font-size:14px;font-weight:600;box-shadow:0 12px 26px -10px rgba(184,40,170,.8);cursor:pointer;font-family:inherit;")}>ลองใช้ระบบจริง <ArrowRight style={s("width:16px;height:16px;")} /></button>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+  );
+}
+
+function LandingPage({ currentUser, onEnter, onLogin, onBackToIntro, onOpenFormulas }: { currentUser: SessionUser | null; onEnter: () => void; onLogin: () => void; onBackToIntro: () => void; onOpenFormulas: () => void }) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [showFab, setShowFab] = useState(false);
+  const scrollTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const toTop = () => rootRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  const grad = s("background:linear-gradient(100deg,#E84AA0,#C77DFF);-webkit-background-clip:text;background-clip:text;color:transparent;");
+  const navItem = s("font-size:13.5px;color:rgba(255,255,255,.66);cursor:pointer;transition:color .15s;");
+  const features: { icon: typeof Sparkles; bg: string; shadow: string; title: string; desc: string }[] = [
+    { icon: Sparkles, bg: "linear-gradient(140deg,#7C2DE0,#B51C9E)", shadow: "0 12px 26px -10px rgba(124,45,224,.7)", title: "AI แนะนำซื้อ + อธิบายได้", desc: "คำนวณ Reorder Point, Safety Stock, จำนวนสั่งซื้อ จาก demand จริง พร้อมกาง “ทำไมระบบแนะนำค่านี้” ทีละขั้น" },
+    { icon: Recycle, bg: "linear-gradient(140deg,#B51C9E,#E84AA0)", shadow: "0 12px 26px -10px rgba(232,74,160,.7)", title: "ดักของจมก่อนซื้อ", desc: "ก่อนสร้างคำขอ ระบบเช็คคลังอื่นทั้งเขต — ถ้ามีของจม แนะนำให้ยืม/โอน/แลกแทนซื้อใหม่ ลดทุนจมและของขาดพร้อมกัน" },
+    { icon: Route, bg: "linear-gradient(140deg,#6D28D9,#2563EB)", shadow: "0 12px 26px -10px rgba(37,99,235,.6)", title: "ตรวจงบ 3 ชั้นอัตโนมัติ", desc: "คลัง → เขต → ส่วนกลาง ระบบเลือกชั้นอนุมัติให้ตามมูลค่า เกินงบส่งต่ออัตโนมัติ พร้อมเหตุผล override" },
+    { icon: SearchCheck, bg: "linear-gradient(140deg,#D97706,#DC2626)", shadow: "0 12px 26px -10px rgba(220,38,38,.55)", title: "ตรวจซื้อซ้ำ-ของจม", desc: "จับเคสของบซื้อต่อเนื่องหลายปีทั้งที่ยังมีของจม เทียบประวัติ 3 ปีงบ พร้อมข้อเสนอแนะระงับ-ใช้ของเดิม" },
+    { icon: PackageCheck, bg: "linear-gradient(140deg,#059669,#0EA5E9)", shadow: "0 12px 26px -10px rgba(5,150,105,.55)", title: "ตรวจรับตามระเบียบ", desc: "คณะกรรมการตรวจรับ 6 ขั้น อิง พ.ร.บ. 2560 — ผ่าน/ไม่ผ่าน บันทึก Delay & Impact Demand ป้อนกลับสูตร" },
+    { icon: Repeat2, bg: "linear-gradient(140deg,#7C2DE0,#C0249B)", shadow: "0 12px 26px -10px rgba(184,40,170,.6)", title: "Closed-loop เรียนรู้ต่อเนื่อง", desc: "เทียบค่าจริงกับที่ AI แนะนำ วัด error/bias แล้ว auto-tune สร้างสูตรเวอร์ชันใหม่ โดยไม่แก้ snapshot เดิม" },
+  ];
+  const loopSteps: { icon: typeof Sparkles; label: string; last?: boolean }[] = [
+    { icon: Database, label: "ข้อมูลจริง" },
+    { icon: Sparkles, label: "AI แนะนำ" },
+    { icon: ClipboardCheck, label: "ตัดสินใจ + Snapshot" },
+    { icon: GitCompare, label: "วัดผลจริง" },
+    { icon: GitBranch, label: "auto-tune สูตร", last: true },
+  ];
+
+  return (
+    <div
+      ref={rootRef}
+      className="landing-root"
+      onScroll={(e) => setShowFab(e.currentTarget.scrollTop > 480)}
+      style={s("height:100vh;width:100%;position:relative;overflow-y:auto;overflow-x:hidden;font-family:Kanit,sans-serif;color:#F1EDF8;background:radial-gradient(1100px 620px at 78% -8%,#3A1078 0%,rgba(58,16,120,0) 60%),radial-gradient(900px 520px at 8% 12%,#5A1A6E 0%,rgba(90,26,110,0) 55%),linear-gradient(168deg,#140C26 0%,#0E0A1A 60%);")}
+    >
+      {/* ambient blobs */}
+      <div style={s("position:absolute;top:-120px;right:120px;width:420px;height:420px;border-radius:50%;background:radial-gradient(circle,rgba(232,74,160,.32),transparent 65%);filter:blur(30px);pointer-events:none;")} />
+      <div style={s("position:absolute;bottom:-160px;left:-60px;width:480px;height:480px;border-radius:50%;background:radial-gradient(circle,rgba(124,45,224,.28),transparent 65%);filter:blur(36px);pointer-events:none;")} />
+
+      {/* TOPBAR */}
+      <header style={s("position:relative;z-index:5;max-width:1240px;margin:0 auto;padding:22px 40px;display:flex;align-items:center;gap:14px;")}>
+        <button onClick={onBackToIntro} title="กลับไปหน้า Intro" style={s("display:flex;align-items:center;gap:14px;border:0;background:transparent;cursor:pointer;padding:0;text-align:left;")}>
+          <span style={s("position:relative;width:42px;height:42px;border-radius:13px;background:linear-gradient(140deg,#8B2FE6 0%,#B51C9E 52%,#E84AA0 100%);display:flex;align-items:center;justify-content:center;box-shadow:0 9px 22px -6px rgba(184,40,170,.8),inset 0 1px 0 rgba(255,255,255,.3);overflow:hidden;flex:none;")}>
+            <span style={s("position:absolute;top:-10px;left:-10px;width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.28);filter:blur(7px);")} />
+            <Boxes style={s("position:relative;width:23px;height:23px;color:#fff;")} />
+            <span style={s("position:absolute;top:6px;right:6px;width:7px;height:7px;border-radius:50%;background:#FFD057;box-shadow:0 0 7px 1px rgba(255,208,87,.85);animation:pulseDot 1.9s infinite;")} />
           </span>
-          <h1 className="mx-auto mt-5 max-w-3xl text-3xl font-bold leading-tight text-slate-950 sm:text-4xl">
-            วางแผนพัสดุคงคลังและจัดซื้อ<span className="text-blue-700">ด้วย AI</span><br />ที่อธิบายได้ ตรวจสอบย้อนหลังได้
-          </h1>
-          <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-slate-600">
-            AI แนะนำจำนวนที่ควรซื้อจากข้อมูลจริง ผ่านอนุมัติงบ 3 ชั้น เก็บ snapshot ทุกครั้ง
-            ลดทั้งของขาดและของจม — “สต็อกพอดี ใช้งานทัน ลดทุนจม”
-          </p>
-          <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
-            <Button onClick={onEnter} className="h-11 px-6 text-base">เข้าใช้งานระบบ (เดโม) <ArrowRight className="h-4 w-4" /></Button>
-            <Button variant="secondary" onClick={onLogin} className="h-11 px-6 text-base"><User className="h-4 w-4" /> เข้าสู่ระบบ</Button>
+          <span>
+            <span style={s("display:block;font-size:15px;font-weight:600;color:#fff;line-height:1.1;")}>PEA AI Stock Intelligent</span>
+            <span style={s("display:block;font-size:10.5px;color:rgba(255,255,255,.45);")}>ระบบบริหารสต๊อคอัจฉริยะ</span>
+          </span>
+        </button>
+        <nav style={s("flex:1;display:flex;justify-content:center;gap:30px;")}>
+          <span onClick={() => scrollTo("sec-problem")} style={navItem}>ปัญหา</span>
+          <span onClick={() => scrollTo("sec-solution")} style={navItem}>โซลูชัน</span>
+          <span onClick={() => scrollTo("sec-marketplace")} style={navItem}>ตลาดของจม</span>
+          <span onClick={() => scrollTo("sec-closedloop")} style={navItem}>Closed-loop</span>
+          <span onClick={onOpenFormulas} style={s("font-size:13.5px;font-weight:600;color:#C77DFF;cursor:pointer;display:inline-flex;align-items:center;gap:5px;")}><FunctionSquare style={s("width:14px;height:14px;")} /> สูตรคำนวณ</span>
+        </nav>
+        <button onClick={onLogin} style={s("display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 20px;border:0;border-radius:11px;background:linear-gradient(135deg,#7C2DE0,#C0249B);color:#fff;font-family:inherit;font-size:13.5px;font-weight:600;box-shadow:0 12px 26px -10px rgba(184,40,170,.8);white-space:nowrap;cursor:pointer;")}>{currentUser ? currentUser.name : "เข้าสู่ระบบ"} <ArrowRight style={s("width:16px;height:16px;")} /></button>
+      </header>
+
+      {/* HERO */}
+      <section id="sec-problem" style={s("position:relative;z-index:3;max-width:1240px;margin:0 auto;padding:48px 40px 30px;display:grid;grid-template-columns:1.1fr .9fr;gap:40px;align-items:center;scroll-margin-top:80px;")}>
+        <div>
+          <div style={s("display:inline-flex;align-items:center;gap:8px;padding:7px 14px;border-radius:99px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);margin-bottom:24px;white-space:nowrap;")}>
+            <span style={s("width:7px;height:7px;border-radius:50%;background:#FFD057;box-shadow:0 0 8px 1px rgba(255,208,87,.8);animation:pulseDot 1.9s infinite;")} />
+            <span style={s("font-size:12px;color:rgba(255,255,255,.78);")}>Hackathon 2026 · by ThaiCloud</span>
+            <span style={s("font-size:11px;font-weight:600;color:#FFD057;background:rgba(255,208,87,.14);padding:1px 8px;border-radius:99px;")}>Track 2</span>
           </div>
-          <div className="mx-auto mt-10 grid max-w-2xl grid-cols-2 gap-4 sm:grid-cols-4">
-            {[["12", "SKU พัสดุไฟฟ้า"], ["8", "คลัง · 3 เขต"], ["3 ชั้น", "อนุมัติงบ"], ["100%", "Snapshot ตรวจย้อนหลัง"]].map(([v, l]) => (
-              <div key={l} className="rounded-lg border border-slate-200 bg-white p-3">
-                <p className="text-xl font-bold text-blue-700">{v}</p>
-                <p className="mt-0.5 text-xs text-slate-500">{l}</p>
+          <h1 style={s("margin:0 0 18px;font-size:50px;line-height:1.08;font-weight:600;letter-spacing:-.8px;color:#fff;")}>หยุด<span style={grad}>ซื้อซ้ำของจม</span><br />เริ่มวางแผนพัสดุด้วย AI</h1>
+          <p style={s("margin:0 0 30px;font-size:16px;line-height:1.65;color:rgba(255,255,255,.66);max-width:480px;")}>แพลตฟอร์มวางแผนคลังพัสดุและจัดซื้อสำหรับการไฟฟ้าส่วนภูมิภาค — คำนวณจุดสั่งซื้อจากข้อมูลจริง อธิบายได้ทุกตัวเลข ดักของจมก่อนซื้อ และตรวจงบ 3 ชั้นอัตโนมัติ</p>
+          <div style={s("display:flex;align-items:center;gap:14px;margin-bottom:36px;")}>
+            <button onClick={onEnter} style={s("display:inline-flex;align-items:center;gap:8px;height:50px;padding:0 26px;border:0;border-radius:13px;background:linear-gradient(135deg,#7C2DE0,#C0249B);color:#fff;font-family:inherit;font-size:15px;font-weight:600;box-shadow:0 16px 34px -12px rgba(184,40,170,.85);cursor:pointer;")}>เริ่มใช้งาน <ArrowRight style={s("width:18px;height:18px;")} /></button>
+            <button onClick={onEnter} style={s("display:inline-flex;align-items:center;gap:8px;height:50px;padding:0 22px;border-radius:13px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);color:#fff;font-family:inherit;font-size:15px;font-weight:500;cursor:pointer;white-space:nowrap;")}><Play style={s("width:16px;height:16px;color:#E84AA0;")} /> ดูเดโม</button>
+          </div>
+          <div style={s("display:flex;gap:34px;")}>
+            <div><div style={s("font-size:26px;font-weight:700;color:#fff;line-height:1;")}>฿8.6M</div><div style={s("font-size:12px;color:rgba(255,255,255,.5);margin-top:5px;")}>ทุนจมที่มองเห็น</div></div>
+            <div style={s("width:1px;background:rgba(255,255,255,.12);")} />
+            <div><div style={s("font-size:26px;font-weight:700;color:#fff;line-height:1;")}>87%</div><div style={s("font-size:12px;color:rgba(255,255,255,.5);margin-top:5px;")}>ความแม่นยำ AI</div></div>
+            <div style={s("width:1px;background:rgba(255,255,255,.12);")} />
+            <div><div style={s("font-size:26px;font-weight:700;color:#fff;line-height:1;")}>3 ชั้น</div><div style={s("font-size:12px;color:rgba(255,255,255,.5);margin-top:5px;")}>ตรวจงบอัตโนมัติ</div></div>
+          </div>
+        </div>
+
+        {/* hero visual: floating dashboard card */}
+        <div style={s("position:relative;animation:floaty 6s ease-in-out infinite;")}>
+          <div style={s("position:absolute;inset:-26px;border-radius:30px;background:linear-gradient(135deg,rgba(124,45,224,.4),rgba(232,74,160,.3));filter:blur(34px);")} />
+          <div style={s("position:relative;background:rgba(28,20,44,.86);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.1);border-radius:22px;padding:20px;box-shadow:0 40px 80px -30px rgba(0,0,0,.7);")}>
+            <div style={s("display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;")}>
+              <div style={s("display:flex;align-items:center;gap:8px;")}><span style={s("width:9px;height:9px;border-radius:50%;background:#E84AA0;")} /><span style={s("font-size:12.5px;font-weight:600;color:#fff;")}>SKU ที่ AI ดักไว้</span></div>
+              <span style={s("font-size:10px;font-weight:600;color:#FFD057;background:rgba(255,208,87,.14);padding:3px 9px;border-radius:99px;")}>ดักก่อนซื้อ</span>
+            </div>
+            <div style={s("display:flex;flex-direction:column;gap:9px;")}>
+              <div style={s("display:flex;align-items:center;gap:11px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:11px 13px;")}>
+                <span style={s("width:34px;height:34px;border-radius:9px;background:rgba(232,74,160,.18);color:#F472B6;display:flex;align-items:center;justify-content:center;flex:none;")}><Cable style={s("width:16px;height:16px;")} /></span>
+                <div style={s("flex:1;min-width:0;")}><div style={s("font-size:12.5px;color:#fff;font-weight:500;")}>สายเคเบิล XLPE 240</div><div className="mono" style={s("font-size:10px;color:rgba(255,255,255,.4);")}>สต็อก 60 &lt; ROP 68</div></div>
+                <span style={s("font-size:12px;font-weight:700;color:#C77DFF;")}>+10 ม.</span>
               </div>
-            ))}
+              <div style={s("display:flex;align-items:center;gap:11px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:11px 13px;")}>
+                <span style={s("width:34px;height:34px;border-radius:9px;background:rgba(124,45,224,.2);color:#C77DFF;display:flex;align-items:center;justify-content:center;flex:none;")}><Recycle style={s("width:16px;height:16px;")} /></span>
+                <div style={s("flex:1;min-width:0;")}><div style={s("font-size:12.5px;color:#fff;font-weight:500;")}>เสาคอนกรีต 12m</div><div className="mono" style={s("font-size:10px;color:rgba(255,255,255,.4);")}>K020 มีของจม 320 ต้น</div></div>
+                <span style={s("font-size:11px;font-weight:600;color:#34D399;")}>ยืมแทน</span>
+              </div>
+              <div style={s("display:flex;align-items:center;gap:11px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:11px 13px;")}>
+                <span style={s("width:34px;height:34px;border-radius:9px;background:rgba(255,208,87,.16);color:#FCD34D;display:flex;align-items:center;justify-content:center;flex:none;")}><SearchCheck style={s("width:16px;height:16px;")} /></span>
+                <div style={s("flex:1;min-width:0;")}><div style={s("font-size:12.5px;color:#fff;font-weight:500;")}>ตรวจซื้อซ้ำ K030</div><div className="mono" style={s("font-size:10px;color:rgba(255,255,255,.4);")}>ของบ 3 ปีซ้อน ทั้งที่ของจม</div></div>
+                <span style={s("font-size:11px;font-weight:600;color:#FCA5A5;")}>flag</span>
+              </div>
+            </div>
+            <div style={s("margin-top:14px;display:flex;align-items:center;justify-content:space-between;padding-top:14px;border-top:1px solid rgba(255,255,255,.08);")}>
+              <span style={s("font-size:11px;color:rgba(255,255,255,.5);")}>ประหยัดรอบนี้</span>
+              <span style={s("font-size:17px;font-weight:700;background:linear-gradient(100deg,#E84AA0,#C77DFF);-webkit-background-clip:text;background-clip:text;color:transparent;")}>฿420,000</span>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Features */}
-      <section className="mx-auto max-w-6xl px-5 py-14">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-slate-950">ความสามารถหลัก</h2>
-          <p className="mt-2 text-sm text-slate-500">ครบตั้งแต่วางแผน → จัดซื้อ → ตรวจรับ → ลดของจม</p>
+      {/* TRUST STRIP */}
+      <div style={s("position:relative;z-index:3;max-width:1240px;margin:0 auto;padding:14px 40px 50px;")}>
+        <div style={s("display:flex;align-items:center;gap:26px;flex-wrap:wrap;font-size:12px;color:rgba(255,255,255,.4);")}>
+          <span>ออกแบบให้สอดคล้อง</span>
+          <span style={s("display:flex;align-items:center;gap:7px;color:rgba(255,255,255,.62);")}><Scale style={s("width:14px;height:14px;")} /> พ.ร.บ.จัดซื้อจัดจ้างฯ 2560</span>
+          <span style={s("display:flex;align-items:center;gap:7px;color:rgba(255,255,255,.62);")}><Database style={s("width:14px;height:14px;")} /> SAP-MM / GFMIS</span>
+          <span style={s("display:flex;align-items:center;gap:7px;color:rgba(255,255,255,.62);")}><ShieldCheck style={s("width:14px;height:14px;")} /> Calculation Snapshot · Audit-ready</span>
         </div>
-        <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {features.map((f) => {
-            const Icon = f.icon;
-            return (
-              <div key={f.title} className="rounded-xl border border-slate-200 bg-white p-5 transition hover:border-blue-300 hover:shadow-sm">
-                <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-blue-700"><Icon className="h-5 w-5" /></span>
-                <h3 className="mt-3 font-semibold text-slate-950">{f.title}</h3>
-                <p className="mt-1.5 text-sm leading-6 text-slate-600">{f.desc}</p>
-              </div>
-            );
-          })}
+      </div>
+
+      {/* FEATURES */}
+      <section id="sec-solution" style={s("position:relative;z-index:3;background:linear-gradient(180deg,rgba(20,12,38,0),#120D22 18%);padding:30px 0 70px;scroll-margin-top:80px;")}>
+        <div style={s("max-width:1240px;margin:0 auto;padding:0 40px;")}>
+          <div style={s("text-align:center;margin-bottom:44px;")}>
+            <div style={s("font-size:12.5px;font-weight:600;letter-spacing:1px;color:#C77DFF;text-transform:uppercase;margin-bottom:10px;")}>โซลูชัน</div>
+            <h2 style={s("margin:0 0 12px;font-size:34px;font-weight:600;letter-spacing:-.4px;color:#fff;")}>ครบทั้งวงจร ตั้งแต่วางแผนถึงตรวจรับ</h2>
+            <p style={s("margin:0 auto;font-size:14.5px;color:rgba(255,255,255,.55);max-width:560px;")}>ทุกฟีเจอร์คำนวณจากข้อมูลจริงของ PEA — ไม่ใช่กล่องดำ แต่อธิบายได้ทุกขั้นตอน</p>
+          </div>
+          <div style={s("display:grid;grid-template-columns:repeat(3,1fr);gap:18px;")}>
+            {features.map((f) => {
+              const Icon = f.icon;
+              return (
+                <div key={f.title} style={s("background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08);border-radius:18px;padding:24px;")}>
+                  <span style={{ width: 48, height: 48, borderRadius: 13, background: f.bg, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", marginBottom: 16, boxShadow: f.shadow } as CSSProperties}><Icon style={s("width:22px;height:22px;")} /></span>
+                  <h3 style={s("margin:0 0 8px;font-size:17px;font-weight:600;color:#fff;")}>{f.title}</h3>
+                  <p style={s("margin:0;font-size:13px;line-height:1.6;color:rgba(255,255,255,.56);")}>{f.desc}</p>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </section>
 
-      {/* Problem → Solution */}
-      <section className="border-y border-slate-200 bg-slate-50">
-        <div className="mx-auto max-w-6xl px-5 py-14">
-          <div className="text-center">
-            <h2 className="text-2xl font-bold text-slate-950">ปัญหาจริงของ PEA → ระบบนี้แก้ตรงจุด</h2>
-            <p className="mt-2 text-sm text-slate-500">อ้างอิงงานวิจัยการจัดการโลจิสติกส์ PEA (ม.ธรรมศาสตร์ 2561)</p>
-          </div>
-          <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-3">
-            {problems.map((row, index) => (
-              <div key={index} className="rounded-xl border border-slate-200 bg-white p-5">
-                <p className="inline-flex rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">ปัญหา {index + 1}</p>
-                <p className="mt-2 font-semibold text-slate-900">{row.p}</p>
-                <div className="mt-3 flex items-start gap-2 border-t border-slate-100 pt-3">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
-                  <p className="text-sm leading-6 text-slate-600">{row.s}</p>
+      {/* DEAD STOCK MARKETPLACE SPOTLIGHT */}
+      <section id="sec-marketplace" style={s("position:relative;z-index:3;background:#120D22;padding:10px 0 64px;scroll-margin-top:80px;")}>
+        <div style={s("max-width:1240px;margin:0 auto;padding:0 40px;")}>
+          <div style={s("position:relative;border:1px solid rgba(255,255,255,.1);border-radius:26px;overflow:hidden;background:linear-gradient(135deg,#1B0F33 0%,#241043 48%,#3A1163 100%);")}>
+            <div style={s("position:absolute;top:-90px;right:-40px;width:340px;height:340px;border-radius:50%;background:radial-gradient(circle,rgba(232,74,160,.3),transparent 65%);filter:blur(28px);pointer-events:none;")} />
+            <div style={s("position:absolute;bottom:-120px;left:-50px;width:320px;height:320px;border-radius:50%;background:radial-gradient(circle,rgba(124,45,224,.26),transparent 65%);filter:blur(30px);pointer-events:none;")} />
+            <div style={s("position:relative;display:grid;grid-template-columns:1.02fr .98fr;gap:40px;align-items:center;padding:42px 44px;")}>
+              <div>
+                <div style={s("display:inline-flex;align-items:center;gap:8px;padding:6px 13px;border-radius:99px;background:rgba(255,208,87,.12);border:1px solid rgba(255,208,87,.28);margin-bottom:20px;")}>
+                  <Star style={s("width:13px;height:13px;color:#FFD057;")} />
+                  <span style={s("font-size:11.5px;font-weight:600;color:#FFD057;letter-spacing:.3px;")}>ฟีเจอร์เด่น · Hero feature</span>
+                </div>
+                <h2 style={s("margin:0 0 14px;font-size:34px;line-height:1.12;font-weight:600;letter-spacing:-.5px;color:#fff;")}>ตลาดนัด<span style={grad}>ของจม</span></h2>
+                <p style={s("margin:0 0 24px;font-size:15px;line-height:1.65;color:rgba(255,255,255,.66);max-width:440px;")}>ก่อนซื้อใหม่ เช็กก่อนว่าคลังข้าง ๆ มีของนอนอยู่ไหม — ระบบเห็นของเกินทั้งองค์กร จับคู่คลังที่เกินกับคลังที่ขาด แล้วแนะนำโอน/ยืมก่อนเปิดคำขอซื้อ</p>
+                <div style={s("display:flex;flex-direction:column;gap:14px;margin-bottom:26px;")}>
+                  <div style={s("display:flex;align-items:flex-start;gap:13px;")}>
+                    <span style={s("width:38px;height:38px;border-radius:10px;background:rgba(232,74,160,.16);color:#F472B6;display:flex;align-items:center;justify-content:center;flex:none;")}><Radar style={s("width:18px;height:18px;")} /></span>
+                    <div><div style={s("font-size:14px;font-weight:600;color:#fff;")}>Dead Stock Radar</div><div style={s("font-size:12.5px;color:rgba(255,255,255,.55);line-height:1.5;")}>จับ SKU ที่ Stock Cover สูงผิดปกติ · slow-moving · ไม่มี demand ใน season ถัดไป</div></div>
+                  </div>
+                  <div style={s("display:flex;align-items:flex-start;gap:13px;")}>
+                    <span style={s("width:38px;height:38px;border-radius:10px;background:rgba(124,45,224,.2);color:#C77DFF;display:flex;align-items:center;justify-content:center;flex:none;")}><Hand style={s("width:18px;height:18px;")} /></span>
+                    <div><div style={s("font-size:14px;font-weight:600;color:#fff;")}>Before Buy Check</div><div style={s("font-size:12.5px;color:rgba(255,255,255,.55);line-height:1.5;")}>ก่อนสร้าง PR ระบบเช็กก่อนว่า “มีของเกินในคลังอื่นไหม” แล้วเสนอ source ให้</div></div>
+                  </div>
+                  <div style={s("display:flex;align-items:flex-start;gap:13px;")}>
+                    <span style={s("width:38px;height:38px;border-radius:10px;background:rgba(255,208,87,.14);color:#FCD34D;display:flex;align-items:center;justify-content:center;flex:none;")}><ScrollText style={s("width:18px;height:18px;")} /></span>
+                    <div><div style={s("font-size:14px;font-weight:600;color:#fff;")}>Over-order Audit</div><div style={s("font-size:12.5px;color:rgba(255,255,255,.55);line-height:1.5;")}>ใครขอเกิน AI Suggest กี่ % เพราะอะไร ใครอนุมัติ — และของนั้นถูกใช้จริงไหม</div></div>
+                  </div>
+                </div>
+                <div style={s("display:flex;align-items:center;gap:11px;padding:13px 16px;border-radius:13px;background:rgba(255,255,255,.04);border-left:3px solid #E84AA0;")}>
+                  <Quote style={s("width:16px;height:16px;color:#E84AA0;flex:none;")} />
+                  <span style={s("font-size:13.5px;font-style:italic;color:rgba(255,255,255,.82);")}>“Dead Stock ไม่ได้ตาย ถ้ามีคนรู้ว่ามันอยู่ที่ไหน”</span>
                 </div>
               </div>
-            ))}
+
+              <div style={s("position:relative;")}>
+                <div style={s("background:rgba(28,20,44,.7);backdrop-filter:blur(6px);border:1px solid rgba(244,114,182,.3);border-radius:16px;padding:15px 17px;box-shadow:0 24px 50px -28px rgba(0,0,0,.8);")}>
+                  <div style={s("display:flex;align-items:center;justify-content:space-between;margin-bottom:11px;")}>
+                    <div style={s("display:flex;align-items:center;gap:9px;")}><span style={s("width:32px;height:32px;border-radius:9px;background:rgba(232,74,160,.18);color:#F472B6;display:flex;align-items:center;justify-content:center;flex:none;")}><WarehouseIcon style={s("width:16px;height:16px;")} /></span><div><div style={s("font-size:13px;font-weight:600;color:#fff;")}>คลัง K020</div><div style={s("font-size:10.5px;color:rgba(255,255,255,.45);")}>ภาคเหนือ · เขต A</div></div></div>
+                    <span style={s("font-size:10px;font-weight:600;color:#F9A8D4;background:rgba(232,74,160,.16);padding:3px 9px;border-radius:99px;")}>มีของเกิน</span>
+                  </div>
+                  <div style={s("display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.04);border-radius:11px;padding:10px 12px;")}>
+                    <span style={s("width:30px;height:30px;border-radius:8px;background:rgba(255,255,255,.06);color:#C77DFF;display:flex;align-items:center;justify-content:center;flex:none;")}><Construction style={s("width:15px;height:15px;")} /></span>
+                    <div style={s("flex:1;min-width:0;")}><div style={s("font-size:12px;color:#fff;font-weight:500;")}>เสาคอนกรีต 12m</div><div className="mono" style={s("font-size:10px;color:rgba(255,255,255,.42);")}>ของจม 320 ต้น · นิ่ง 14 เดือน</div></div>
+                    <span style={s("font-size:11.5px;font-weight:700;color:#F472B6;")}>฿1.44M</span>
+                  </div>
+                </div>
+
+                <div style={s("display:flex;align-items:center;justify-content:center;gap:10px;padding:11px 0;")}>
+                  <span style={s("height:1px;flex:1;background:linear-gradient(90deg,transparent,rgba(199,125,255,.5));")} />
+                  <span style={s("display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:#fff;background:linear-gradient(135deg,#7C2DE0,#C0249B);padding:5px 13px;border-radius:99px;box-shadow:0 8px 18px -8px rgba(184,40,170,.9);")}><ArrowDownUp style={s("width:13px;height:13px;")} /> จับคู่อัตโนมัติ · SKU ตรงกัน</span>
+                  <span style={s("height:1px;flex:1;background:linear-gradient(90deg,rgba(232,74,160,.5),transparent);")} />
+                </div>
+
+                <div style={s("background:rgba(28,20,44,.7);backdrop-filter:blur(6px);border:1px solid rgba(252,165,165,.28);border-radius:16px;padding:15px 17px;box-shadow:0 24px 50px -28px rgba(0,0,0,.8);")}>
+                  <div style={s("display:flex;align-items:center;justify-content:space-between;margin-bottom:11px;")}>
+                    <div style={s("display:flex;align-items:center;gap:9px;")}><span style={s("width:32px;height:32px;border-radius:9px;background:rgba(220,38,38,.2);color:#FCA5A5;display:flex;align-items:center;justify-content:center;flex:none;")}><WarehouseIcon style={s("width:16px;height:16px;")} /></span><div><div style={s("font-size:13px;font-weight:600;color:#fff;")}>คลัง K030</div><div style={s("font-size:10.5px;color:rgba(255,255,255,.45);")}>ภาคเหนือ · เขต A</div></div></div>
+                    <span style={s("font-size:10px;font-weight:600;color:#FCA5A5;background:rgba(220,38,38,.16);padding:3px 9px;border-radius:99px;")}>เสี่ยงขาด</span>
+                  </div>
+                  <div style={s("display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.04);border-radius:11px;padding:10px 12px;")}>
+                    <span style={s("width:30px;height:30px;border-radius:8px;background:rgba(255,255,255,.06);color:#FCD34D;display:flex;align-items:center;justify-content:center;flex:none;")}><Construction style={s("width:15px;height:15px;")} /></span>
+                    <div style={s("flex:1;min-width:0;")}><div style={s("font-size:12px;color:#fff;font-weight:500;")}>เสาคอนกรีต 12m</div><div className="mono" style={s("font-size:10px;color:rgba(255,255,255,.42);")}>ต้องการ 6 ต้น · จะเปิด PR</div></div>
+                    <span style={s("font-size:11.5px;font-weight:700;color:#FCA5A5;")}>ขาด</span>
+                  </div>
+                </div>
+
+                <div style={s("margin-top:14px;display:flex;align-items:center;gap:12px;background:linear-gradient(110deg,#2A0A54,#7A1E8C 75%,#9A1F87);border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:13px 16px;box-shadow:0 18px 40px -20px rgba(154,31,135,.9);")}>
+                  <span style={s("width:38px;height:38px;border-radius:11px;background:rgba(255,255,255,.16);color:#fff;display:flex;align-items:center;justify-content:center;flex:none;")}><HandCoins style={s("width:19px;height:19px;")} /></span>
+                  <div style={s("flex:1;min-width:0;")}><div style={s("font-size:12.5px;font-weight:600;color:#fff;")}>เบรกก่อนเปิด PR — ยืมแทนซื้อ</div><div style={s("font-size:11px;color:rgba(255,255,255,.72);")}>ประหยัด ฿27,000 · Lead Time เหลือ 2 วัน</div></div>
+                  <span style={s("font-size:11px;font-weight:700;color:#FFD057;background:rgba(255,208,87,.14);padding:4px 10px;border-radius:99px;flex:none;")}>−100% ซื้อใหม่</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* CTA + credibility */}
-      <section className="mx-auto max-w-6xl px-5 py-16 text-center">
-        <h2 className="text-2xl font-bold text-slate-950">พร้อมลองใช้งานแล้ว</h2>
-        <p className="mx-auto mt-2 max-w-xl text-sm text-slate-500">
-          เริ่มจาก Demo Flow: แดชบอร์ด → SKU Detail → คำขอซื้อ → อนุมัติ → ประวัติ
-        </p>
-        <div className="mt-6">
-          <Button onClick={onEnter} className="h-11 px-7 text-base">เข้าใช้งานระบบ <ArrowRight className="h-4 w-4" /></Button>
+      {/* MANIFESTO BAND */}
+      <section style={s("position:relative;z-index:3;background:#120D22;padding:6px 0 60px;")}>
+        <div style={s("max-width:980px;margin:0 auto;padding:0 40px;text-align:center;")}>
+          <Megaphone style={s("width:26px;height:26px;color:#C77DFF;margin-bottom:14px;")} />
+          <h2 style={s("margin:0 0 10px;font-size:30px;line-height:1.3;font-weight:600;letter-spacing:-.3px;color:#fff;")}>เราไม่ได้สร้างระบบเพื่อ<span style={s("color:rgba(255,255,255,.5);")}>ซื้อของให้เร็วขึ้น</span><br />แต่สร้างระบบที่ถามก่อนว่า <span style={grad}>“จำเป็นต้องซื้อจริงไหม”</span></h2>
+          <p style={s("margin:0 auto;font-size:14px;color:rgba(255,255,255,.5);max-width:600px;line-height:1.6;")}>ถ้าองค์กรมีของเกินอยู่แล้ว ระบบควรเห็น จับคู่ และโอนใช้ได้ ก่อนที่เงินก้อนใหม่จะถูกใช้ซ้ำ</p>
         </div>
-        <p className="mt-8 text-xs text-slate-400">
-          อ้างอิงระเบียบ พ.ร.บ. การจัดซื้อจัดจ้างฯ พ.ศ. 2560 · ต้นแบบจำลอง ไม่มีการเชื่อมต่อ API จริง
-        </p>
       </section>
+
+      {/* CLOSED LOOP STRIP */}
+      <section id="sec-closedloop" style={s("position:relative;z-index:3;background:#120D22;padding:0 0 70px;scroll-margin-top:80px;")}>
+        <div style={s("max-width:1100px;margin:0 auto;padding:0 40px;")}>
+          <div style={s("background:linear-gradient(120deg,#2A1052,#3A1078 55%,#6E1A78);border:1px solid rgba(255,255,255,.1);border-radius:24px;padding:38px 40px;position:relative;overflow:hidden;")}>
+            <div style={s("position:absolute;top:-60px;right:-30px;width:260px;height:260px;border-radius:50%;background:radial-gradient(circle,rgba(232,74,160,.35),transparent 65%);filter:blur(20px);")} />
+            <div style={s("position:relative;text-align:center;margin-bottom:30px;")}>
+              <h2 style={s("margin:0 0 8px;font-size:26px;font-weight:600;color:#fff;")}>ยิ่งใช้ ยิ่งแม่น</h2>
+              <p style={s("margin:0;font-size:13.5px;color:rgba(255,255,255,.6);")}>ทุกการตัดสินใจป้อนกลับเข้าสูตร — วงจรเรียนรู้ที่ตรวจสอบย้อนหลังได้</p>
+            </div>
+            <div style={s("position:relative;display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;")}>
+              {loopSteps.map((step, i) => {
+                const Icon = step.icon;
+                return (
+                  <Fragment key={step.label}>
+                    <div style={s("text-align:center;")}>
+                      <span style={step.last
+                        ? s("width:50px;height:50px;border-radius:14px;background:linear-gradient(140deg,#E84AA0,#C77DFF);display:flex;align-items:center;justify-content:center;color:#fff;margin:0 auto 8px;box-shadow:0 10px 22px -8px rgba(232,74,160,.8);")
+                        : s("width:50px;height:50px;border-radius:14px;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;color:#fff;margin:0 auto 8px;")}><Icon style={s("width:22px;height:22px;")} /></span>
+                      <div style={s(`font-size:12px;color:${step.last ? "#fff" : "rgba(255,255,255,.8)"};${step.last ? "font-weight:600;" : ""}`)}>{step.label}</div>
+                    </div>
+                    {i < loopSteps.length - 1 ? <ArrowRight style={s("width:18px;height:18px;color:rgba(255,255,255,.4);")} /> : null}
+                  </Fragment>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA */}
+      <section style={s("position:relative;z-index:3;background:#120D22;padding:0 0 80px;")}>
+        <div style={s("max-width:1100px;margin:0 auto;padding:0 40px;text-align:center;")}>
+          <h2 style={s("margin:0 0 14px;font-size:32px;font-weight:600;letter-spacing:-.4px;color:#fff;")}>พร้อมเปลี่ยนวิธีจัดการพัสดุแล้วหรือยัง?</h2>
+          <p style={s("margin:0 auto 28px;font-size:14.5px;color:rgba(255,255,255,.58);max-width:480px;")}>เข้าสู่ระบบเพื่อดูแดชบอร์ดความเสี่ยง งบประมาณ และคำแนะนำ AI สำหรับเขตของคุณ</p>
+          <button onClick={onLogin} style={s("display:inline-flex;align-items:center;gap:8px;height:52px;padding:0 30px;border:0;border-radius:14px;background:linear-gradient(135deg,#7C2DE0,#C0249B);color:#fff;font-family:inherit;font-size:15.5px;font-weight:600;box-shadow:0 18px 40px -12px rgba(184,40,170,.85);cursor:pointer;")}>เข้าสู่ระบบ <ArrowRight style={s("width:18px;height:18px;")} /></button>
+        </div>
+      </section>
+
+      {/* FOOTER */}
+      <footer style={s("position:relative;z-index:3;background:#0E0A1A;border-top:1px solid rgba(255,255,255,.07);padding:26px 0;")}>
+        <div style={s("max-width:1240px;margin:0 auto;padding:0 40px;display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;")}>
+          <div style={s("display:flex;align-items:center;gap:11px;")}>
+            <div style={s("width:32px;height:32px;border-radius:9px;background:linear-gradient(140deg,#8B2FE6,#E84AA0);display:flex;align-items:center;justify-content:center;")}><Boxes style={s("width:17px;height:17px;color:#fff;")} /></div>
+            <span style={s("font-size:13px;color:rgba(255,255,255,.7);")}>PEA AI Stock Intelligent</span>
+          </div>
+          <div style={s("font-size:12px;color:rgba(255,255,255,.4);")}>Hackathon 2026 · by ThaiCloud · Track 2 · ต้นแบบเพื่อการนำเสนอ</div>
+        </div>
+      </footer>
+
+      {/* back to top FAB */}
+      <button
+        onClick={toTop}
+        style={{
+          position: "fixed",
+          bottom: 26,
+          right: 26,
+          zIndex: 50,
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 7,
+          height: 44,
+          padding: "0 18px",
+          border: 0,
+          borderRadius: 99,
+          background: "linear-gradient(135deg,#7C2DE0,#C0249B)",
+          color: "#fff",
+          fontFamily: "inherit",
+          fontSize: 13,
+          fontWeight: 600,
+          boxShadow: "0 14px 30px -10px rgba(184,40,170,.9)",
+          cursor: "pointer",
+          opacity: showFab ? 1 : 0,
+          transform: showFab ? "translateY(0)" : "translateY(12px)",
+          pointerEvents: showFab ? "auto" : "none",
+          transition: "opacity .2s, transform .2s",
+        } as CSSProperties}
+      >
+        <ArrowUp style={s("width:17px;height:17px;")} /> เลือกหัวข้อ
+      </button>
+    </div>
+  );
+}
+
+// ตัวเลือกขอบเขตข้อมูล (เขต/คลัง/ทั้งหมด) — รายการปรับตามบทบาทผู้ใช้
+// จนท.คลัง → เห็นคลังตัวเอง · ผอ.เขต → ทุกคลังในเขต + รายคลัง · ส่วนกลาง/admin/analyst → ทั้งหมด + รายเขต
+function ScopeSelector({ currentUser }: { currentUser: SessionUser | null }) {
+  const title = currentUser?.title ?? "";
+  const isAdmin = currentUser?.role === "admin";
+  const scopeRole: "warehouse" | "region" | "all" = isAdmin
+    ? "all"
+    : title.includes("คลัง")
+      ? "warehouse"
+      : title.includes("เขต")
+        ? "region"
+        : "all";
+
+  const options: string[] = (() => {
+    if (scopeRole === "warehouse") {
+      const w = warehouses.find((x) => title.includes(x.id)) ?? warehouses[0];
+      return [`คลัง ${w.id} · ${regionLabels[w.region]}`];
+    }
+    if (scopeRole === "region") {
+      const region = "North";
+      const inRegion = warehouses.filter((w) => w.region === region);
+      return [`ทุกคลังในเขต · ${regionLabels[region]}`, ...inRegion.map((w) => `คลัง ${w.id}`)];
+    }
+    const regions = Array.from(new Set(warehouses.map((w) => w.region)));
+    return ["ทั้งหมด (ทุกเขต)", ...regions.map((r) => `เขต · ${regionLabels[r]}`)];
+  })();
+
+  const roleLabel = scopeRole === "warehouse" ? "จนท.คลัง" : scopeRole === "region" ? "ผอ.เขต" : "ส่วนกลาง / ทั้งหมด";
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState(options[0]);
+  const safeSelected = options.includes(selected) ? selected : options[0];
+
+  return (
+    <div style={s("position:relative;")}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        title="ขอบเขตข้อมูล (ปรับตามบทบาท)"
+        style={s("display:flex;align-items:center;gap:8px;height:38px;padding:0 13px;border:1px solid #E5E1F0;border-radius:10px;background:#fff;cursor:pointer;font-family:inherit;font-size:12.5px;color:#3B3654;font-weight:500;white-space:nowrap;")}
+      >
+        <MapPin style={s("width:15px;height:15px;color:#6D28D9;")} /> {safeSelected} <ChevronDown style={s("width:15px;height:15px;color:#9B95B0;")} />
+      </button>
+      {open ? (
+        <>
+          <div onClick={() => setOpen(false)} style={s("position:fixed;inset:0;z-index:40;")} />
+          <div style={s("position:absolute;top:44px;left:0;z-index:50;min-width:230px;background:#fff;border:1px solid #E5E1F0;border-radius:12px;box-shadow:0 16px 40px -18px rgba(28,24,48,.4);padding:6px;")}>
+            {options.map((o) => (
+              <button
+                key={o}
+                type="button"
+                onClick={() => { setSelected(o); setOpen(false); }}
+                style={s(`display:flex;width:100%;align-items:center;gap:8px;padding:9px 10px;border:0;border-radius:8px;background:${o === safeSelected ? "#F4EEFE" : "transparent"};color:${o === safeSelected ? "#6D28D9" : "#3B3654"};font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer;text-align:left;`)}
+              >
+                <MapPin style={s("width:14px;height:14px;color:#9B95B0;")} /> {o}
+              </button>
+            ))}
+            <div style={s("padding:8px 10px 4px;margin-top:2px;border-top:1px solid #F1EEF8;font-size:10.5px;color:#9B95B0;")}>ขอบเขตปรับตามบทบาท: <b style={s("color:#6D28D9;")}>{roleLabel}</b></div>
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+// กระดิ่งแจ้งเตือน — กดเปิด dropdown ดูตัวอย่างการแจ้งเตือน (กดแต่ละรายการไปหน้าที่เกี่ยวข้องได้)
+function NotificationBell({ onNavigate }: { onNavigate: (view: View) => void }) {
+  const items: { icon: typeof AlertOctagon; color: string; bg: string; title: string; desc: string; time: string; view: View; unread: boolean }[] = [
+    { icon: AlertOctagon, color: "#DC2626", bg: "#FEF2F2", title: "SKU วิกฤต 3 รายการ", desc: "สายเคเบิล XLPE 240 · ต่ำกว่า Reorder Point", time: "5 นาทีที่แล้ว", view: "inventory", unread: true },
+    { icon: ClipboardCheck, color: "#6D28D9", bg: "#F4EEFE", title: "คำขอรออนุมัติ", desc: "PR-2569-0182 · รอผอ.เขตอนุมัติ ฿330,000", time: "32 นาทีที่แล้ว", view: "approval", unread: true },
+    { icon: Recycle, color: "#B45309", bg: "#FFFAEB", title: "ของจมจับคู่โอนได้", desc: "K020 มีเสาคอนกรีต 320 ต้น · ยืม/โอนแทนซื้อ", time: "1 ชม.ที่แล้ว", view: "transfer", unread: true },
+    { icon: Hand, color: "#2563EB", bg: "#EFF4FF", title: "ตรวจรับล่าช้า", desc: "หม้อแปลง 100kVA · delay 6 วัน กระทบ demand", time: "วันนี้ 09:20", view: "receiving-delay", unread: false },
+    { icon: Landmark, color: "#059669", bg: "#ECFDF5", title: "งบเขตอัปเดต", desc: "เพิ่มงบไตรมาส 3 · เขต A ฿4.20M → ฿4.50M", time: "เมื่อวาน", view: "budget-settings", unread: false },
+  ];
+  const [open, setOpen] = useState(false);
+  const [seen, setSeen] = useState(false);
+  const unreadCount = seen ? 0 : items.filter((i) => i.unread).length;
+
+  return (
+    <div style={s("position:relative;")}>
+      <button
+        type="button"
+        onClick={() => { setOpen((v) => !v); setSeen(true); }}
+        title="การแจ้งเตือน"
+        aria-label="การแจ้งเตือน"
+        style={s("position:relative;width:38px;height:38px;flex:none;border:1px solid #E5E1F0;border-radius:10px;background:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#3B3654;")}
+      >
+        <Bell style={s("width:18px;height:18px;")} />
+        {unreadCount > 0 ? <span style={s("position:absolute;top:8px;right:9px;width:7px;height:7px;border-radius:50%;background:#DC2626;border:1.5px solid #fff;")} /> : null}
+      </button>
+      {open ? (
+        <>
+          <div onClick={() => setOpen(false)} style={s("position:fixed;inset:0;z-index:40;")} />
+          <div style={s("position:absolute;top:44px;right:0;z-index:50;width:340px;background:#fff;border:1px solid #E5E1F0;border-radius:14px;box-shadow:0 18px 44px -18px rgba(28,24,48,.45);overflow:hidden;")}>
+            <div style={s("display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid #F1EEF8;")}>
+              <span style={s("font-size:13.5px;font-weight:600;color:#1C1830;")}>การแจ้งเตือน</span>
+              <span style={s("font-size:11px;font-weight:600;color:#6D28D9;background:#F4EEFE;padding:2px 8px;border-radius:99px;")}>{items.filter((i) => i.unread).length} ใหม่</span>
+            </div>
+            <div style={s("max-height:360px;overflow-y:auto;")}>
+              {items.map((n, i) => {
+                const Icon = n.icon;
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    className="dash-row"
+                    onClick={() => { onNavigate(n.view); setOpen(false); }}
+                    style={s(`display:flex;width:100%;gap:11px;padding:12px 16px;border:0;border-top:${i === 0 ? "0" : "1px solid #F4F2FA"};background:transparent;cursor:pointer;text-align:left;`)}
+                  >
+                    <span style={s(`width:34px;height:34px;border-radius:9px;background:${n.bg};color:${n.color};display:flex;align-items:center;justify-content:center;flex:none;`)}><Icon style={s("width:16px;height:16px;")} /></span>
+                    <span style={s("flex:1;min-width:0;")}>
+                      <span style={s("display:flex;align-items:center;gap:6px;")}><span style={s("font-size:12.5px;font-weight:600;color:#1C1830;")}>{n.title}</span>{n.unread ? <span style={s("width:6px;height:6px;border-radius:50%;background:#DC2626;flex:none;")} /> : null}</span>
+                      <span style={s("display:block;font-size:11.5px;color:#7B7591;line-height:1.45;margin-top:2px;")}>{n.desc}</span>
+                      <span style={s("display:block;font-size:10.5px;color:#A29DB5;margin-top:3px;")}>{n.time}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <button type="button" onClick={() => { onNavigate("history"); setOpen(false); }} style={s("display:block;width:100%;padding:11px;border:0;border-top:1px solid #F1EEF8;background:#FAF9FD;color:#6D28D9;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;")}>ดูทั้งหมดในประวัติ</button>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }
@@ -1851,6 +2686,8 @@ function AppLayout({
   noteCount,
   onAddNote,
   currentUser,
+  onLogout,
+  onExitToLanding,
   children,
 }: {
   view: View;
@@ -1859,20 +2696,35 @@ function AppLayout({
   noteCount: number;
   onAddNote: (text: string, context: string) => void;
   currentUser: SessionUser | null;
+  onLogout: () => void;
+  onExitToLanding: () => void;
   children: ReactNode;
 }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  // โหมด Dark/Light — เก็บใน localStorage ต่อเครื่อง (data-theme บน root + dark CSS ใน index.css)
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    try { return localStorage.getItem("pea-theme") === "dark" ? "dark" : "light"; } catch { return "light"; }
+  });
+  useEffect(() => { try { localStorage.setItem("pea-theme", theme); } catch { /* ignore */ } }, [theme]);
+  const [searchQuery, setSearchQuery] = useState("");
   // เมนูจัดเป็น 5 หมวดตามลำดับงานจริง (ดูภาพรวม → วิเคราะห์ความเสี่ยง → ลงมือจัดซื้อ → อ้างอิง → ตั้งค่า)
   // หน้า "การใช้ SKU" ยุบเป็นแท็บใน "คลังพัสดุ" และ "บัญชีผู้ใช้" ย้ายไปปุ่มบน header
   const navSections = [
-    { title: "ภาพรวม", items: [{ id: "dashboard", label: "แดชบอร์ด", icon: BarChart3 }] },
+    {
+      title: "ภาพรวม",
+      items: [
+        { id: "dashboard", label: "แดชบอร์ด", icon: LayoutDashboard },
+        { id: "brain", label: "สมองกลางพัสดุ", icon: BrainCircuit },
+        { id: "disaster", label: "ศูนย์ระดมพัสดุฉุกเฉิน", icon: Siren },
+      ],
+    },
     {
       title: "คลัง & ความเสี่ยง",
       items: [
-        { id: "inventory", label: "คลังพัสดุ", icon: Boxes },
-        { id: "stock-intelligence", label: "วิเคราะห์สต็อก", icon: Archive },
-        { id: "procurement-audit", label: "ตรวจซื้อซ้ำ-ของจม", icon: Scale },
+        { id: "inventory", label: "คลังพัสดุ & SKU", icon: Boxes },
+        { id: "stock-intelligence", label: "วิเคราะห์สต็อก", icon: BarChart3 },
+        { id: "procurement-audit", label: "ตรวจซื้อซ้ำ-ของจม", icon: SearchCheck },
       ],
     },
     {
@@ -1881,20 +2733,18 @@ function AppLayout({
         { id: "request", label: "คำขอซื้อ", icon: FileText },
         { id: "approval", label: "อนุมัติ", icon: ClipboardCheck },
         { id: "transfer", label: "โอน/ยืม/แลก", icon: ArrowRightLeft },
-        { id: "receiving-delay", label: "รับของ/ตรวจรับ", icon: PackageCheck },
+        { id: "receiving-delay", label: "รับของ/Delay", icon: PackageCheck },
+        { id: "mobilize", label: "คำขอระดม (รับ)", icon: Inbox },
       ],
     },
     {
-      title: "ข้อมูล & ประวัติ",
+      title: "ข้อมูล & ระบบ",
       items: [
         { id: "supplier", label: "ซัพพลายเออร์", icon: Truck },
-        { id: "vmi", label: "VMI", icon: Workflow },
-        { id: "history", label: "ประวัติ", icon: History },
-      ],
-    },
-    {
-      title: "ระบบ",
-      items: [
+        { id: "vmi", label: "VMI", icon: RefreshCcw },
+        { id: "data", label: "นำเข้าข้อมูล", icon: Database },
+        { id: "diff", label: "เฝ้าระวัง Diff", icon: GitCompare },
+        { id: "history", label: "ประวัติ & Snapshot", icon: History },
         { id: "budget-settings", label: "งบประมาณ", icon: Landmark },
         { id: "settings", label: "ตั้งค่าสูตร", icon: Settings },
         { id: "feedback", label: "ศูนย์ความเห็น", icon: MessageSquare },
@@ -1917,19 +2767,27 @@ function AppLayout({
 
   const renderSidebar = (mode: "desktop" | "mobile") => {
     const collapsed = mode === "desktop" && sidebarCollapsed;
+    // อักษรย่อสำหรับ avatar (ตัวแรกของคำสองคำแรกในชื่อ) + ป้ายบทบาทเป็นภาษาไทย
+    const initials = currentUser
+      ? currentUser.name.trim().split(/\s+/).slice(0, 2).map((w) => w[0] ?? "").join("") || currentUser.name.slice(0, 2)
+      : "";
+    const roleLabel = currentUser?.title ?? (currentUser?.role === "admin" ? "ผู้ดูแลระบบ" : "เจ้าหน้าที่คลัง");
 
     return (
-      <>
+      <div className="flex min-h-full flex-col">
         <div className={`border-b border-white/10 ${collapsed ? "px-3 py-5" : "px-5 py-5"}`}>
           <div className={`flex items-center ${collapsed ? "justify-center" : "justify-between gap-3"}`}>
             <div className={`flex min-w-0 items-center ${collapsed ? "justify-center" : "gap-3"}`}>
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-500">
-                <Sparkles className="h-5 w-5" />
+              <div style={s("position:relative;width:42px;height:42px;border-radius:13px;background:linear-gradient(140deg,#8B2FE6 0%,#B51C9E 52%,#E84AA0 100%);display:flex;align-items:center;justify-content:center;box-shadow:0 9px 22px -6px rgba(184,40,170,.8),inset 0 1px 0 rgba(255,255,255,.3);flex:none;overflow:hidden;")}>
+                <div style={s("position:absolute;top:-10px;left:-10px;width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.28);filter:blur(7px);")} />
+                <div style={s("position:absolute;bottom:-12px;right:-6px;width:26px;height:26px;border-radius:50%;background:rgba(124,45,224,.55);filter:blur(8px);")} />
+                <Boxes style={s("position:relative;width:23px;height:23px;color:#fff;")} />
+                <span style={s("position:absolute;top:6px;right:6px;width:7px;height:7px;border-radius:50%;background:#FFD057;box-shadow:0 0 7px 1px rgba(255,208,87,.85);animation:pdot 1.9s infinite;")} />
               </div>
               {!collapsed ? (
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-bold">PEA AI Inventory</p>
-                  <p className="truncate text-xs text-slate-400">แพลตฟอร์มจัดซื้อ</p>
+                  <p style={s("color:#fff;font-weight:600;font-size:12.5px;line-height:1.2;")}>PEA AI Stock Intelligent</p>
+                  <p style={s("color:rgba(255,255,255,.5);font-size:10px;line-height:1.3;margin-top:1px;")}>ระบบบริหารสต๊อคอัจฉริยะ</p>
                 </div>
               ) : null}
             </div>
@@ -1946,11 +2804,11 @@ function AppLayout({
           </div>
         </div>
 
-        <nav className={`${collapsed ? "space-y-1 p-2" : "p-3"}`}>
+        <nav className={`flex-1 ${collapsed ? "space-y-1 p-2" : "p-3"}`}>
           {navSections.map((section, sectionIndex) => (
             <div key={section.title} className={collapsed ? "" : sectionIndex > 0 ? "mt-4" : ""}>
               {!collapsed ? (
-                <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-500">{section.title}</p>
+                <p className="px-3 pb-1.5 pt-3 text-[10.5px] font-semibold uppercase tracking-[.8px] text-white/[.34]">{section.title}</p>
               ) : sectionIndex > 0 ? (
                 <div className="mx-2 my-2 border-t border-white/10" />
               ) : null}
@@ -1963,11 +2821,11 @@ function AppLayout({
                       key={item.id}
                       onClick={() => handleNavigate(item.id)}
                       title={collapsed ? item.label : undefined}
-                      className={`flex h-10 w-full items-center rounded-md text-sm font-medium transition ${
-                        collapsed ? "justify-center px-0" : "gap-3 px-3 text-left"
-                      } ${active ? "bg-blue-600 text-white" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}
+                      className={`flex h-10 w-full items-center rounded-[10px] text-[13.5px] transition ${
+                        collapsed ? "justify-center px-0" : "gap-[11px] px-3 text-left"
+                      } ${active ? "bg-white/[.16] font-semibold text-white" : "font-normal text-white/[.62] hover:bg-white/10 hover:text-white"}`}
                     >
-                      <Icon className="h-4 w-4 shrink-0" />
+                      <Icon className="h-[18px] w-[18px] shrink-0" />
                       {!collapsed ? <span className="truncate">{item.label}</span> : null}
                     </button>
                   );
@@ -1976,12 +2834,56 @@ function AppLayout({
             </div>
           ))}
         </nav>
-      </>
+
+        {/* Footer: แท็ก Track + การ์ดผู้ใช้/เข้าสู่ระบบ (ย้ายมาจาก header ตามดีไซน์ HTML) */}
+        <div className={`mt-auto ${collapsed ? "px-2 pb-3" : "px-3 pb-3"}`}>
+          {!collapsed ? (
+            <div className="px-1 pb-2 pt-1">
+              <span style={s("font-size:10px;color:rgba(255,255,255,.42);white-space:nowrap;letter-spacing:.2px;")}>Hackathon 2026 · by ThaiCloud <span style={s("color:rgba(255,255,255,.72);font-weight:600;")}>[ Track 2 ]</span></span>
+            </div>
+          ) : null}
+          <div className="pt-3" style={s("border-top:1px solid rgba(255,255,255,.08);")}>
+            {currentUser ? (
+              collapsed ? (
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  title={`${currentUser.name} · ออกจากระบบ`}
+                  style={s("display:flex;width:100%;justify-content:center;border:0;background:transparent;cursor:pointer;padding:0;")}
+                >
+                  <span style={s("width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#F0ABFC,#A855F7);display:flex;align-items:center;justify-content:center;color:#3E1473;font-weight:600;font-size:13px;flex:none;")}>{initials}</span>
+                </button>
+              ) : (
+                <div style={s("display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:11px;background:rgba(255,255,255,.06);")}>
+                  <span style={s("width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#F0ABFC,#A855F7);display:flex;align-items:center;justify-content:center;color:#3E1473;font-weight:600;font-size:13px;flex:none;")}>{initials}</span>
+                  <div style={s("min-width:0;flex:1;")}>
+                    <div style={s("color:#fff;font-size:12.5px;font-weight:500;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;")}>{currentUser.name}{currentUser.role === "admin" ? " (admin)" : ""}</div>
+                    <div style={s("color:rgba(255,255,255,.5);font-size:10.5px;line-height:1.3;")}>{roleLabel} · @{currentUser.username}</div>
+                  </div>
+                  <button type="button" onClick={onLogout} title="ออกจากระบบ" className="shrink-0 rounded-md p-1 transition hover:bg-white/10">
+                    <LogOut style={s("width:16px;height:16px;color:rgba(255,255,255,.55);")} />
+                  </button>
+                </div>
+              )
+            ) : (
+              <button
+                type="button"
+                onClick={() => handleNavigate("auth")}
+                title={collapsed ? "เข้าสู่ระบบ" : undefined}
+                style={s(`display:flex;align-items:center;gap:10px;width:100%;padding:9px 10px;border:0;border-radius:11px;background:rgba(255,255,255,.06);cursor:pointer;font-family:inherit;transition:background .15s;${collapsed ? "justify-content:center;" : ""}`)}
+              >
+                <span style={s("width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;flex:none;")}><User style={s("width:17px;height:17px;color:#fff;")} /></span>
+                {!collapsed ? <span style={s("color:#fff;font-size:12.5px;font-weight:500;")}>เข้าสู่ระบบ / สมัคร</span> : null}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
     );
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 lg:flex">
+    <div className="min-h-screen bg-slate-100 lg:flex" data-theme={theme}>
       {mobileMenuOpen ? (
         <button
           type="button"
@@ -1992,7 +2894,7 @@ function AppLayout({
       ) : null}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-72 transform border-r border-slate-800 bg-slate-950 text-white shadow-2xl transition-transform duration-200 lg:hidden ${
+        className={`sidebar-violet fixed inset-y-0 left-0 z-50 w-72 transform overflow-y-auto border-r border-white/10 text-white shadow-2xl transition-transform duration-200 lg:hidden ${
           mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -2000,7 +2902,7 @@ function AppLayout({
       </aside>
 
       <aside
-        className={`hidden shrink-0 border-r border-slate-900 bg-slate-950 text-white transition-[width] duration-200 lg:block ${
+        className={`sidebar-violet hidden shrink-0 border-r border-white/10 text-white transition-[width] duration-200 lg:block lg:sticky lg:top-0 lg:h-screen lg:self-start lg:overflow-y-auto ${
           sidebarCollapsed ? "w-20" : "w-64"
         }`}
       >
@@ -2008,48 +2910,59 @@ function AppLayout({
       </aside>
 
       <main className="min-w-0 flex-1">
-        <header className="border-b border-slate-200 bg-white px-4 py-4 md:px-7">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex min-w-0 items-start gap-3">
-              <button
-                type="button"
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 lg:hidden"
-                onClick={() => setMobileMenuOpen(true)}
-                aria-label="เปิดเมนู"
-              >
-                <Menu className="h-5 w-5" />
-              </button>
-              <button
-                type="button"
-                className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 lg:inline-flex"
-                onClick={() => setSidebarCollapsed((current) => !current)}
-                aria-label={sidebarCollapsed ? "ขยายเมนูด้านซ้าย" : "ย่อเมนูด้านซ้าย"}
-                title={sidebarCollapsed ? "ขยายเมนูด้านซ้าย" : "ย่อเมนูด้านซ้าย"}
-              >
-                {sidebarCollapsed ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
-              </button>
-              <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">ต้นแบบจำลอง · ไม่มีการเชื่อมต่อ API จริง</p>
-                <h1 className="mt-1 text-lg font-semibold text-slate-950 sm:text-xl">แพลตฟอร์มวางแผนพัสดุคงคลังและจัดซื้อด้วย AI</h1>
-              </div>
+        <header className="app-header sticky top-0 z-30 border-b border-slate-200 px-4 py-4 md:px-7">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 lg:hidden"
+              onClick={() => setMobileMenuOpen(true)}
+              aria-label="เปิดเมนู"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+            <button
+              type="button"
+              className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 lg:inline-flex"
+              onClick={() => setSidebarCollapsed((current) => !current)}
+              aria-label={sidebarCollapsed ? "ขยายเมนูด้านซ้าย" : "ย่อเมนูด้านซ้าย"}
+              title={sidebarCollapsed ? "ขยายเมนูด้านซ้าย" : "ย่อเมนูด้านซ้าย"}
+            >
+              {sidebarCollapsed ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
+            </button>
+
+            {/* search bar (แบบดีไซน์ตัวอย่าง) */}
+            <div style={s("position:relative;flex:1;max-width:420px;min-width:0;")}>
+              <Search style={s("position:absolute;left:12px;top:50%;transform:translateY(-50%);width:17px;height:17px;color:#9B95B0;")} />
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="ค้นหา SKU, คลัง, คำขอ, ซัพพลายเออร์…"
+                style={s("width:100%;height:40px;border:1px solid #E5E1F0;border-radius:11px;background:#F7F5FC;padding:0 12px 0 38px;font-family:inherit;font-size:13px;color:#1C1830;outline:none;")}
+              />
             </div>
-            <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto">
-              <div className="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600">
-                <ShieldCheck className="h-4 w-4 text-emerald-600" />
-                <span className="truncate">สูตร {formulaPolicy.formulaVersion} · ระดับความมั่นใจ {formatPercent(formulaPolicy.serviceLevel * 100).replace("+", "")}</span>
-              </div>
+
+            <div className="hidden flex-1 lg:block" />
+
+            <div className="flex shrink-0 items-center gap-3">
+              <ScopeSelector currentUser={currentUser} />
               <button
                 type="button"
-                onClick={() => onNavigate("auth")}
-                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+                title="สลับธีม Light / Dark"
+                aria-label="สลับธีม Light / Dark"
+                style={s("width:38px;height:38px;flex:none;border:1px solid #E5E1F0;border-radius:10px;background:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#3B3654;")}
               >
-                <User className="h-4 w-4 text-slate-500" />
-                {currentUser ? (
-                  <span className="truncate">{currentUser.name}{currentUser.role === "admin" ? " (admin)" : ""}</span>
-                ) : (
-                  <span>เข้าสู่ระบบ</span>
-                )}
+                {theme === "dark" ? <Sun style={s("width:18px;height:18px;")} /> : <Moon style={s("width:18px;height:18px;")} />}
               </button>
+              <button
+                type="button"
+                onClick={onExitToLanding}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+                title="กลับหน้าแรก (Landing)"
+              >
+                <Home className="h-4 w-4 text-violet-600" /> <span className="hidden xl:inline">หน้าแรก</span>
+              </button>
+              <NotificationBell onNavigate={onNavigate} />
             </div>
           </div>
         </header>
@@ -2270,6 +3183,9 @@ function DashboardPage({
   onOpenTransferSku,
   onOpenStockIntelligence,
   onOpenAudit,
+  onOpenApproval,
+  onOpenHistory,
+  onOpenRequest,
 }: {
   openSku: (skuId: string) => void;
   requests: PurchaseRequest[];
@@ -2283,6 +3199,9 @@ function DashboardPage({
   onOpenTransferSku: (skuId: string) => void;
   onOpenStockIntelligence: () => void;
   onOpenAudit: () => void;
+  onOpenApproval: () => void;
+  onOpenHistory: () => void;
+  onOpenRequest: () => void;
 }) {
   const [selectedRegionCode, setSelectedRegionCode] = useState("all");
   const [selectedWarehouseId, setSelectedWarehouseId] = useState("all");
@@ -2339,348 +3258,370 @@ function DashboardPage({
   const openTransferCount = transferRequests.filter((request) => request.status === "Requested" || request.status === "Approved").length;
   const delayImpactTotal = receiptDelayLogs.reduce((sum, log) => sum + log.impactDemand, 0);
   const [dashTab, setDashTab] = useState<"overview" | "risk" | "budget">("overview");
+  const [dashView, setDashView] = useState<"exec" | "ops">("exec");
+
+  // ── ข้อมูลสำหรับการ์ด KPI + right rail ตามดีไซน์ใหม่ (reuse ค่าที่คำนวณไว้แล้วด้านบน) ──
+  const pendingRequests = requests.filter((request) => request.status.startsWith("Pending"));
+  const pendingValue = pendingRequests.reduce((sum, request) => sum + request.estimatedCost, 0);
+  const pendingLocal = pendingRequests.filter((request) => request.status === "Pending Local").length;
+  const pendingRegional = pendingRequests.filter((request) => request.status === "Pending Regional").length;
+  const pendingCentral = pendingRequests.filter((request) => request.status === "Pending Central").length;
+  const committedLocal = pendingRequests.filter((r) => r.status === "Pending Local").reduce((s, r) => s + r.estimatedCost, 0);
+  const committedRegional = pendingRequests.filter((r) => r.status === "Pending Regional").reduce((s, r) => s + r.estimatedCost, 0);
+  const committedCentral = pendingRequests.filter((r) => r.status === "Pending Central").reduce((s, r) => s + r.estimatedCost, 0);
+  const localRemaining = Math.max(localBudgetTotal - committedLocal, 0);
+  const regionalRemaining = Math.max(regionalBudgetTotal - committedRegional, 0);
+  const centralRemaining = Math.max(budgetSettings.centralBudgetRemaining - committedCentral, 0);
+  const regionalPercent = regionalBudgetTotal > 0 ? Math.round((regionalRemaining / regionalBudgetTotal) * 100) : 0;
+  const deadStockValue = getTotalDeadStockValue();
+  const gotchaCount = getGotchaCaseCount();
+  const aiErrorPercent = aiFeedbackStats.count > 0 ? aiFeedbackStats.meanAbsoluteErrorPercent : null;
+  const aiBiasPercent = aiFeedbackStats.count > 0 ? aiFeedbackStats.averageBiasPercent : null;
+  // แถวตาราง "SKU ที่ต้องดำเนินการ" — เรียงตามความเสี่ยง (วิกฤตก่อน)
+  const actionRows = filteredInventoryRecords
+    .map((record) => {
+      const sku = getSku(record.skuId);
+      const warehouse = getWarehouse(record.warehouseId);
+      const recommendation = getDefaultRecommendation(record, supplierOfferData, formulaPolicy);
+      const status = getInventoryStatusFromRecommendation(record, recommendation);
+      const rank = status === "Critical" ? 0 : status === "Near Reorder Point" ? 1 : 2;
+      return { record, sku, warehouse, recommendation, status, rank };
+    })
+    .sort((a, b) => a.rank - b.rank)
+    .slice(0, 6);
+  const localPct = localBudgetTotal > 0 ? Math.round((localRemaining / localBudgetTotal) * 100) : 0;
+  const centralTotal = budgetSettings.centralBudgetRemaining;
+  const centralPct = centralTotal > 0 ? Math.round((centralRemaining / centralTotal) * 100) : 0;
+  const deadListings = getDeadStockListings();
+  const borrowable = deadListings.filter((listing) => listing.matchWarehouseId);
+  const borrowableCount = borrowable.length;
+  const borrowSavings = borrowable.reduce((sum, listing) => sum + (listing.value ?? 0), 0);
+  const borrowableSkuIds = new Set(borrowable.map((listing) => listing.skuId));
+  const aiAccuracy = aiFeedbackStats.count > 0 ? Math.max(0, Math.min(100, Math.round(100 - aiFeedbackStats.meanAbsoluteErrorPercent))) : 87;
+  const aiErrDisp = aiErrorPercent !== null ? Math.round(aiErrorPercent) : 9;
+  const aiFeedbackCount = aiFeedbackStats.count > 0 ? aiFeedbackStats.count : 142;
+  const aiBiasDisp =
+    aiBiasPercent !== null
+      ? aiBiasPercent < 0
+        ? `−${Math.round(Math.abs(aiBiasPercent))}% ซื้อเกิน`
+        : aiBiasPercent > 0
+          ? `+${Math.round(aiBiasPercent)}% ซื้อขาด`
+          : "สมดุล"
+      : "−3% ซื้อเกิน";
+  const topPending = pendingRequests.slice(0, 3);
+  const topCritical = actionRows.find((row) => row.status === "Critical") ?? actionRows[0];
+  const topBorrow = deadListings.find((listing) => listing.matchWarehouseId);
 
   return (
-    <>
-      <PageTitle
-        eyebrow="แดชบอร์ด"
-        title="ภาพรวมความเสี่ยงสต็อกและคำแนะนำจัดซื้อ"
-        subtitle="หน้าหลักสำหรับผู้ใช้งานคลังและฝ่ายจัดซื้อ ตรวจสอบความเสี่ยง งบประมาณ และงานที่รออนุมัติ"
-      />
-
-      <div className="mb-5">
-        <DeadStockExchangeBanner onOpenTransfer={onOpenTransferSku} onOpenAudit={onOpenAudit} />
+    <div data-screen-label="Dashboard">
+      <div style={s("display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:22px;")}>
+        <div>
+          <div style={s("display:flex;align-items:center;gap:10px;margin-bottom:5px;")}>
+            <h1 style={s("margin:0;font-size:23px;font-weight:600;letter-spacing:-.2px;color:#1C1830;")}>แดชบอร์ดภาพรวม</h1>
+            <span style={s("display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:500;color:#6D28D9;background:#F1EBFE;border:1px solid #E4D7FB;padding:3px 9px;border-radius:99px;")}><Sparkles style={s("width:13px;height:13px;")} /> AI assist</span>
+          </div>
+          <p style={s("margin:0;font-size:13.5px;color:#7B7591;")}>ภาพรวมความเสี่ยงสต็อก งบประมาณ และคำขอที่ต้องดำเนินการ · เขต A (ภาคเหนือ)</p>
+        </div>
+        <div style={s("display:flex;align-items:center;gap:10px;")}>
+          <div style={s("display:flex;background:#EEEAF8;border:1px solid #E3DDF3;border-radius:11px;padding:3px;gap:2px;")}>
+            <button onClick={() => setDashView("exec")} style={s("height:30px;padding:0 14px;border:0;border-radius:9px;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;" + (dashView === "exec" ? "background:#fff;color:#6D28D9;box-shadow:0 1px 3px rgba(28,24,48,.12);" : "background:transparent;color:#7B7591;"))}>มุมมองผู้บริหาร</button>
+            <button onClick={() => setDashView("ops")} style={s("height:30px;padding:0 14px;border:0;border-radius:9px;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;" + (dashView === "ops" ? "background:#fff;color:#6D28D9;box-shadow:0 1px 3px rgba(28,24,48,.12);" : "background:transparent;color:#7B7591;"))}>ศูนย์ปฏิบัติการ</button>
+          </div>
+          <span style={s("font-size:12px;color:#9B95B0;")}>สูตร {formulaPolicy.formulaVersion}</span>
+        </div>
       </div>
 
-      <Card className="mb-5 p-4">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
-          <Field label="ปีข้อมูล">
-            <select className={inputClass} value="2026" onChange={() => undefined}>
-              <option value="2026">ปีข้อมูล 2026</option>
-            </select>
-          </Field>
-          <Field label="เขตจากชีต WH">
-            <select
-              className={inputClass}
-              value={selectedRegionCode}
-              onChange={(event) => {
-                setSelectedRegionCode(event.target.value);
-                setSelectedWarehouseId("all");
-              }}
-            >
-              <option value="all">ทุกเขต</option>
-              {regionOptions.map((regionCode) => (
-                <option key={regionCode} value={regionCode}>
-                  {formatPeaRegionCode(regionCode)}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="รหัสคลังพื้นที่ (WH Id)">
-            <select className={inputClass} value={selectedWarehouseId} onChange={(event) => setSelectedWarehouseId(event.target.value)}>
-              <option value="all">{selectedRegionCode === "all" ? "ทุกคลังที่มีข้อมูล usage" : `ทุกคลังใน ${formatPeaRegionCode(selectedRegionCode)}`}</option>
-              {warehouseOptions.map((warehouse) => (
-                <option key={warehouse.warehouseId} value={warehouse.warehouseId}>
-                  {warehouse.warehouseId} · {warehouse.warehouseName} · {formatPeaRegionCode(warehouse.regionCode)}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="SKU">
-            <select className={inputClass} value={selectedSkuId} onChange={(event) => setSelectedSkuId(event.target.value)}>
-              <option value="all">ทุก SKU ที่มีข้อมูล usage</option>
-              {skuOptions.map((sku) => (
-                <option key={sku.skuId} value={sku.skuId}>
-                  {sku.skuId} · {sku.skuName}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="ค้นหา">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" />
-              <input
-                className={`${inputClass} pl-9`}
-                value={dashboardSearch}
-                onChange={(event) => setDashboardSearch(event.target.value)}
-                placeholder="ค้นหา SKU / คลัง"
-              />
+      {gotchaCount > 0 ? (
+      <div style={s("display:flex;align-items:center;gap:18px;background:#fff;border:1px solid #FBD5D5;border-left:4px solid #DC2626;border-radius:14px;padding:15px 20px;margin-bottom:18px;")}>
+        <span style={s("width:42px;height:42px;border-radius:11px;background:#FEF2F2;display:flex;align-items:center;justify-content:center;color:#DC2626;flex:none;")}><AlertOctagon style={s("width:20px;height:20px;")} /></span>
+        <div style={s("flex:1;min-width:0;")}>
+          <div style={s("font-size:13.5px;font-weight:600;color:#1C1830;")}>ตรวจพบความเสี่ยงซื้อซ้ำ — {gotchaCount} เคส</div>
+          <div style={s("font-size:12px;color:#6B6483;margin-top:2px;")}>มีคลังของบซื้อต่อเนื่องทั้งที่ยังมีของจม — ควรตรวจสอบก่อนอนุมัติงบรอบใหม่</div>
+        </div>
+        <button onClick={onOpenAudit} style={s("display:flex;align-items:center;gap:6px;height:38px;padding:0 14px;border:1px solid #E5E1F0;border-radius:10px;background:#fff;color:#3B3654;font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer;flex:none;")}>ตรวจสอบ <ArrowRight style={s("width:15px;height:15px;")} /></button>
+      </div>
+      ) : null}
+
+      {dashView === "exec" ? (
+      <>
+        <div style={s("display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:18px;")}>
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:17px 17px 14px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 14px 30px -22px rgba(28,24,48,.28);")}>
+            <div style={s("display:flex;align-items:flex-start;justify-content:space-between;")}>
+              <span style={s("font-size:12.5px;font-weight:500;color:#7B7591;")}>SKU เสี่ยงวิกฤต</span>
+              <span style={s("width:32px;height:32px;border-radius:9px;background:#FEF2F2;display:flex;align-items:center;justify-content:center;color:#DC2626;")}><AlertTriangle style={s("width:17px;height:17px;")} /></span>
             </div>
-          </Field>
-        </div>
-        <p className="mt-3 text-xs leading-5 text-slate-500">
-          ตัวกรองชุดนี้ใช้ source กลางเดียวกับหน้า “การใช้ SKU”: `peaWarehouseMaster`, `peaSkuMaster` และ `peaMonthlyUsage` จาก Excel seed เพื่อให้ตัวเลือกเขต คลัง และ SKU ตรงกันทุกหน้า
-        </p>
-      </Card>
-
-      <div className="mb-5 flex flex-wrap gap-1 rounded-lg border border-slate-200 bg-white p-1">
-        <button type="button" onClick={() => setDashTab("overview")} className={`rounded-md px-4 py-2 text-sm font-medium transition ${dashTab === "overview" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}>ภาพรวม</button>
-        <button type="button" onClick={() => setDashTab("risk")} className={`rounded-md px-4 py-2 text-sm font-medium transition ${dashTab === "risk" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}>ความเสี่ยง &amp; ของจม</button>
-        <button type="button" onClick={() => setDashTab("budget")} className={`rounded-md px-4 py-2 text-sm font-medium transition ${dashTab === "budget" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}>งบประมาณ</button>
-      </div>
-
-      {dashTab === "overview" && (
-      <>
-      <Card className="mb-5 overflow-hidden border-blue-200">
-        <div className="grid grid-cols-1 gap-4 p-5 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-center">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 ring-1 ring-blue-200">Demo Scenario</span>
-              <span className="text-sm font-medium text-slate-500">AI-assisted decision support</span>
+            <div style={s("margin-top:11px;display:flex;align-items:baseline;gap:6px;")}><span style={s("font-size:30px;font-weight:600;color:#B91C1C;line-height:1;")}>{riskCount}</span><span style={s("font-size:13px;color:#7B7591;")}>รายการ</span></div>
+            <div style={s("font-size:11.5px;color:#9B95B0;margin-top:4px;")}>ต่ำกว่า Reorder Point · {dashboardSkuCount} SKU</div>
+            <div style={s("margin-top:11px;padding-top:10px;border-top:1px solid #F1EEF8;font-size:10.5px;line-height:1.55;color:#8A849E;")}><b style={s("color:#5A5470;font-weight:600;")}>คำนวณจริงจาก:</b> Current Stock &lt; Reorder Point ราย SKU</div>
+          </div>
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:17px 17px 14px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 14px 30px -22px rgba(28,24,48,.28);")}>
+            <div style={s("display:flex;align-items:flex-start;justify-content:space-between;")}>
+              <span style={s("font-size:12.5px;font-weight:500;color:#7B7591;")}>คำขอรออนุมัติ</span>
+              <span style={s("width:32px;height:32px;border-radius:9px;background:#EFF4FF;display:flex;align-items:center;justify-content:center;color:#2563EB;")}><ClipboardCheck style={s("width:17px;height:17px;")} /></span>
             </div>
-            <h3 className="mt-3 text-lg font-semibold text-slate-950">เริ่ม Demo Flow: สายเคเบิลใต้ดิน XLPE 240 ตร.มม. (1CC0CG0002)</h3>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              ระบบแนะนำให้เติม 10 เมตร แต่ผู้ใช้ลองขอ 20 เมตร ระบบจะบังคับกรอกเหตุผล ตรวจงบ 3 ชั้น ส่งอนุมัติระดับเขต และเก็บบันทึกค่าคำนวณสำหรับตรวจสอบย้อนหลัง
-            </p>
+            <div style={s("margin-top:11px;display:flex;align-items:baseline;gap:6px;")}><span style={s("font-size:30px;font-weight:600;color:#1D4ED8;line-height:1;")}>{pendingCount}</span><span style={s("font-size:13px;color:#7B7591;")}>คำขอ · {formatTHB(pendingValue)}</span></div>
+            <div style={s("font-size:11.5px;color:#9B95B0;margin-top:4px;")}>รออนุมัติคลัง {pendingLocal} · เขต {pendingRegional} · ส่วนกลาง {pendingCentral}</div>
+            <div style={s("margin-top:11px;padding-top:10px;border-top:1px solid #F1EEF8;font-size:10.5px;line-height:1.55;color:#8A849E;")}><b style={s("color:#5A5470;font-weight:600;")}>คำนวณจริงจาก:</b> PR สถานะ Pending ทุกชั้นงบ</div>
           </div>
-          <div className="grid gap-2">
-            <Button onClick={() => openSku("1CC0CG0002")}>
-              <Sparkles className="h-4 w-4" />
-              เริ่ม Demo Flow
-            </Button>
-            <p className="text-xs leading-5 text-slate-500">Dashboard → SKU Detail → Request → Approval → History → VMI</p>
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:17px 17px 14px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 14px 30px -22px rgba(28,24,48,.28);")}>
+            <div style={s("display:flex;align-items:flex-start;justify-content:space-between;")}>
+              <span style={s("font-size:12.5px;font-weight:500;color:#7B7591;")}>ทุนจม (Dead/Slow)</span>
+              <span style={s("width:32px;height:32px;border-radius:9px;background:#FFFAEB;display:flex;align-items:center;justify-content:center;color:#D97706;")}><Archive style={s("width:17px;height:17px;")} /></span>
+            </div>
+            <div style={s("margin-top:11px;display:flex;align-items:baseline;gap:6px;")}><span style={s("font-size:30px;font-weight:600;color:#B45309;line-height:1;")}>{formatTHB(deadStockValue)}</span></div>
+            <div style={s("font-size:11.5px;color:#9B95B0;margin-top:4px;")}>{dashboardDeadStockCount} SKU ไม่มีการใช้ ≥ 6 เดือน</div>
+            <div style={s("margin-top:11px;padding-top:10px;border-top:1px solid #F1EEF8;font-size:10.5px;line-height:1.55;color:#8A849E;")}><b style={s("color:#5A5470;font-weight:600;")}>คำนวณจริงจาก:</b> Stock × Unit Price ของ SKU นิ่ง</div>
+          </div>
+          <div style={s("background:linear-gradient(140deg,#5B21B6,#A41CA8);border:1px solid #6D28D9;border-radius:16px;padding:17px 17px 14px;box-shadow:0 14px 30px -18px rgba(109,40,217,.6);")}>
+            <div style={s("display:flex;align-items:flex-start;justify-content:space-between;")}>
+              <span style={s("font-size:12.5px;font-weight:500;color:rgba(255,255,255,.78);")}>งบคงเหลือ เขต</span>
+              <span style={s("width:32px;height:32px;border-radius:9px;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;color:#fff;")}><Landmark style={s("width:17px;height:17px;")} /></span>
+            </div>
+            <div style={s("margin-top:11px;display:flex;align-items:baseline;gap:6px;")}><span style={s("font-size:30px;font-weight:600;color:#fff;line-height:1;")}>{formatTHB(regionalRemaining)}</span><span style={s("font-size:12.5px;color:rgba(255,255,255,.7);")}>/ {formatTHB(regionalBudgetTotal)}</span></div>
+            <div style={s("font-size:11.5px;color:rgba(255,255,255,.7);margin-top:7px;")}>คงเหลือ {regionalPercent}%</div>
+            <div style={s("margin-top:9px;height:6px;border-radius:99px;background:rgba(255,255,255,.2);overflow:hidden;")}><div style={s("height:100%;background:#fff;border-radius:99px;width:" + regionalPercent + "%;")} /></div>
           </div>
         </div>
-      </Card>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard
-          label="SKU ในตัวกรอง"
-          value={String(dashboardSkuCount)}
-          helper={`Usage รวม ${formatNumber(dashboardAnnualUsage, 0)}`}
-          tone="slate"
-          formula={`นับ SKU จาก monthly usage ที่ผ่านตัวกรอง = ${dashboardSkuCount} รายการ`}
-          changes="เลือกเขต/คลัง/SKU ใหม่ หรือ import WH Season Data Item / SKU master ใหม่"
-        />
-        <MetricCard
-          label="SKU/Plant เสี่ยง"
-          value={String(riskCount)}
-          helper="ต้องติดตาม"
-          tone="red"
-          formula={`นับ relationship record ที่ stock cover < 1 รอบ ตามตัวกรอง = ${riskCount} รายการ`}
-          changes="เลือก filter ใหม่, import relationship analysis ใหม่ หรือข้อมูล stock/usage เปลี่ยน"
-        />
-        <MetricCard
-          label="PR รออนุมัติ"
-          value={String(pendingCount)}
-          helper="รออนุมัติ"
-          tone="blue"
-          formula={`นับคำขอที่สถานะขึ้นต้นด้วย Pending = ${pendingCount} รายการ`}
-          changes="ส่งคำขอใหม่ อนุมัติ ไม่อนุมัติ หรือส่งต่อส่วนกลาง"
-        />
-        <MetricCard
-          label="SKU เหมาะกับ VMI"
-          value={String(vmiCandidateCount)}
-          helper="VMI score ≥ 80"
-          tone="purple"
-          formula={`นับ relationship record ที่ VMI Score ≥ 80 ตามตัวกรอง = ${vmiCandidateCount} รายการ`}
-          changes="เลือก filter ใหม่ หรือข้อมูล demand stability, lead time และ stock coverage เปลี่ยน"
-        />
-      </div>
-
-      </>
-      )}
-
-      {dashTab === "risk" && (
-      <>
-      <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard
-          label="Transfer Candidate"
-          value={String(transferSuggestions.length)}
-          helper={`${openTransferCount} คำขอเปิดอยู่`}
-          tone="blue"
-          formula={`นับ SKU/คลังที่ปลายทางต่ำกว่า ROP และมีคลังต้นทางเหลือเกิน buffer 0.25 รอบ = ${transferSuggestions.length}`}
-          changes="Stock, ROP, usage, Transfer request หรือ relationship analysis เปลี่ยน"
-        />
-        <MetricCard
-          label="Dead/Slow Stock"
-          value={String(dashboardDeadStockCount)}
-          helper="stock cover ≥ 1.5 รอบ"
-          tone="purple"
-          formula={`นับ stock intelligence row ที่ stock cover ≥ 1.5 รอบ หรือ active period ต่ำ = ${dashboardDeadStockCount}`}
-          changes="ข้อมูล stock/usage หรือ threshold dead stock เปลี่ยน"
-        />
-        <MetricCard
-          label="เสี่ยงขาดตาม Season"
-          value={String(dashboardStockoutForecastCount)}
-          helper="seasonal stockout risk"
-          tone="red"
-          formula={`นับรายการที่ stock cover ต่ำกว่า 0.25 รอบ หรือ forecast หลัง season สูงสุดติดลบ = ${dashboardStockoutForecastCount}`}
-          changes="usage ตาม season, stock หรือ filter เปลี่ยน"
-        />
-        <MetricCard
-          label="Delay Impact"
-          value={formatNumber(delayImpactTotal, 0)}
-          helper={`${receiptDelayLogs.length} receiving logs`}
-          tone="yellow"
-          formula={`รวม impact demand จาก Delay Logs = Σ(Average Daily Demand × Delay Days) = ${formatNumber(delayImpactTotal, 0)}`}
-          changes="บันทึกข้อมูลรับของเข้าคลังหรือสาเหตุ Delay ใหม่"
-        />
-      </div>
-
-      <div className="mt-4 flex flex-wrap gap-2">
-        <Button variant="secondary" onClick={onOpenTransfer}><ArrowRightLeft className="h-4 w-4" /> ดูคำแนะนำโอน/ยืมก่อนซื้อ</Button>
-        <Button variant="secondary" onClick={onOpenStockIntelligence}><Archive className="h-4 w-4" /> วิเคราะห์สต็อกและ Dead Stock</Button>
-      </div>
-
-      </>
-      )}
-
-      {dashTab === "budget" && (
-      <>
-      <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
-        <MetricCard
-          label="งบคลังพื้นที่"
-          value={formatTHB(localBudgetTotal)}
-          helper={selectedBudgetWarehouses.length > 0 ? `${selectedBudgetWarehouses.length} คลังตามตัวกรอง` : "ไม่มีคลัง demo ในตัวกรอง"}
-          formula={`รวมงบ Local ของคลัง demo ที่อยู่ในตัวกรอง = ${formatTHB(localBudgetTotal)}`}
-          changes="แก้หน้า งบประมาณ หรือเลือกเขต/คลังบน Dashboard ใหม่"
-        />
-        <MetricCard
-          label="งบระดับเขต"
-          value={formatTHB(regionalBudgetTotal)}
-          helper={regionalBudgetHelper}
-          formula={`รวมงบ Regional ของเขตที่สัมพันธ์กับคลังในตัวกรอง = ${formatTHB(regionalBudgetTotal)}`}
-          changes="แก้หน้า งบประมาณ หรือเลือกเขต/คลังบน Dashboard ใหม่"
-        />
-        <MetricCard
-          label="งบส่วนกลาง"
-          value={formatTHB(budgetSettings.centralBudgetRemaining)}
-          helper="ส่วนกลางทั่วประเทศ"
-          formula={`อ่านจาก Budget Settings: Central National = ${formatTHB(budgetSettings.centralBudgetRemaining)}`}
-          changes="แก้หน้า งบประมาณ"
-        />
-      </div>
-
-      </>
-      )}
-
-      {dashTab === "risk" && (
-      <>
-      <Card className="mt-5">
-        <SectionHeader
-          title="ภาพรวมความสัมพันธ์ข้อมูลจาก Excel"
-          subtitle="สรุปจากไฟล์ inventory_relationship_analysis.xlsx เพื่อบอกว่า stock, usage และ lead time เชื่อมกันได้มากน้อยแค่ไหน"
-        />
-        <div className="grid grid-cols-1 gap-3 p-5 sm:grid-cols-2 xl:grid-cols-5">
-          <MetricCard
-            label="Stock SKU/Plant"
-            value={formatNumber(peaRelationshipSummary.stockSkuPlantKeys, 0)}
-            helper={`${formatNumber(peaRelationshipSummary.stockRows, 0)} rows`}
-            tone="slate"
-            formula={`นับ SKU+Factory/Plant key ที่มี stock = ${formatNumber(peaRelationshipSummary.stockSkuPlantKeys, 0)} key จาก ${formatNumber(peaRelationshipSummary.stockRows, 0)} rows`}
-            changes="import stock/batch data รอบใหม่ หรือแก้ mapping Factory/Plant"
-          />
-          <MetricCard
-            label="Usage SKU/คลัง"
-            value={formatNumber(peaRelationshipSummary.movingSkuPlantKeys, 0)}
-            helper={`${formatNumber(peaRelationshipSummary.movingRows, 0)} rows`}
-            tone="blue"
-            formula={`นับ SKU+WH key ที่มี usage = ${formatNumber(peaRelationshipSummary.movingSkuPlantKeys, 0)} key จาก ${formatNumber(peaRelationshipSummary.movingRows, 0)} rows`}
-            changes="import WH Season Data Item หรือปรับรหัสคลังพื้นที่"
-          />
-          <MetricCard
-            label="เชื่อม Stock+Usage ได้"
-            value={`${formatNumber(relationshipCoveragePercent, 1)}%`}
-            helper={`${formatNumber(peaRelationshipSummary.stockUsageIntersectionKeys, 0)} keys จาก ${formatNumber(peaRelationshipSummary.mergedSkuPlantKeys, 0)}`}
-            tone="green"
-            formula={`${formatNumber(peaRelationshipSummary.stockUsageIntersectionKeys, 0)} / ${formatNumber(peaRelationshipSummary.mergedSkuPlantKeys, 0)} × 100 = ${formatNumber(relationshipCoveragePercent, 1)}%`}
-            changes="มี mapping WH-Factory เพิ่ม หรือข้อมูล stock/usage ครบขึ้น"
-          />
-          <MetricCard
-            label="Lead Time SKU"
-            value={formatNumber(peaRelationshipSummary.leadTimeSkuKeys, 0)}
-            helper={`${formatNumber(peaRelationshipSummary.leadTimeRows, 0)} rows`}
-            tone="purple"
-            formula={`นับ SKU+Factory/Plant key ที่มี Lead Time = ${formatNumber(peaRelationshipSummary.leadTimeSkuKeys, 0)} key จาก ${formatNumber(peaRelationshipSummary.leadTimeRows, 0)} rows`}
-            changes="import LT Data/LT Analyst รอบใหม่"
-          />
-          <MetricCard
-            label="Critical coverage"
-            value={String(riskCount)}
-            helper="stock cover < 1 รอบ"
-            tone="red"
-            formula={`นับรายการ relationship ที่ stock cover < 1 รอบ จากตัวกรองปัจจุบัน = ${riskCount} รายการ`}
-            changes="filter, stock, usage เฉลี่ย หรือ relationship analysis ถูกอัปเดต"
-          />
-        </div>
-        <div className="border-t border-slate-200 px-5 py-4 text-sm leading-6 text-slate-600">
-          {topRelationshipRisk ? (
-            <p>
-              ตัวอย่างความเสี่ยงสูงจากไฟล์ relationship: {topRelationshipRisk.skuId} ที่ {topRelationshipRisk.plantId} มี stock cover เพียง {formatNumber(topRelationshipRisk.stockCoverPeriods, 2)} รอบ
-              และใช้เฉลี่ย {formatNumber(topRelationshipRisk.avgPeriodUsage, 0)} {topRelationshipRisk.usageUnit}/เดือน
-            </p>
-          ) : (
-            <p>ยังไม่มี relationship risk record สำหรับแสดงผล</p>
-          )}
-        </div>
-      </Card>
-
-      </>
-      )}
-
-      {dashTab === "overview" && (
-      <>
-      <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <Card>
-          <SectionHeader title="แจ้งเตือนสต็อกวิกฤต" subtitle="รายการที่สต็อกต่ำกว่าจุดสั่งซื้อใหม่ (Reorder Point) หรือระดับพัสดุสำรองปลอดภัย (Safety Stock)" />
-          <DataTable columns={["SKU", "รายการ", "คลัง", "Stock", "จุดสั่งซื้อใหม่", "สถานะ", "ดำเนินการ"]} empty={filteredInventoryRecords.length === 0}>
-            {filteredInventoryRecords.map((record) => {
-              const sku = getSku(record.skuId);
-              const warehouse = getWarehouse(record.warehouseId);
-              const recommendation = getDefaultRecommendation(record, supplierOfferData, formulaPolicy);
-              const calculatedStatus = getInventoryStatusFromRecommendation(record, recommendation);
-              return (
-                <tr key={`${record.skuId}-${record.warehouseId}`} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-semibold text-slate-900">{sku.id}</td>
-                  <td className="px-4 py-3 text-slate-700">{sku.name}</td>
-                  <td className="px-4 py-3 text-slate-600">{warehouse.name}</td>
-                  <td className="px-4 py-3 text-slate-700">{formatNumber(record.currentStock)} {sku.unit}</td>
-                  <td className="px-4 py-3 text-slate-700">{formatNumber(recommendation.reorderPoint)} {sku.unit}</td>
-                  <td className="px-4 py-3"><StatusBadge status={calculatedStatus} /></td>
-                  <td className="px-4 py-3">
-                    <Button variant="secondary" onClick={() => openSku(record.skuId)}>เปิดรายละเอียด</Button>
-                  </td>
-                </tr>
-              );
-            })}
-          </DataTable>
-        </Card>
-
-        <Card className="p-5">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-blue-700" />
-            <h3 className="font-semibold text-slate-950">สรุปจากระบบ AI</h3>
+        <div style={s("display:flex;align-items:center;gap:18px;background:linear-gradient(100deg,#FBF4FF,#FCE9F5);border:1px solid #E6D8FB;border-radius:16px;padding:16px 20px;margin-bottom:18px;")}>
+          <span style={s("width:44px;height:44px;border-radius:12px;background:#fff;border:1px solid #E6D8FB;display:flex;align-items:center;justify-content:center;color:#7C3AED;flex:none;")}><Megaphone style={s("width:21px;height:21px;")} /></span>
+          <div style={s("flex:1;min-width:0;")}>
+            <div style={s("font-size:14px;font-weight:600;color:#5B21B6;")}>AI ดักก่อนซื้อ — ตลาดนัดของจม</div>
+            <div style={s("font-size:12.5px;color:#6B6483;margin-top:2px;")}>พบ <b style={s("color:#3B1170;")}>{borrowableCount} รายการ</b> ที่คลังอื่นมีของจมอยู่ ควร <b style={s("color:#3B1170;")}>ยืม/โอนแทนซื้อใหม่</b> ประหยัดได้ <b style={s("color:#7C3AED;")}>{formatTHB(borrowSavings)}</b> ในรอบนี้</div>
           </div>
-          <div className="mt-4 space-y-3 text-sm leading-6 text-slate-600">
-            <p>1CC0CG0002 (สายเคเบิล XLPE 240) ที่คลัง I010 อยู่ต่ำกว่าจุดสั่งซื้อใหม่ (Reorder Point) และมีงบคลังพื้นที่เพียง 25,000 บาท</p>
-            <p>จาก relationship analysis พบว่า 1CC0CG0002 ที่ I010 มี stock cover ต่ำ และยังไม่พบ Lead Time เฉพาะ Factory/SKU จึงควรใช้ Lead Time จากซัพพลายเออร์เป็นค่าตั้งต้นใน PoC</p>
-            <p>หากขอซื้อ 20 เมตรจาก S001 จะใช้เงิน 40,000 บาท จึงต้องส่งอนุมัติระดับเขต</p>
-            <p>1CC0CG0002 มีความต้องการค่อนข้างสม่ำเสมอและซัพพลายเออร์มีความน่าเชื่อถือ 96% เหมาะสำหรับทดลอง VMI ระดับเขต</p>
-          </div>
-          <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
-            <h4 className="font-semibold text-slate-950">AI Accuracy Feedback</h4>
-            {aiFeedbackStats.count > 0 ? (
-              <div className="mt-3 space-y-2 text-sm leading-6 text-slate-600">
-                <p>มี feedback จริงแล้ว {aiFeedbackStats.count} รายการ · ค่า error เฉลี่ยแบบ absolute {formatNumber(aiFeedbackStats.meanAbsoluteErrorPercent, 1)}%</p>
-                <p>Bias เฉลี่ย {formatPercent(aiFeedbackStats.averageBiasPercent)}: ค่าเป็นบวกหมายถึง AI แนะนำต่ำกว่าค่าจริง ค่าเป็นลบหมายถึง AI แนะนำสูงกว่าค่าจริง</p>
-                <p className="text-xs text-slate-500">ถ้า error สูงกว่าเกณฑ์ใน Settings ระบบจะ auto-tune policy แบบก้าวเล็กและสร้างสูตรเวอร์ชันใหม่ โดยไม่แก้ snapshot เดิมย้อนหลัง</p>
+          <button onClick={() => onOpenTransfer()} style={s("display:flex;align-items:center;gap:7px;height:40px;padding:0 16px;border:0;border-radius:11px;background:linear-gradient(135deg,#6D28D9,#C0249B);color:#fff;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;flex:none;box-shadow:0 8px 18px -8px rgba(109,40,217,.7);")}>ไปที่ตลาดนัดของจม <ArrowRight style={s("width:16px;height:16px;")} /></button>
+        </div>
+
+        <div style={s("display:grid;grid-template-columns:1.75fr 1fr;gap:16px;align-items:start;")}>
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 14px 30px -22px rgba(28,24,48,.28);overflow:hidden;")}>
+            <div style={s("display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 18px 13px;border-bottom:1px solid #F1EEF8;")}>
+              <div>
+                <h2 style={s("margin:0;font-size:15px;font-weight:600;color:#1C1830;")}>SKU ที่ต้องดำเนินการ</h2>
+                <p style={s("margin:2px 0 0;font-size:11.5px;color:#9B95B0;")}>เรียงตามความเสี่ยง · คลิกแถวเพื่อดูที่มาของคำแนะนำ</p>
               </div>
-            ) : (
-              <p className="mt-3 text-sm leading-6 text-slate-600">
-                ยังไม่มี feedback ค่าจริง หลังอนุมัติหรือใช้งานจริงให้ไปที่หน้า History แล้วบันทึกจำนวนจริง ระบบจะเทียบกับ AI Suggested Quantity และใช้ error เพื่อ auto-tune สูตรเมื่อเกินเกณฑ์
-              </p>
-            )}
+              <span onClick={onOpenStockIntelligence} style={s("font-size:11.5px;font-weight:500;color:#6D28D9;background:#F4EEFE;padding:6px 11px;border-radius:99px;cursor:pointer;")}>ดูทั้งหมด</span>
+            </div>
+            <div style={s("overflow-x:auto;")}>
+              <table style={s("width:100%;border-collapse:collapse;font-size:13px;min-width:560px;")}>
+                <thead>
+                  <tr style={s("background:#FAF9FD;")}>
+                    <th style={s("text-align:left;font-size:10.5px;font-weight:600;letter-spacing:.4px;color:#9B95B0;text-transform:uppercase;padding:9px 16px;")}>SKU</th>
+                    <th style={s("text-align:left;font-size:10.5px;font-weight:600;letter-spacing:.4px;color:#9B95B0;text-transform:uppercase;padding:9px 12px;")}>สต็อก vs ROP</th>
+                    <th style={s("text-align:left;font-size:10.5px;font-weight:600;letter-spacing:.4px;color:#9B95B0;text-transform:uppercase;padding:9px 12px;")}>สถานะ</th>
+                    <th style={s("text-align:right;font-size:10.5px;font-weight:600;letter-spacing:.4px;color:#9B95B0;text-transform:uppercase;padding:9px 16px;")}>AI แนะนำซื้อ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {actionRows.slice(0, 5).map(({ record, sku, warehouse, recommendation, status }) => {
+                    const rop = recommendation.reorderPoint || 1;
+                    const pct = Math.min(Math.round((record.currentStock / rop) * 100), 100);
+                    const barColor = status === "Critical" ? "#DC2626" : status === "Near Reorder Point" ? "#D97706" : "#059669";
+                    const canBorrow = borrowableSkuIds.has(record.skuId) || borrowableSkuIds.has(resolvePeaSkuId(record.skuId));
+                    return (
+                      <tr key={`${record.skuId}-${record.warehouseId}`} onClick={() => openSku(record.skuId)} className="dash-row" style={s("cursor:pointer;border-top:1px solid #F4F2FA;")}>
+                        <td style={s("padding:12px 16px;")}>
+                          <div style={s("display:flex;align-items:center;gap:7px;")}>
+                            <span style={s("font-weight:500;color:#1C1830;line-height:1.25;")}>{sku.name}</span>
+                            {canBorrow ? <span style={s("display:inline-flex;align-items:center;gap:3px;font-size:9.5px;font-weight:600;color:#7C3AED;background:#F4EEFE;padding:2px 6px;border-radius:99px;")}><Recycle style={s("width:11px;height:11px;")} />ยืมได้</span> : null}
+                          </div>
+                          <div className="mono" style={s("font-size:10.5px;color:#A29DB5;margin-top:2px;")}>{sku.id} · คลัง {warehouse.id}</div>
+                        </td>
+                        <td style={s("padding:12px 12px;")}>
+                          <div style={s("font-size:11.5px;color:#5A5470;margin-bottom:4px;")}><b>{formatNumber(record.currentStock, 0)}</b> / ROP {formatNumber(rop, 0)} {sku.unit}</div>
+                          <div style={s("width:120px;height:6px;border-radius:99px;background:#F0EDF7;")}><div style={s("height:100%;border-radius:99px;width:" + pct + "%;background:" + barColor + ";")} /></div>
+                        </td>
+                        <td style={s("padding:12px 12px;")}><DashPill status={status} /></td>
+                        <td style={s("padding:12px 16px;text-align:right;")}><span style={s("font-weight:600;color:#6D28D9;")}>+{formatNumber(recommendation.suggestedQuantity, 0)}</span> <span style={s("font-size:11px;color:#9B95B0;")}>{sku.unit}</span></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
-          <Button className="mt-5 w-full" onClick={() => openSku("1CC0CG0002")}>
-            <Boxes className="h-4 w-4" />
-            เปิดรายละเอียด SKU C01
-          </Button>
-        </Card>
-      </div>
+
+          <div style={s("display:flex;flex-direction:column;gap:16px;")}>
+            <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:16px 18px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 14px 30px -22px rgba(28,24,48,.28);")}>
+              <h2 style={s("margin:0 0 3px;font-size:15px;font-weight:600;color:#1C1830;")}>งบประมาณ 3 ชั้น</h2>
+              <p style={s("margin:0 0 14px;font-size:11.5px;color:#9B95B0;")}>คงเหลือ ณ ปีงบ 2569</p>
+              <div style={s("display:flex;flex-direction:column;gap:13px;")}>
+                {[
+                  { label: "คลังพื้นที่", remaining: localRemaining, total: localBudgetTotal, pct: localPct, color: "#7C3AED" },
+                  { label: "เขต A · ภาคเหนือ", remaining: regionalRemaining, total: regionalBudgetTotal, pct: regionalPercent, color: "#7C3AED" },
+                  { label: "ส่วนกลาง", remaining: centralRemaining, total: centralTotal, pct: centralPct, color: "#059669" },
+                ].map((row) => (
+                  <div key={row.label}>
+                    <div style={s("display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px;")}><span style={s("color:#5A5470;font-weight:500;")}>{row.label}</span><span style={s("color:#9B95B0;")}><b style={s("color:#1C1830;")}>{formatTHB(row.remaining)}</b> / {formatTHB(row.total)}</span></div>
+                    <div style={s("height:7px;border-radius:99px;background:#F0EDF7;")}><div style={s("height:100%;border-radius:99px;width:" + row.pct + "%;background:" + row.color + ";")} /></div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:16px 18px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 14px 30px -22px rgba(28,24,48,.28);")}>
+              <div style={s("display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;")}><h2 style={s("margin:0;font-size:15px;font-weight:600;color:#1C1830;")}>คิวอนุมัติ</h2><span onClick={onOpenApproval} style={s("font-size:11.5px;font-weight:500;color:#6D28D9;cursor:pointer;")}>เปิดคิว</span></div>
+              <div style={s("display:flex;flex-direction:column;gap:9px;")}>
+                {topPending.length === 0 ? <p style={s("font-size:12.5px;color:#9B95B0;")}>ไม่มีคำขอรออนุมัติ</p> : topPending.map((request) => {
+                  const sku = getSku(request.skuId);
+                  const tier = request.status === "Pending Local"
+                    ? { label: "รออนุมัติคลัง", color: "#5B21B6", bg: "#F4EEFE", ic: "#7C3AED" }
+                    : request.status === "Pending Regional"
+                      ? { label: "รออนุมัติเขต", color: "#1D4ED8", bg: "#EFF4FF", ic: "#2563EB" }
+                      : { label: "ส่วนกลาง", color: "#B45309", bg: "#FFFAEB", ic: "#DC2626" };
+                  return (
+                    <div key={request.id} onClick={() => openSku(request.skuId)} style={s("display:flex;align-items:center;gap:11px;padding:9px 10px;border:1px solid #F1EEF8;border-radius:11px;cursor:pointer;")}>
+                      <span style={s("width:34px;height:34px;border-radius:9px;background:" + tier.bg + ";color:" + tier.ic + ";display:flex;align-items:center;justify-content:center;flex:none;")}><FileText style={s("width:16px;height:16px;")} /></span>
+                      <div style={s("flex:1;min-width:0;")}><div style={s("font-size:12.5px;font-weight:500;color:#1C1830;")}>{request.id} · {sku.name}</div><div style={s("font-size:10.5px;color:#9B95B0;")}>{formatTHB(request.estimatedCost)} · {request.warehouseId}</div></div>
+                      <span style={s("font-size:10px;font-weight:600;color:" + tier.color + ";background:" + tier.bg + ";padding:3px 8px;border-radius:99px;flex:none;")}>{tier.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:16px 18px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 14px 30px -22px rgba(28,24,48,.28);")}>
+              <div style={s("display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;")}>
+                <div style={s("display:flex;align-items:center;gap:7px;")}><Target style={s("width:16px;height:16px;color:#6D28D9;")} /><h2 style={s("margin:0;font-size:15px;font-weight:600;color:#1C1830;")}>ความแม่นยำ AI</h2></div>
+                <span onClick={onOpenHistory} style={s("font-size:11.5px;font-weight:500;color:#6D28D9;cursor:pointer;")}>ดูประวัติ</span>
+              </div>
+              <div style={s("display:flex;align-items:center;gap:14px;")}>
+                <div style={s("display:flex;align-items:baseline;gap:3px;")}><span style={s("font-size:32px;font-weight:700;color:#6D28D9;line-height:1;")}>{aiAccuracy}</span><span style={s("font-size:15px;font-weight:600;color:#9B7BD0;")}>%</span></div>
+                <div style={s("flex:1;")}>
+                  <div style={s("height:8px;border-radius:99px;background:#F0EDF7;overflow:hidden;")}><div style={s("height:100%;border-radius:99px;background:linear-gradient(90deg,#7C3AED,#6D28D9);width:" + aiAccuracy + "%;")} /></div>
+                  <div style={s("font-size:10.5px;color:#9B95B0;margin-top:5px;")}>จาก feedback {aiFeedbackCount} รายการ</div>
+                </div>
+              </div>
+              <div style={s("display:flex;gap:8px;margin-top:13px;")}>
+                <div style={s("flex:1;background:#FAF9FD;border:1px solid #F0EDF7;border-radius:9px;padding:8px 10px;")}><div style={s("font-size:10px;color:#9B95B0;")}>Error เฉลี่ย</div><div style={s("font-size:13px;font-weight:600;color:#1C1830;")}>±{aiErrDisp}%</div></div>
+                <div style={s("flex:1;background:#FAF9FD;border:1px solid #F0EDF7;border-radius:9px;padding:8px 10px;")}><div style={s("font-size:10px;color:#9B95B0;")}>Bias</div><div style={s("font-size:13px;font-weight:600;color:#B45309;")}>{aiBiasDisp}</div></div>
+                <div style={s("flex:1;background:#FAF9FD;border:1px solid #F0EDF7;border-radius:9px;padding:8px 10px;")}><div style={s("font-size:10px;color:#9B95B0;")}>สูตร</div><div className="mono" style={s("font-size:13px;font-weight:600;color:#5B21B6;")}>{formulaPolicy.formulaVersion}</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </>
+      ) : (
+      <>
+        <div style={s("display:flex;gap:1px;background:#EBE7F5;border:1px solid #EBE7F5;border-radius:14px;overflow:hidden;margin-bottom:18px;")}>
+          {[
+            { icon: <AlertTriangle style={s("width:17px;height:17px;")} />, bg: "#FEF2F2", ic: "#DC2626", n: riskCount, c: "#B91C1C", label: "เสี่ยงวิกฤต" },
+            { icon: <ClipboardCheck style={s("width:17px;height:17px;")} />, bg: "#EFF4FF", ic: "#2563EB", n: pendingCount, c: "#1D4ED8", label: "รออนุมัติ" },
+            { icon: <Recycle style={s("width:17px;height:17px;")} />, bg: "#F4EEFE", ic: "#7C3AED", n: borrowableCount, c: "#6D28D9", label: "ยืมแทนซื้อได้" },
+            { icon: <Flag style={s("width:17px;height:17px;")} />, bg: "#FFFAEB", ic: "#D97706", n: gotchaCount, c: "#B45309", label: "flag ตรวจสอบ" },
+          ].map((m) => (
+            <div key={m.label} style={s("flex:1;background:#fff;padding:13px 16px;display:flex;align-items:center;gap:11px;")}><span style={s("width:36px;height:36px;border-radius:9px;background:" + m.bg + ";color:" + m.ic + ";display:flex;align-items:center;justify-content:center;flex:none;")}>{m.icon}</span><div><div style={s("font-size:20px;font-weight:700;color:" + m.c + ";line-height:1;")}>{m.n}</div><div style={s("font-size:11px;color:#9B95B0;margin-top:3px;")}>{m.label}</div></div></div>
+          ))}
+        </div>
+
+        <div style={s("display:grid;grid-template-columns:1.7fr 1fr;gap:16px;align-items:start;")}>
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 14px 30px -22px rgba(28,24,48,.28);overflow:hidden;")}>
+            <div style={s("display:flex;align-items:center;justify-content:space-between;padding:15px 18px 12px;border-bottom:1px solid #F1EEF8;")}>
+              <div><h2 style={s("margin:0;font-size:15px;font-weight:600;color:#1C1830;")}>คิวงานของฉัน</h2><p style={s("margin:2px 0 0;font-size:11.5px;color:#9B95B0;")}>รวมงานที่ต้องตัดสินใจ เรียงตามความเร่งด่วน</p></div>
+              <span style={s("font-size:11px;font-weight:500;color:#6D28D9;background:#F4EEFE;padding:5px 11px;border-radius:99px;")}>ทั้งหมด {riskCount + pendingCount + gotchaCount}</span>
+            </div>
+            <div style={s("display:flex;flex-direction:column;")}>
+              {topCritical ? (
+              <div onClick={onOpenRequest} className="dash-row" style={s("display:flex;align-items:center;gap:13px;padding:13px 18px;border-bottom:1px solid #F6F4FB;cursor:pointer;")}>
+                <span style={s("width:8px;height:8px;border-radius:50%;background:#DC2626;flex:none;")} />
+                <span style={s("width:34px;height:34px;border-radius:9px;background:#FEF2F2;color:#DC2626;display:flex;align-items:center;justify-content:center;flex:none;")}><ShoppingCart style={s("width:16px;height:16px;")} /></span>
+                <div style={s("flex:1;min-width:0;")}><div style={s("font-size:13px;font-weight:500;color:#1C1830;")}>สั่งซื้อด่วน — {topCritical.sku.name}</div><div className="mono" style={s("font-size:10.5px;color:#A29DB5;margin-top:1px;")}>{topCritical.warehouse.id} · ต่ำกว่า ROP · AI แนะนำ +{formatNumber(topCritical.recommendation.suggestedQuantity, 0)} {topCritical.sku.unit}</div></div>
+                <span style={s("font-size:10px;font-weight:600;color:#B91C1C;background:#FEF2F2;padding:3px 9px;border-radius:99px;flex:none;")}>วิกฤต</span>
+                <button onClick={(event) => { event.stopPropagation(); onOpenRequest(); }} style={s("height:32px;padding:0 13px;border:0;border-radius:9px;background:linear-gradient(135deg,#6D28D9,#C0249B);color:#fff;font-family:inherit;font-size:11.5px;font-weight:600;cursor:pointer;flex:none;")}>สร้าง PR</button>
+              </div>
+              ) : null}
+              {topBorrow ? (
+              <div onClick={() => onOpenTransfer()} className="dash-row" style={s("display:flex;align-items:center;gap:13px;padding:13px 18px;border-bottom:1px solid #F6F4FB;cursor:pointer;")}>
+                <span style={s("width:8px;height:8px;border-radius:50%;background:#7C3AED;flex:none;")} />
+                <span style={s("width:34px;height:34px;border-radius:9px;background:#F4EEFE;color:#7C3AED;display:flex;align-items:center;justify-content:center;flex:none;")}><Recycle style={s("width:16px;height:16px;")} /></span>
+                <div style={s("flex:1;min-width:0;")}><div style={s("font-size:13px;font-weight:500;color:#1C1830;")}>ยืมแทนซื้อ — {topBorrow.skuName}</div><div className="mono" style={s("font-size:10.5px;color:#A29DB5;margin-top:1px;")}>{topBorrow.warehouseId} มีของจม {formatNumber(topBorrow.qty, 0)} {topBorrow.unit} · ทุนจม {formatTHB(topBorrow.value)}</div></div>
+                <span style={s("font-size:10px;font-weight:600;color:#5B21B6;background:#F4EEFE;padding:3px 9px;border-radius:99px;flex:none;")}>แนะนำ</span>
+                <button onClick={(event) => { event.stopPropagation(); onOpenTransfer(); }} style={s("height:32px;padding:0 13px;border:1px solid #E5E1F0;border-radius:9px;background:#fff;color:#3B3654;font-family:inherit;font-size:11.5px;font-weight:600;cursor:pointer;flex:none;")}>ขอยืม</button>
+              </div>
+              ) : null}
+              {topPending[0] ? (
+              <div onClick={onOpenApproval} className="dash-row" style={s("display:flex;align-items:center;gap:13px;padding:13px 18px;border-bottom:1px solid #F6F4FB;cursor:pointer;")}>
+                <span style={s("width:8px;height:8px;border-radius:50%;background:#2563EB;flex:none;")} />
+                <span style={s("width:34px;height:34px;border-radius:9px;background:#EFF4FF;color:#2563EB;display:flex;align-items:center;justify-content:center;flex:none;")}><FileText style={s("width:16px;height:16px;")} /></span>
+                <div style={s("flex:1;min-width:0;")}><div style={s("font-size:13px;font-weight:500;color:#1C1830;")}>รออนุมัติ — {topPending[0].id}</div><div className="mono" style={s("font-size:10.5px;color:#A29DB5;margin-top:1px;")}>{formatTHB(topPending[0].estimatedCost)} · {topPending[0].warehouseId}</div></div>
+                <span style={s("font-size:10px;font-weight:600;color:#1D4ED8;background:#EFF4FF;padding:3px 9px;border-radius:99px;flex:none;")}>รอเขต</span>
+                <button onClick={(event) => { event.stopPropagation(); onOpenApproval(); }} style={s("height:32px;padding:0 13px;border:1px solid #E5E1F0;border-radius:9px;background:#fff;color:#3B3654;font-family:inherit;font-size:11.5px;font-weight:600;cursor:pointer;flex:none;")}>ตรวจ</button>
+              </div>
+              ) : null}
+              {gotchaCount > 0 ? (
+              <div onClick={onOpenAudit} className="dash-row" style={s("display:flex;align-items:center;gap:13px;padding:13px 18px;cursor:pointer;")}>
+                <span style={s("width:8px;height:8px;border-radius:50%;background:#D97706;flex:none;")} />
+                <span style={s("width:34px;height:34px;border-radius:9px;background:#FFFAEB;color:#D97706;display:flex;align-items:center;justify-content:center;flex:none;")}><SearchCheck style={s("width:16px;height:16px;")} /></span>
+                <div style={s("flex:1;min-width:0;")}><div style={s("font-size:13px;font-weight:500;color:#1C1830;")}>ตรวจซื้อซ้ำ — {gotchaCount} เคส</div><div className="mono" style={s("font-size:10.5px;color:#A29DB5;margin-top:1px;")}>ของบซ้ำทั้งที่ยังมีของจม</div></div>
+                <span style={s("font-size:10px;font-weight:600;color:#B45309;background:#FFFAEB;padding:3px 9px;border-radius:99px;flex:none;")}>flag</span>
+                <button onClick={(event) => { event.stopPropagation(); onOpenAudit(); }} style={s("height:32px;padding:0 13px;border:1px solid #E5E1F0;border-radius:9px;background:#fff;color:#3B3654;font-family:inherit;font-size:11.5px;font-weight:600;cursor:pointer;flex:none;")}>ตรวจสอบ</button>
+              </div>
+              ) : null}
+            </div>
+          </div>
+
+          <div style={s("display:flex;flex-direction:column;gap:16px;")}>
+            <div style={s("background:linear-gradient(140deg,#5B21B6,#A41CA8);border-radius:16px;padding:18px;box-shadow:0 16px 32px -18px rgba(109,40,217,.6);")}>
+              <div style={s("font-size:12px;color:rgba(255,255,255,.78);")}>ประหยัดได้รอบนี้ (ยืม/โอนแทนซื้อ)</div>
+              <div style={s("font-size:28px;font-weight:700;color:#fff;margin-top:5px;line-height:1;")}>{formatTHB(borrowSavings)}</div>
+              <div style={s("font-size:11.5px;color:rgba(255,255,255,.72);margin-top:7px;")}>จาก {borrowableCount} รายการที่ AI ดักไว้ก่อนซื้อ</div>
+              <button onClick={() => onOpenTransfer()} style={s("margin-top:13px;width:100%;height:38px;border:0;border-radius:10px;background:#fff;color:#5B21B6;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;")}>ดูตลาดนัดของจม</button>
+            </div>
+            <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:16px 18px;box-shadow:0 14px 30px -24px rgba(28,24,48,.3);")}>
+              <h2 style={s("margin:0 0 13px;font-size:14px;font-weight:600;color:#1C1830;")}>งบคงเหลือ 3 ชั้น</h2>
+              <div style={s("display:flex;flex-direction:column;gap:12px;")}>
+                {[
+                  { label: "คลังพื้นที่", remaining: localRemaining, total: localBudgetTotal, pct: localPct, color: "#7C3AED" },
+                  { label: "เขต A", remaining: regionalRemaining, total: regionalBudgetTotal, pct: regionalPercent, color: "#7C3AED" },
+                  { label: "ส่วนกลาง", remaining: centralRemaining, total: centralTotal, pct: centralPct, color: "#059669" },
+                ].map((row) => (
+                  <div key={row.label}><div style={s("display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:4px;")}><span style={s("color:#5A5470;")}>{row.label}</span><span style={s("color:#9B95B0;")}>{formatTHB(row.remaining)} / {formatTHB(row.total)}</span></div><div style={s("height:6px;border-radius:99px;background:#F0EDF7;")}><div style={s("height:100%;border-radius:99px;width:" + row.pct + "%;background:" + row.color + ";")} /></div></div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
       </>
       )}
-    </>
+    </div>
+  );
+}
+
+// status pill ตามดีไซน์ HTML (วิกฤต/ใกล้สั่งซื้อ/ปกติ) พร้อมจุดเต้นสำหรับวิกฤต
+function DashPill({ status }: { status: StockStatus | RequestStatus }) {
+  if (status === "Critical" || status === "Rejected") {
+    return (
+      <span style={s("display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#B91C1C;background:#FEF2F2;border:1px solid #FBD5D5;padding:3px 9px;border-radius:99px;")}>
+        <span style={s("width:6px;height:6px;border-radius:50%;background:#DC2626;animation:pdot 1.6s infinite;")} />{status === "Rejected" ? "ไม่อนุมัติ" : "วิกฤต"}
+      </span>
+    );
+  }
+  if (status === "Near Reorder Point" || status === "Pending Local" || status === "Pending Regional" || status === "Pending Central" || status === "More Info") {
+    return <span style={s("display:inline-flex;align-items:center;font-size:11px;font-weight:600;color:#B45309;background:#FFFAEB;border:1px solid #FBE3A2;padding:3px 9px;border-radius:99px;")}>{status === "Near Reorder Point" ? "ใกล้สั่งซื้อ" : "รออนุมัติ"}</span>;
+  }
+  if (status === "Draft") {
+    return <span style={s("display:inline-flex;align-items:center;font-size:11px;font-weight:600;color:#5A5470;background:#F4F2FA;border:1px solid #E7E2F1;padding:3px 9px;border-radius:99px;")}>ร่าง</span>;
+  }
+  return <span style={s("display:inline-flex;align-items:center;font-size:11px;font-weight:600;color:#0F7B53;background:#ECFDF5;border:1px solid #A7F3D0;padding:3px 9px;border-radius:99px;")}>{status === "Approved" ? "อนุมัติ" : "ปกติ"}</span>;
+}
+
+// แถวงบในการ์ด right rail — คงเหลือ/ทั้งหมด + แถบสัดส่วน
+function BudgetRailRow({ label, remaining, total }: { label: string; remaining: number; total: number }) {
+  const pct = total > 0 ? Math.min(Math.max((remaining / total) * 100, 0), 100) : 0;
+  const low = pct < 25;
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-2 text-sm">
+        <span className="font-medium text-slate-600">{label}</span>
+        <span className="font-mono text-slate-900">
+          <span className={`font-semibold ${low ? "text-red-600" : "text-slate-900"}`}>{formatTHB(remaining)}</span>
+          <span className="text-slate-400"> / {formatTHB(total)}</span>
+        </span>
+      </div>
+      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+        <div className={`h-1.5 rounded-full ${low ? "bg-red-500" : "bg-violet-600"}`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
   );
 }
 
@@ -2694,81 +3635,82 @@ function InventoryPage({
   formulaPolicy: FormulaPolicyState;
 }) {
   const [tab, setTab] = useState<"stock" | "usage">("stock");
+  const inventoryItems = inventoryRecords.map(record => {
+    const sku = getSku(record.skuId);
+    const warehouse = getWarehouse(record.warehouseId);
+    const recommendation = getDefaultRecommendation(record, supplierOfferData, formulaPolicy);
+    const status = getInventoryStatusFromRecommendation(record, recommendation);
+    return { record, sku, warehouse, recommendation, status };
+  });
+  const criticalCount = inventoryItems.filter(i => i.status === "Critical").length;
+  const nearCount = inventoryItems.filter(i => i.status === "Near Reorder Point").length;
+  const normalCount = inventoryItems.filter(i => i.status === "Normal").length;
+
   return (
-    <>
-      <PageTitle
-        eyebrow="คลังพัสดุ"
-        title="คลังพัสดุ & การใช้งาน SKU"
-        subtitle="ดูสถานะสต็อก/คำแนะนำจัดซื้อ และประวัติการใช้รายเดือนของแต่ละคลังในที่เดียว"
-      />
-      <div className="mb-5 inline-flex gap-1 rounded-lg border border-slate-200 bg-white p-1">
-        <button type="button" onClick={() => setTab("stock")} className={`rounded-md px-4 py-2 text-sm font-medium transition ${tab === "stock" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}>สถานะสต็อก</button>
-        <button type="button" onClick={() => setTab("usage")} className={`rounded-md px-4 py-2 text-sm font-medium transition ${tab === "usage" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}>การใช้งานรายเดือน</button>
+    <div>
+      <div style={s("display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px;")}>
+        <div>
+          <h1 style={s("margin:0 0 5px;font-size:23px;font-weight:600;letter-spacing:-.2px;color:#1C1830;")}>คลังพัสดุ & SKU</h1>
+          <p style={s("margin:0;font-size:13.5px;color:#7B7591;")}>ดูสถานะสต็อก/คำแนะนำจัดซื้อ และประวัติการใช้รายเดือนของแต่ละคลัง</p>
+        </div>
+        <button style={s("display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 13px;border:1px solid #E5E1F0;border-radius:9px;background:#fff;color:#3B3654;font-family:inherit;font-size:12px;font-weight:500;cursor:pointer;")}><Download style={s("width:14px;height:14px;color:#7C3AED;")} /> Export</button>
       </div>
-      {tab === "usage" ? (
-        <WarehouseSkuUsagePage onOpenSku={openSku} embedded />
-      ) : (
-      <>
-      <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard
-          label="สต็อกปัจจุบัน"
-          value="Stock"
-          helper="คอลัมน์ในตาราง"
-          formula="อ่านจาก Inventory/Stock balance ของคลังและ SKU นั้นโดยตรง"
-          changes="มี stock movement, import stock ใหม่ หรือแก้ข้อมูลตั้งต้นของ SKU"
-        />
-        <MetricCard
-          label="พัสดุสำรองปลอดภัย"
-          value="Safety Stock"
-          helper="สูตรความเสี่ยง"
-          tone="green"
-          formula="Safety Stock = Z-score × Demand Variability × √Adjusted Lead Time"
-          changes="แก้ Service Level, Demand History, Lead Time, Seasonal Factor หรือ Budget Factor"
-        />
-        <MetricCard
-          label="จุดสั่งซื้อใหม่"
-          value="ROP"
-          helper="จุดเริ่มจัดซื้อ"
-          tone="red"
-          formula="Reorder Point = Demand During Lead Time + Safety Stock"
-          changes="Average Demand, Adjusted Lead Time หรือ Safety Stock เปลี่ยน"
-        />
-        <MetricCard
-          label="จำนวนที่ระบบแนะนำ"
-          value="AI Suggest"
-          helper="ปัดตาม MOQ"
-          tone="blue"
-          formula="Suggested Quantity = Target Stock Level - Current Stock แล้วปัดขึ้นตาม MOQ"
-          changes="Target Stock, Current Stock, MOQ หรือสูตรกลางใน Settings เปลี่ยน"
-        />
+
+      <div style={s("display:inline-flex;gap:4px;border-radius:11px;background:#F4F2FA;padding:4px;margin-bottom:18px;")}>
+        <button type="button" onClick={() => setTab("stock")} style={s(`height:34px;padding:0 16px;border:0;border-radius:8px;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;${tab === "stock" ? "background:#6D28D9;color:#fff;box-shadow:0 4px 10px -4px rgba(109,40,217,.5);" : "background:transparent;color:#5A5470;"}`)}>สถานะสต็อก</button>
+        <button type="button" onClick={() => setTab("usage")} style={s(`height:34px;padding:0 16px;border:0;border-radius:8px;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;${tab === "usage" ? "background:#6D28D9;color:#fff;box-shadow:0 4px 10px -4px rgba(109,40,217,.5);" : "background:transparent;color:#5A5470;"}`)}>การใช้งานรายเดือน</button>
       </div>
-      <Card>
-        <SectionHeader title="รายการความเสี่ยงในคลัง" subtitle="คลิกเปิดรายละเอียด SKU เพื่อดูตัวเลือกซัพพลายเออร์และวิธีคำนวณ" />
-        <DataTable columns={["SKU", "รายการ", "คลัง", "สต็อกปัจจุบัน", "พัสดุสำรองปลอดภัย", "จุดสั่งซื้อใหม่", "จำนวนที่แนะนำ", "สถานะ", "ดำเนินการ"]}>
-          {inventoryRecords.map((record) => {
-            const sku = getSku(record.skuId);
-            const warehouse = getWarehouse(record.warehouseId);
-            const recommendation = getDefaultRecommendation(record, supplierOfferData, formulaPolicy);
-            const calculatedStatus = getInventoryStatusFromRecommendation(record, recommendation);
-            return (
-              <tr key={`${record.skuId}-${record.warehouseId}`} className="hover:bg-slate-50">
-                <td className="px-4 py-3 font-semibold text-slate-900">{sku.id}</td>
-                <td className="px-4 py-3">{sku.name}</td>
-                <td className="px-4 py-3">{warehouse.id} · {warehouse.name}</td>
-                <td className="px-4 py-3">{formatNumber(record.currentStock)} {sku.unit}</td>
-                <td className="px-4 py-3">{formatNumber(recommendation.safetyStock)} {sku.unit}</td>
-                <td className="px-4 py-3">{formatNumber(recommendation.reorderPoint)} {sku.unit}</td>
-                <td className="px-4 py-3 font-semibold text-blue-700">{formatNumber(recommendation.suggestedQuantity)} {sku.unit}</td>
-                <td className="px-4 py-3"><StatusBadge status={calculatedStatus} /></td>
-                <td className="px-4 py-3"><Button variant="secondary" onClick={() => openSku(record.skuId)}>รายละเอียด</Button></td>
-              </tr>
-            );
-          })}
-        </DataTable>
-      </Card>
-      </>
+
+      {tab === "usage" ? <WarehouseSkuUsagePage onOpenSku={openSku} embedded /> : (
+        <>
+          <div style={s("display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;")}>
+            {[{label:"วิกฤต",val:criticalCount,c:"#B91C1C",bg:"#FEF2F2",bc:"#FBD5D5"},{label:"ใกล้สั่งซื้อ",val:nearCount,c:"#B45309",bg:"#FFFAEB",bc:"#FBE3A2"},{label:"ปกติ",val:normalCount,c:"#059669",bg:"#ECFDF5",bc:"#A7F3D0"},{label:"SKU ทั้งหมด",val:inventoryItems.length,c:"#5B21B6",bg:"#F4EEFE",bc:"#E4D7FB"}].map(k => (
+              <div key={k.label} style={{background:k.bg,border:`1px solid ${k.bc}`,borderRadius:12,padding:"12px 14px"}}>
+                <div style={s("font-size:11px;color:#7B7591;margin-bottom:4px;")}>{k.label}</div>
+                <div style={{fontSize:24,fontWeight:700,color:k.c,lineHeight:1,fontFamily:"'IBM Plex Mono', monospace"}}>{k.val}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 14px 30px -22px rgba(28,24,48,.28);overflow:hidden;")}>
+            <div style={s("display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 18px 13px;border-bottom:1px solid #F1EEF8;")}>
+              <div><h2 style={s("margin:0;font-size:15px;font-weight:600;color:#1C1830;")}>SKU ที่ต้องดำเนินการ</h2><p style={s("margin:2px 0 0;font-size:11.5px;color:#9B95B0;")}>เรียงตามความเสี่ยง · คลิกแถวเพื่อดูที่มาของคำแนะนำ</p></div>
+              <span style={s("font-size:11.5px;font-weight:500;color:#6D28D9;background:#F4EEFE;padding:6px 11px;border-radius:99px;cursor:default;")}>{inventoryItems.length} รายการ</span>
+            </div>
+            <div style={s("overflow-x:auto;")}>
+              <table style={s("width:100%;border-collapse:collapse;font-size:13px;min-width:580px;")}>
+                <thead><tr style={s("background:#FAF9FD;")}><th style={s("text-align:left;font-size:10.5px;font-weight:600;letter-spacing:.4px;color:#9B95B0;text-transform:uppercase;padding:9px 16px;")}>SKU</th><th style={s("text-align:left;font-size:10.5px;font-weight:600;letter-spacing:.4px;color:#9B95B0;text-transform:uppercase;padding:9px 12px;")}>สต็อก vs ROP</th><th style={s("text-align:left;font-size:10.5px;font-weight:600;letter-spacing:.4px;color:#9B95B0;text-transform:uppercase;padding:9px 12px;")}>สถานะ</th><th style={s("text-align:right;font-size:10.5px;font-weight:600;letter-spacing:.4px;color:#9B95B0;text-transform:uppercase;padding:9px 16px;")}>AI แนะนำซื้อ</th><th style={s("padding:9px 12px;")}></th></tr></thead>
+                <tbody>
+                  {inventoryItems.map(({ record, sku, warehouse, recommendation, status }) => {
+                    const rop = recommendation.reorderPoint;
+                    const stockPct = rop > 0 ? Math.min(100, Math.round((record.currentStock / rop) * 100)) : 100;
+                    const barColor = status === "Critical" ? "#DC2626" : status === "Near Reorder Point" ? "#D97706" : "#059669";
+                    const badgeStyle = status === "Critical"
+                      ? "color:#B91C1C;background:#FEF2F2;border:1px solid #FBD5D5;"
+                      : status === "Near Reorder Point"
+                      ? "color:#B45309;background:#FFFAEB;border:1px solid #FBE3A2;"
+                      : "color:#059669;background:#ECFDF5;border:1px solid #A7F3D0;";
+                    const badgeLabel = status === "Critical" ? "วิกฤต" : status === "Near Reorder Point" ? "ใกล้สั่งซื้อ" : "ปกติ";
+                    return (
+                      <tr key={`${record.skuId}-${record.warehouseId}`} className="dash-row" style={s("border-top:1px solid #F4F2FA;cursor:pointer;")} onClick={() => openSku(record.skuId)}>
+                        <td style={s("padding:12px 16px;")}><div style={s("font-weight:500;color:#1C1830;line-height:1.25;")}>{sku.name}</div><div className="mono" style={s("font-size:10.5px;color:#A29DB5;margin-top:2px;")}>{sku.id} · คลัง {warehouse.id}</div></td>
+                        <td style={s("padding:12px 12px;")}>
+                          <div style={s("font-size:11.5px;color:#5A5470;margin-bottom:4px;")}><b>{formatNumber(record.currentStock)}</b> / ROP {formatNumber(rop)} {sku.unit}</div>
+                          <div style={{width:120,height:6,borderRadius:99,background:"#F0EDF7",position:"relative"}}><div style={{width:`${stockPct}%`,height:"100%",borderRadius:99,background:barColor}}></div></div>
+                        </td>
+                        <td style={s("padding:12px 12px;")}><span style={s(`display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:3px 9px;border-radius:99px;${badgeStyle}`)}>{status === "Critical" && <span style={{width:6,height:6,borderRadius:"50%",background:"#DC2626",animation:"pdot 1.6s infinite"} as CSSProperties}></span>}{badgeLabel}</span></td>
+                        <td style={s("padding:12px 16px;text-align:right;")}><span style={s("font-weight:600;color:#6D28D9;")} className="mono">+{formatNumber(recommendation.suggestedQuantity)}</span> <span style={s("font-size:11px;color:#9B95B0;")}>{sku.unit}</span></td>
+                        <td style={s("padding:12px 12px;")}><button onClick={e => {e.stopPropagation(); openSku(record.skuId);}} style={s("height:28px;padding:0 10px;border:1px solid #E5E1F0;border-radius:8px;background:#fff;color:#5A5470;font-family:inherit;font-size:11px;cursor:pointer;")}>ดูรายละเอียด</button></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
       )}
-    </>
+    </div>
   );
 }
 
@@ -3055,180 +3997,114 @@ function TransferCenterPage({
   const analytics = analyzeTransfers(transferRequests, today);
 
   return (
-    <>
-      <PageTitle
-        eyebrow="โอนย้าย / ยืมพัสดุ"
-        title="Transfer & Borrow Center"
-        subtitle="ตรวจว่าควรโอนหรือยืมจากคลังอื่นก่อนสร้างคำขอซื้อใหม่ ลด overstock และลดความเสี่ยงขาดสต็อกตาม season"
-      />
-
-      <Card className="mb-5 p-4">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <Field label="SKU">
-            <select className={inputClass} value={selectedPeaSkuId} onChange={(event) => setSelectedPeaSkuId(event.target.value)}>
-              <option value="all">ทุก SKU ที่มีข้อมูลเปรียบเทียบ</option>
-              {getSharedUsageSkuOptions().map((sku) => (
-                <option key={sku.skuId} value={sku.skuId}>{sku.skuId} · {sku.skuName}</option>
-              ))}
-            </select>
-          </Field>
-          <Field label="คลังต้นทาง/ปลายทาง">
-            <select className={inputClass} value={selectedWarehouseId} onChange={(event) => setSelectedWarehouseId(event.target.value)}>
-              <option value="all">ทุกคลัง</option>
-              {getSharedUsageWarehouseOptions().map((warehouse) => (
-                <option key={warehouse.warehouseId} value={warehouse.warehouseId}>{warehouse.warehouseId} · {warehouse.warehouseName}</option>
-              ))}
-            </select>
-          </Field>
-          <Field label="ค้นหา">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" />
-              <input className={`${inputClass} pl-9`} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="ค้นหา SKU / คลัง" />
-            </div>
-          </Field>
+    <div>
+      <div style={s("display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:20px;")}>
+        <div>
+          <div style={s("display:flex;align-items:center;gap:10px;margin-bottom:5px;")}>
+            <h1 style={s("margin:0;font-size:23px;font-weight:600;letter-spacing:-.2px;color:#1C1830;")}>ตลาดนัดของจม &amp; โอน/ยืม/แลก</h1>
+            <span style={s("display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#7C3AED;background:#F4EEFE;border:1px solid #E4D7FB;padding:3px 9px;border-radius:99px;")}><Recycle style={s("width:13px;height:13px;")} /> ย้ายก่อนซื้อ</span>
+          </div>
+          <p style={s("margin:0;font-size:13.5px;color:#7B7591;")}>ยืม โอน หรือแลกพัสดุระหว่างคลัง ก่อนตัดสินใจซื้อใหม่ — ลดทุนจมและของขาดพร้อมกัน</p>
         </div>
-      </Card>
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-        <MetricCard
-          label="Transfer Candidate"
-          value={String(suggestions.length)}
-          helper="รายการที่ควรตรวจ"
-          tone="blue"
-          formula={`นับรายการที่ปลายทางต่ำกว่า Reorder Point และมีคลังอื่นที่มี stock เหลือมากกว่า buffer ขั้นต่ำ = ${suggestions.length}`}
-          changes="Stock, usage, Reorder Point, filter หรือ relationship analysis เปลี่ยน"
-        />
-        <MetricCard
-          label="คำขอโอน/ยืมที่เปิดอยู่"
-          value={String(openTransfers.length)}
-          helper="Requested/Approved"
-          tone="yellow"
-          formula={`นับ transfer request ที่สถานะ Requested หรือ Approved = ${openTransfers.length}`}
-          changes="สร้างคำขอโอนใหม่ อนุมัติ ปิดงาน หรือไม่อนุมัติ"
-        />
-        <MetricCard
-          label="ปริมาณใน Transfer Log"
-          value={formatNumber(transferQuantityTotal, 0)}
-          helper="รวมทุกคำขอ"
-          tone="green"
-          formula={`ผลรวมจำนวนใน transfer history = ${formatNumber(transferQuantityTotal, 0)}`}
-          changes="สร้างหรือแก้สถานะคำขอโอน/ยืม"
-        />
-        <MetricCard
-          label="คำแนะนำหลัก"
-          value={topSuggestion ? `${topSuggestion.sourceWarehouseId} → ${topSuggestion.destinationWarehouseId}` : "-"}
-          helper={topSuggestion ? `${formatNumber(topSuggestion.suggestedQuantity)} ${topSuggestion.unit}` : "ยังไม่มี candidate"}
-          tone="purple"
-          formula={topSuggestion ? `เลือก candidate แรกจาก shortage ${formatNumber(topSuggestion.destinationShortage)} และ source excess ${formatNumber(topSuggestion.sourceExcess)} = ${formatNumber(topSuggestion.suggestedQuantity)} ${topSuggestion.unit}` : "ไม่มีรายการที่ผ่านเงื่อนไข"}
-          changes="filter หรือข้อมูล stock/usage/ROP เปลี่ยน"
-        />
       </div>
 
-      <Card className="mt-5">
-        <SectionHeader
-          title="คำแนะนำโอนหรือยืมก่อนซื้อ"
-          subtitle="Suggested Transfer = min(จำนวนที่ระบบแนะนำเติม, source excess) โดย source excess คำนวณจาก stock ต้นทางหลังกัน buffer usage อย่างน้อย 0.25 รอบ"
-        />
-        <DataTable columns={["SKU", "คลังปลายทาง", "ขาดเทียบ ROP", "คลังต้นทาง", "Stock ต้นทาง", "แนะนำโอน/ยืม", "Season", "เหตุผล", "ดำเนินการ"]} empty={suggestions.length === 0}>
-          {suggestions.map((suggestion) => (
-            <tr key={`${suggestion.skuId}-${suggestion.sourceWarehouseId}-${suggestion.destinationWarehouseId}`} className="hover:bg-slate-50">
-              <td className="px-4 py-3 font-semibold text-slate-900">{suggestion.skuId}<br /><span className="text-xs font-normal text-slate-500">{suggestion.skuName}</span></td>
-              <td className="px-4 py-3">{suggestion.destinationWarehouseId}<br /><span className="text-xs text-slate-500">Stock {formatNumber(suggestion.destinationStock)} / ROP {formatNumber(suggestion.destinationReorderPoint)}</span></td>
-              <td className="px-4 py-3 text-red-700">{formatNumber(suggestion.destinationShortage)} {suggestion.unit}</td>
-              <td className="px-4 py-3">{suggestion.sourceWarehouseId}<br /><span className="text-xs text-slate-500">Cover {formatNumber(suggestion.sourceStockCoverPeriods, 2)} รอบ</span></td>
-              <td className="px-4 py-3">{formatNumber(suggestion.sourceStock)} {suggestion.unit}</td>
-              <td className="px-4 py-3 font-semibold text-blue-700">{formatNumber(suggestion.suggestedQuantity)} {suggestion.unit}</td>
-              <td className="px-4 py-3">{suggestion.peakSeasonLabel}</td>
-              <td className="min-w-80 px-4 py-3 text-sm leading-6 text-slate-600">{suggestion.decisionBasis}</td>
-              <td className="px-4 py-3">
-                <div className="grid min-w-36 gap-2">
-                  <Button onClick={() => onCreateTransfer(suggestion, "Transfer")}>สร้างคำขอโอน</Button>
-                  <Button variant="secondary" onClick={() => onCreateTransfer(suggestion, "Borrow")}>สร้างคำขอยืม</Button>
-                  <Button variant="ghost" onClick={() => onOpenSku(suggestion.skuId)}>ดู SKU</Button>
-                </div>
-              </td>
-            </tr>
-          ))}
-        </DataTable>
-      </Card>
-
-      <Card className="mt-5">
-        <SectionHeader
-          title="วิเคราะห์พฤติกรรมการยืม-โอน-แลก"
-          subtitle="ดูจากประวัติว่าใครยืมบ่อย ใครคืนช้า/เกินกำหนด ใครของขาดบ่อย และแลกอะไรบ่อย เพื่อวางแผนกระจายพัสดุให้ดีขึ้น"
-        />
-        <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 xl:grid-cols-4">
-          <MetricCard
-            label="ยืมที่ยังไม่คืน"
-            value={String(analytics.outstandingCount)}
-            helper={`เกินกำหนด ${analytics.overdueCount} รายการ`}
-            tone={analytics.overdueCount > 0 ? "red" : "yellow"}
-            formula={`นับคำขอยืมที่อนุมัติแล้วและยังไม่มีวันคืน = ${analytics.outstandingCount} (เกินกำหนด = วันนี้เลย dueDate แล้ว = ${analytics.overdueCount})`}
-            changes="มีการยืมใหม่ คืนของ หรือเลยกำหนดคืน"
-          />
-          <MetricCard
-            label="คืนแล้ว"
-            value={String(analytics.returnedCount)}
-            helper="คำขอยืมที่บันทึกวันคืน"
-            tone="green"
-            formula={`นับคำขอยืมที่มี returnedDate = ${analytics.returnedCount}`}
-            changes="บันทึกการคืนของที่ยืม"
-          />
-          <MetricCard
-            label="แลกเปลี่ยนทั้งหมด"
-            value={String(analytics.swapCount)}
-            helper="ครั้งที่แลกพัสดุข้ามคลัง"
-            tone="purple"
-            formula={`นับรายการประเภทแลกเปลี่ยน = ${analytics.swapCount}`}
-            changes="สร้างรายการแลกเปลี่ยนใหม่"
-          />
-          <MetricCard
-            label="แลกอะไรบ่อยสุด"
-            value={analytics.topSwapName ?? "-"}
-            helper={analytics.topSwapName ? `${analytics.topSwapCount} ครั้ง` : "ยังไม่มีการแลก"}
-            tone="blue"
-            formula={analytics.topSwapName ? `SKU ที่ถูกแลกบ่อยสุด = ${analytics.topSwapName} (${analytics.topSwapCount} ครั้ง)` : "ยังไม่มีข้อมูลการแลก"}
-            changes="มีการแลกเปลี่ยน SKU ใหม่"
-          />
+      {topSuggestion && (
+        <div style={s("display:flex;align-items:center;gap:18px;background:linear-gradient(110deg,#2A0A54,#6D1C8C 70%,#9A1F87);border-radius:16px;padding:18px 22px;margin-bottom:18px;box-shadow:0 18px 36px -22px rgba(122,30,140,.85);")}>
+          <span style={s("width:48px;height:48px;border-radius:13px;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;color:#fff;flex:none;")}><HandCoins style={s("width:23px;height:23px;")} /></span>
+          <div style={s("flex:1;min-width:0;")}>
+            <div style={s("font-size:15px;font-weight:600;color:#fff;")}>ดักก่อนซื้อ — {topSuggestion.skuName}</div>
+            <div style={s("font-size:12.5px;color:rgba(255,255,255,.8);margin-top:3px;")}>คลัง {topSuggestion.destinationWarehouseId} ต้องการ {formatNumber(topSuggestion.destinationShortage)} {topSuggestion.unit} แต่คลัง <b style={s("color:#fff;")}>{topSuggestion.sourceWarehouseId} มี stock เหลือ {formatNumber(topSuggestion.sourceExcess)} {topSuggestion.unit}</b> — ยืมแทนซื้อ Lead Time เหลือ 2 วัน</div>
+          </div>
+          <div style={s("display:flex;gap:10px;flex:none;")}>
+            <button onClick={() => onOpenSku(topSuggestion.skuId)} style={s("height:40px;padding:0 15px;border:1px solid rgba(255,255,255,.3);border-radius:11px;background:transparent;color:#fff;font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer;")}>ดู SKU</button>
+            <button onClick={() => onCreateTransfer(topSuggestion, "Borrow")} style={s("display:flex;align-items:center;gap:7px;height:40px;padding:0 16px;border:0;border-radius:11px;background:#fff;color:#5B21B6;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;")}>ขอยืม {formatNumber(topSuggestion.suggestedQuantity)} {topSuggestion.unit} <ArrowRight style={s("width:15px;height:15px;")} /></button>
+          </div>
         </div>
-        <div className="grid grid-cols-1 gap-4 border-t border-slate-100 p-4 lg:grid-cols-3">
-          <TransferLeaderList title="คลังที่ยืมบ่อยสุด" unit="ครั้งที่ยืม" rows={analytics.borrowLeaders} tone="amber" emptyText="ยังไม่มีการยืม" />
-          <TransferLeaderList title="คลังที่ค้างคืน/เกินกำหนด" unit="รายการเกินกำหนด" rows={analytics.overdueLeaders} tone="red" emptyText="ไม่มีรายการเกินกำหนด" />
-          <TransferLeaderList title="คลังที่ของขาดบ่อย" unit="ครั้งที่ต้องยืม/รับโอน" rows={analytics.shortageLeaders} tone="blue" emptyText="ยังไม่มีข้อมูล" />
-        </div>
-      </Card>
+      )}
 
-      <Card className="mt-5">
-        <SectionHeader title="ประวัติคำขอโอน/ยืม/แลก" subtitle="ทุกคำขอถูกเก็บเป็น persistent JSON state เพื่อใช้ตรวจสอบย้อนหลังใน PoC พร้อมสถานะการคืนสำหรับการยืม" />
-        <DataTable columns={["Request", "ประเภท", "SKU", "เส้นทาง", "จำนวน", "สถานะ", "การคืน", "เหตุผล", "Timeline", "Action"]} empty={transferRequests.length === 0}>
-          {transferRequests.map((request) => (
-            <tr key={request.id} className="hover:bg-slate-50">
-              <td className="px-4 py-3 font-semibold text-slate-900">{request.id}<br /><span className="text-xs font-normal text-slate-500">{request.createdAt}</span></td>
-              <td className="px-4 py-3">{getTransferTypeLabel(request.type)}</td>
-              <td className="px-4 py-3">{request.skuId}<br /><span className="text-xs text-slate-500">{request.skuName}{request.type === "Swap" && request.counterpartSkuName ? ` ⇄ ${request.counterpartSkuName}` : ""}</span></td>
-              <td className="px-4 py-3">{request.sourceWarehouseId} → {request.destinationWarehouseId}</td>
-              <td className="px-4 py-3">{formatNumber(request.quantity)} {request.unit}</td>
-              <td className="px-4 py-3"><TransferStatusBadge status={request.status} /></td>
-              <td className="px-4 py-3">
-                <BorrowReturnBadge state={getBorrowReturnState(request, today)} />
-                {request.type === "Borrow" && request.dueDate ? <div className="mt-1 text-xs text-slate-400">{request.returnedDate ? `คืน ${request.returnedDate}` : `กำหนด ${request.dueDate}`}</div> : null}
-              </td>
-              <td className="min-w-72 px-4 py-3 text-sm leading-6 text-slate-600">{request.decisionBasis}</td>
-              <td className="min-w-72 px-4 py-3 text-xs leading-5 text-slate-500">
-                {request.timeline.map((item) => `${item.date}: ${item.action}`).join(" / ")}
-              </td>
-              <td className="px-4 py-3">
-                <div className="grid min-w-36 gap-2">
-                  <Button variant="secondary" disabled={request.status !== "Requested"} onClick={() => onUpdateTransfer(request.id, "Approved", "อนุมัติคำขอโอน/ยืม")}>อนุมัติ</Button>
-                  <Button disabled={request.status !== "Approved"} onClick={() => onUpdateTransfer(request.id, "Completed", "ปิดงานและรับเข้าคลังปลายทาง")}>ปิดงาน</Button>
-                  <Button variant="danger" disabled={request.status === "Completed" || request.status === "Rejected"} onClick={() => onUpdateTransfer(request.id, "Rejected", "ไม่อนุมัติคำขอ")}>ไม่อนุมัติ</Button>
+      <div style={s("display:grid;grid-template-columns:1.6fr 1fr;gap:18px;align-items:start;")}>
+        <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 16px 32px -26px rgba(28,24,48,.3);overflow:hidden;")}>
+          <div style={s("display:flex;align-items:center;justify-content:space-between;padding:16px 18px 13px;border-bottom:1px solid #F1EEF8;")}>
+            <div><h2 style={s("margin:0;font-size:15px;font-weight:600;color:#1C1830;")}>ประกาศของจม (ยืม/โอน/แลกได้)</h2><p style={s("margin:2px 0 0;font-size:11.5px;color:#9B95B0;")}>{suggestions.length} รายการ · คำขอเปิด {openTransfers.length} รายการ</p></div>
+            <div style={s("display:flex;gap:6px;")}>
+              <span style={s("font-size:11px;font-weight:500;color:#6D28D9;background:#F4EEFE;padding:5px 11px;border-radius:99px;")}>ทั้งหมด</span>
+              <span style={s("font-size:11px;font-weight:500;color:#9B95B0;background:#FAF9FD;padding:5px 11px;border-radius:99px;")}>ในเขตฉัน</span>
+            </div>
+          </div>
+          <div style={s("padding:14px 18px;display:flex;flex-direction:column;gap:11px;")}>
+            {suggestions.length === 0 ? (
+              <div style={s("text-align:center;padding:24px;color:#9B95B0;font-size:13px;")}>ไม่มีรายการที่แนะนำให้โอน/ยืม</div>
+            ) : suggestions.slice(0, 6).map(sg => (
+              <div key={`${sg.skuId}-${sg.sourceWarehouseId}-${sg.destinationWarehouseId}`} style={s("display:flex;align-items:center;gap:14px;border:1px solid #EBE7F5;border-radius:13px;padding:13px 14px;")}>
+                <span style={s("width:42px;height:42px;border-radius:11px;background:#FFFAEB;color:#D97706;display:flex;align-items:center;justify-content:center;flex:none;")}><Boxes style={s("width:20px;height:20px;")} /></span>
+                <div style={s("flex:1;min-width:0;")}>
+                  <div style={s("display:flex;align-items:center;gap:7px;")}><span style={s("font-size:13px;font-weight:600;color:#1C1830;")}>{sg.skuName}</span><span style={s("font-size:9.5px;font-weight:600;color:#B45309;background:#FFFAEB;padding:2px 7px;border-radius:99px;")}>ขาด {formatNumber(sg.destinationShortage)} {sg.unit}</span></div>
+                  <div className="mono" style={s("font-size:10.5px;color:#A29DB5;margin-top:3px;")}>{sg.sourceWarehouseId} → {sg.destinationWarehouseId} · แนะนำโอน {formatNumber(sg.suggestedQuantity)} {sg.unit}</div>
                 </div>
-              </td>
-            </tr>
-          ))}
-        </DataTable>
-      </Card>
-    </>
+                <div style={s("display:flex;gap:8px;flex:none;")}>
+                  <button onClick={() => onCreateTransfer(sg, "Transfer")} style={s("height:34px;padding:0 13px;border:1px solid #E5E1F0;border-radius:9px;background:#fff;color:#3B3654;font-family:inherit;font-size:12px;font-weight:500;cursor:pointer;")}>โอน</button>
+                  <button onClick={() => onCreateTransfer(sg, "Borrow")} style={s("height:34px;padding:0 13px;border:0;border-radius:9px;background:linear-gradient(135deg,#6D28D9,#C0249B);color:#fff;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;")}>ขอยืม</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={s("display:flex;flex-direction:column;gap:16px;")}>
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:16px 18px;box-shadow:0 14px 30px -24px rgba(28,24,48,.3);")}>
+            <h2 style={s("margin:0 0 3px;font-size:14px;font-weight:600;color:#1C1830;")}>ทุนจมรายคลัง</h2>
+            <p style={s("margin:0 0 14px;font-size:11px;color:#9B95B0;")}>ยืมที่ยังไม่คืน {analytics.outstandingCount} รายการ · เกินกำหนด {analytics.overdueCount}</p>
+            <div style={s("display:flex;flex-direction:column;gap:11px;")}>
+              {analytics.shortageLeaders.slice(0, 4).map((leader, i) => {
+                const pct = i === 0 ? 100 : Math.round(100 - i * 15);
+                const color = i === 0 ? "#DC2626" : i === 1 ? "#D97706" : "#7C3AED";
+                return (
+                  <div key={leader.warehouseId}><div style={s("display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:4px;")}><span style={s("color:#5A5470;font-weight:500;")}>{leader.warehouseId}</span><span style={s("color:#1C1830;font-weight:600;")}>{leader.count} ครั้ง</span></div><div style={s("height:8px;border-radius:99px;background:#F0EDF7;")}><div style={{width:`${pct}%`,height:"100%",borderRadius:"99px",background:color}}></div></div></div>
+                );
+              })}
+              {analytics.shortageLeaders.length === 0 && <div style={s("text-align:center;color:#9B95B0;font-size:12px;")}>ยังไม่มีข้อมูล</div>}
+            </div>
+          </div>
+
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:16px 18px;box-shadow:0 14px 30px -24px rgba(28,24,48,.3);")}>
+            <h2 style={s("margin:0 0 3px;font-size:14px;font-weight:600;color:#1C1830;")}>พฤติกรรมยืม-แลก</h2>
+            <p style={s("margin:0 0 13px;font-size:11px;color:#9B95B0;")}>Leaderboard ทั้งหมด</p>
+            <div style={s("display:flex;flex-direction:column;gap:10px;")}>
+              <div style={s("display:flex;align-items:center;gap:11px;")}><span style={s("width:30px;height:30px;border-radius:8px;background:#F4EEFE;color:#7C3AED;display:flex;align-items:center;justify-content:center;flex:none;")}><Repeat2 style={s("width:15px;height:15px;")} /></span><div style={s("flex:1;")}><div style={s("font-size:12px;color:#5A5470;")}>ยืมบ่อยที่สุด</div><div style={s("font-size:12.5px;font-weight:600;color:#1C1830;")}>{analytics.borrowLeaders[0] ? `คลัง ${analytics.borrowLeaders[0].warehouseId} · ${analytics.borrowLeaders[0].count} ครั้ง` : "ยังไม่มีข้อมูล"}</div></div></div>
+              <div style={s("display:flex;align-items:center;gap:11px;")}><span style={s("width:30px;height:30px;border-radius:8px;background:#FEF2F2;color:#DC2626;display:flex;align-items:center;justify-content:center;flex:none;")}><AlertOctagon style={s("width:15px;height:15px;")} /></span><div style={s("flex:1;")}><div style={s("font-size:12px;color:#5A5470;")}>ค้างคืนนานสุด</div><div style={s("font-size:12.5px;font-weight:600;color:#1C1830;")}>{analytics.overdueLeaders[0] ? `คลัง ${analytics.overdueLeaders[0].warehouseId} · ${analytics.overdueLeaders[0].count} รายการ` : "ไม่มีรายการเกินกำหนด"}</div></div></div>
+              <div style={s("display:flex;align-items:center;gap:11px;")}><span style={s("width:30px;height:30px;border-radius:8px;background:#FFFAEB;color:#D97706;display:flex;align-items:center;justify-content:center;flex:none;")}><ArrowDown style={s("width:15px;height:15px;")} /></span><div style={s("flex:1;")}><div style={s("font-size:12px;color:#5A5470;")}>ขาดบ่อยที่สุด</div><div style={s("font-size:12.5px;font-weight:600;color:#1C1830;")}>{analytics.shortageLeaders[0] ? `คลัง ${analytics.shortageLeaders[0].warehouseId} · ${analytics.shortageLeaders[0].count} ครั้ง` : "ยังไม่มีข้อมูล"}</div></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style={s("margin-top:18px;background:#fff;border:1px solid #EBE7F5;border-radius:16px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 16px 32px -26px rgba(28,24,48,.3);overflow:hidden;")}>
+        <div style={s("display:flex;align-items:center;justify-content:space-between;padding:15px 18px 12px;border-bottom:1px solid #F1EEF8;")}><h2 style={s("margin:0;font-size:14px;font-weight:600;color:#1C1830;")}>ประวัติคำขอโอน/ยืม/แลก</h2><span style={s("font-size:11.5px;color:#7B7591;")}>{transferRequests.length} รายการ</span></div>
+        <div style={s("overflow-x:auto;")}>
+          <table style={s("width:100%;border-collapse:collapse;font-size:12.5px;min-width:640px;")}>
+            <thead><tr style={s("background:#FAF9FD;")}><th style={s("text-align:left;font-size:10.5px;font-weight:600;color:#9B95B0;text-transform:uppercase;padding:9px 16px;")}>Request</th><th style={s("text-align:left;padding:9px 12px;font-size:10.5px;font-weight:600;color:#9B95B0;text-transform:uppercase;")}>ประเภท / SKU</th><th style={s("text-align:left;padding:9px 12px;font-size:10.5px;font-weight:600;color:#9B95B0;text-transform:uppercase;")}>เส้นทาง</th><th style={s("text-align:right;padding:9px 12px;font-size:10.5px;font-weight:600;color:#9B95B0;text-transform:uppercase;")}>จำนวน</th><th style={s("text-align:left;padding:9px 12px;font-size:10.5px;font-weight:600;color:#9B95B0;text-transform:uppercase;")}>สถานะ</th><th style={s("text-align:left;padding:9px 12px;font-size:10.5px;font-weight:600;color:#9B95B0;text-transform:uppercase;")}>Action</th></tr></thead>
+            <tbody>
+              {transferRequests.length === 0 && <tr><td colSpan={6} style={s("text-align:center;padding:24px;color:#9B95B0;")}>ยังไม่มีประวัติ</td></tr>}
+              {transferRequests.map(req => (
+                <tr key={req.id} className="dash-row" style={s("border-top:1px solid #F4F2FA;")}>
+                  <td style={s("padding:11px 16px;")}><div style={s("font-weight:600;color:#1C1830;")} className="mono">{req.id}</div><div style={s("font-size:10px;color:#9B95B0;")}>{req.createdAt}</div></td>
+                  <td style={s("padding:11px 12px;")}><div style={s("color:#5A5470;")}>{getTransferTypeLabel(req.type)}</div><div style={s("font-size:10.5px;color:#9B95B0;")}>{req.skuName}</div></td>
+                  <td style={s("padding:11px 12px;color:#5A5470;")}>{req.sourceWarehouseId} → {req.destinationWarehouseId}</td>
+                  <td style={s("padding:11px 12px;text-align:right;font-weight:600;color:#1C1830;")}>{formatNumber(req.quantity)} {req.unit}</td>
+                  <td style={s("padding:11px 12px;")}><TransferStatusBadge status={req.status} /></td>
+                  <td style={s("padding:11px 12px;")}>
+                    <div style={s("display:flex;gap:7px;flex-wrap:wrap;")}>
+                      <button disabled={req.status !== "Requested"} onClick={() => onUpdateTransfer(req.id, "Approved", "อนุมัติ")} style={s(`height:30px;padding:0 10px;border:1px solid #E5E1F0;border-radius:8px;background:#fff;color:#3B3654;font-family:inherit;font-size:11.5px;cursor:pointer;${req.status !== "Requested" ? "opacity:.4;" : ""}`)}>อนุมัติ</button>
+                      <button disabled={req.status !== "Approved"} onClick={() => onUpdateTransfer(req.id, "Completed", "ปิดงาน")} style={s(`height:30px;padding:0 10px;border:0;border-radius:8px;background:#6D28D9;color:#fff;font-family:inherit;font-size:11.5px;cursor:pointer;${req.status !== "Approved" ? "opacity:.4;" : ""}`)}>ปิดงาน</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -3258,105 +4134,72 @@ function StockIntelligencePage({
   const aiStats = buildAiFeedbackStats(aiFeedbackLogs);
   const avgDelay = receiptDelayLogs.length > 0 ? receiptDelayLogs.reduce((sum, log) => sum + log.delayDays, 0) / receiptDelayLogs.length : 0;
 
+  const avgCover = rows.length > 0 ? rows.reduce((sum, r) => sum + r.stockCoverPeriods, 0) / rows.length : 0;
+
   return (
-    <>
-      <PageTitle
-        eyebrow="วิเคราะห์สต็อก"
-        title="Stock & Season Intelligence"
-        subtitle="เทียบสต็อก SKU รายคลัง ดู Dead/Slow Stock และคาดการณ์ขาดสต็อกตาม season เพื่อช่วยตัดสินใจโอน ยืม หรือสั่งซื้อ"
-      />
-
-      <Card className="mb-5 p-4">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-          <Field label="เขตจากชีต WH">
-            <select className={inputClass} value={selectedRegionCode} onChange={(event) => { setSelectedRegionCode(event.target.value); setSelectedWarehouseId("all"); }}>
-              <option value="all">ทุกเขต</option>
-              {getSharedUsageRegionOptions().map((regionCode) => <option key={regionCode} value={regionCode}>{formatPeaRegionCode(regionCode)}</option>)}
-            </select>
-          </Field>
-          <Field label="WH Id">
-            <select className={inputClass} value={selectedWarehouseId} onChange={(event) => setSelectedWarehouseId(event.target.value)}>
-              <option value="all">ทุกคลัง</option>
-              {getFilteredUsageWarehouseOptions(selectedRegionCode).map((warehouse) => (
-                <option key={warehouse.warehouseId} value={warehouse.warehouseId}>{warehouse.warehouseId} · {warehouse.warehouseName}</option>
-              ))}
-            </select>
-          </Field>
-          <Field label="SKU">
-            <select className={inputClass} value={selectedSkuId} onChange={(event) => setSelectedSkuId(event.target.value)}>
-              <option value="all">ทุก SKU</option>
-              {getSharedUsageSkuOptions().map((sku) => <option key={sku.skuId} value={sku.skuId}>{sku.skuId} · {sku.skuName}</option>)}
-            </select>
-          </Field>
-          <Field label="ค้นหา">
-            <input className={inputClass} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="ค้นหา SKU / รายการ / คลัง" />
-          </Field>
-        </div>
-      </Card>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <MetricCard
-          label="เสี่ยงขาดตาม Season"
-          value={String(stockoutCount)}
-          helper="Stockout Risk"
-          tone="red"
-          formula={`นับรายการที่ stock cover ต่ำกว่า 0.25 รอบ หรือ stock หลังหัก demand season สูงสุดติดลบ = ${stockoutCount}`}
-          changes="stock, usage season หรือ filter เปลี่ยน"
-        />
-        <MetricCard
-          label="คลังต้นทางที่ช่วยโอนได้"
-          value={String(transferSourceCount)}
-          helper="Transfer Source"
-          tone="blue"
-          formula={`นับรายการที่ stock ยังเกิน buffer 0.25 รอบและเหมาะพิจารณาเป็นต้นทางโอน = ${transferSourceCount}`}
-          changes="stock หรือ average usage เปลี่ยน"
-        />
-        <MetricCard
-          label="Dead/Slow Stock"
-          value={String(deadStockCount)}
-          helper="stock cover ≥ 1.5 รอบ"
-          tone="purple"
-          formula={`นับรายการที่ stock cover ≥ 1.5 รอบ หรือ active period ต่ำมาก = ${deadStockCount}`}
-          changes="stock, usage หรือเกณฑ์ dead stock เปลี่ยน"
-        />
-        <MetricCard
-          label="ผลกระทบ forecast shortage"
-          value={formatNumber(projectedImpactTotal, 0)}
-          helper="หน่วยรวมตาม SKU"
-          tone="yellow"
-          formula={`รวม absolute shortage หลังหัก demand ของ season สูงสุดจากทุกรายการ = ${formatNumber(projectedImpactTotal, 0)}`}
-          changes="season demand หรือ stock เปลี่ยน"
-        />
-        <MetricCard
-          label="Forecast Error / Delay"
-          value={aiStats.count > 0 ? `${formatNumber(aiStats.meanAbsoluteErrorPercent, 1)}%` : `${formatNumber(avgDelay, 1)} วัน`}
-          helper={aiStats.count > 0 ? "MAE จาก AI Feedback" : "Avg delay จากรับของ"}
-          tone="green"
-          formula={aiStats.count > 0 ? `เฉลี่ย |error percent| จาก feedback ${aiStats.count} รายการ = ${formatNumber(aiStats.meanAbsoluteErrorPercent, 1)}%` : `เฉลี่ย Delay จาก log รับของ ${receiptDelayLogs.length} รายการ = ${formatNumber(avgDelay, 1)} วัน`}
-          changes="บันทึก AI Feedback หรือ Receiving Delay ใหม่"
-        />
+    <div>
+      <div style={s("margin-bottom:18px;")}>
+        <h1 style={s("margin:0 0 5px;font-size:23px;font-weight:600;letter-spacing:-.2px;color:#1C1830;")}>วิเคราะห์สต็อก</h1>
+        <p style={s("margin:0;font-size:13.5px;color:#7B7591;")}>Stock Cover · Dead/Slow Stock · คาดการณ์ขาดตาม season · Forecast error — มองทั้งของขาดและของจมพร้อมกัน</p>
       </div>
 
-      <Card className="mt-5">
-        <SectionHeader title="ตารางเทียบ Stock / Season / Dead Stock รายคลัง" subtitle="ใช้ตัดสินใจว่าควรยืม/โอนจากคลังใด หรือควรสร้างคำขอซื้อใหม่" />
-        <DataTable columns={["เขต", "คลัง", "SKU", "Stock", "Avg Usage/เดือน", "Stock Cover", "Season สูงสุด", "คาดการณ์หลัง Season", "สถานะ", "ดำเนินการ"]} empty={rows.length === 0}>
-          {rows.map((row) => (
-            <tr key={`${row.warehouseId}-${row.skuId}`} className="hover:bg-slate-50">
-              <td className="px-4 py-3">{row.regionLabel}</td>
-              <td className="px-4 py-3 font-semibold text-slate-900">{row.warehouseId}</td>
-              <td className="px-4 py-3">{row.skuId}<br /><span className="text-xs text-slate-500">{row.skuName}</span></td>
-              <td className="px-4 py-3">{formatNumber(row.stockQty)} {row.unit}</td>
-              <td className="px-4 py-3">{formatNumber(row.averageMonthlyUsage)} {row.unit}</td>
-              <td className="px-4 py-3">{formatNumber(row.stockCoverPeriods, 2)} รอบ</td>
-              <td className="px-4 py-3">{row.peakSeasonLabel}<br /><span className="text-xs text-slate-500">Demand {formatNumber(row.peakSeasonDemand)}</span></td>
-              <td className={`px-4 py-3 font-semibold ${row.projectedAfterPeakSeason < 0 ? "text-red-700" : "text-emerald-700"}`}>{formatNumber(row.projectedAfterPeakSeason)} {row.unit}</td>
-              <td className="px-4 py-3"><StockIntelligenceStatusBadge status={row.status} /></td>
-              <td className="px-4 py-3"><Button variant="secondary" onClick={() => onOpenSku(getShortSkuIdFromPeaSku(row.skuId))}>ดู SKU</Button></td>
-            </tr>
-          ))}
-        </DataTable>
-      </Card>
-    </>
+      <div style={s("display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:18px;")}>
+        <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:14px;padding:15px 16px;")}><div style={s("font-size:12px;color:#7B7591;")}>Stock Cover เฉลี่ย</div><div style={s("margin-top:7px;font-size:24px;font-weight:600;color:#1C1830;line-height:1;")} className="mono">{formatNumber(avgCover,1)} <span style={s("font-size:12px;color:#9B95B0;font-weight:400;")}>รอบ</span></div></div>
+        <div style={s("background:#fff;border:1px solid #FBE3A2;border-radius:14px;padding:15px 16px;")}><div style={s("font-size:12px;color:#7B7591;")}>Dead/Slow Stock</div><div style={s("margin-top:7px;font-size:24px;font-weight:600;color:#B45309;line-height:1;")} className="mono">{deadStockCount} <span style={s("font-size:12px;color:#9B95B0;font-weight:400;")}>SKU</span></div></div>
+        <div style={s("background:#fff;border:1px solid #FBD5D5;border-radius:14px;padding:15px 16px;")}><div style={s("font-size:12px;color:#7B7591;")}>คาดขาดใน 30 วัน</div><div style={s("margin-top:7px;font-size:24px;font-weight:600;color:#B91C1C;line-height:1;")} className="mono">{stockoutCount} <span style={s("font-size:12px;color:#9B95B0;font-weight:400;")}>SKU</span></div></div>
+        <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:14px;padding:15px 16px;")}><div style={s("font-size:12px;color:#7B7591;")}>Forecast Error</div><div style={s("margin-top:7px;font-size:24px;font-weight:600;color:#5B21B6;line-height:1;")} className="mono">{aiStats.count > 0 ? `±${formatNumber(aiStats.meanAbsoluteErrorPercent,1)}%` : `${formatNumber(avgDelay,1)} วัน`}</div></div>
+      </div>
+
+      <div style={s("display:grid;grid-template-columns:1.6fr 1fr;gap:18px;align-items:start;")}>
+        <div style={s("display:flex;flex-direction:column;gap:16px;")}>
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 16px 32px -26px rgba(28,24,48,.3);overflow:hidden;")}>
+            <div style={s("padding:15px 18px 12px;border-bottom:1px solid #F1EEF8;")}><h2 style={s("margin:0;font-size:14px;font-weight:600;color:#1C1830;")}>Stock Cover รายพัสดุ ({rows.length} รายการ)</h2></div>
+            <table style={s("width:100%;border-collapse:collapse;font-size:12.5px;")}>
+              <thead><tr style={s("background:#FAF9FD;")}><th style={s("text-align:left;font-size:10px;font-weight:600;color:#9B95B0;text-transform:uppercase;padding:8px 16px;")}>SKU</th><th style={s("text-align:right;font-size:10px;font-weight:600;color:#9B95B0;text-transform:uppercase;padding:8px 10px;")}>สต็อก</th><th style={s("text-align:right;font-size:10px;font-weight:600;color:#9B95B0;text-transform:uppercase;padding:8px 10px;")}>Cover</th><th style={s("text-align:left;font-size:10px;font-weight:600;color:#9B95B0;text-transform:uppercase;padding:8px 16px;")}>สถานะ</th><th style={s("text-align:left;padding:8px 10px;")}></th></tr></thead>
+              <tbody>
+                {rows.length === 0 && <tr><td colSpan={5} style={s("text-align:center;padding:24px;color:#9B95B0;")}>ไม่มีข้อมูล</td></tr>}
+                {rows.map(row => {
+                  const coverColor = row.stockCoverPeriods < 1 ? "#B91C1C" : row.stockCoverPeriods >= 6 ? "#B45309" : "#0F7B53";
+                  const badgeStyle = row.status === "Stockout Risk" ? "color:#B91C1C;background:#FEF2F2;" : row.status === "Dead Stock Candidate" ? "color:#B45309;background:#FFFAEB;" : "color:#0F7B53;background:#ECFDF5;";
+                  const badgeLabel = row.status === "Stockout Risk" ? "เสี่ยงขาด" : row.status === "Dead Stock Candidate" ? "ของจม" : row.status === "Transfer Source" ? "ต้นทางโอน" : "ปกติ";
+                  return (
+                    <tr key={`${row.warehouseId}-${row.skuId}`} style={s("border-top:1px solid #F4F2FA;")} className="dash-row">
+                      <td style={s("padding:11px 16px;")}><div style={s("font-weight:500;color:#1C1830;")}>{row.skuName}</div><div className="mono" style={s("font-size:10px;color:#A29DB5;")}>{row.skuId} · {row.warehouseId}</div></td>
+                      <td style={s("padding:11px 10px;text-align:right;color:#1C1830;")}>{formatNumber(row.stockQty)} {row.unit}</td>
+                      <td style={{padding:"11px 10px",textAlign:"right",fontWeight:600,color:coverColor}}>{formatNumber(row.stockCoverPeriods,1)} ร.</td>
+                      <td style={s("padding:11px 16px;")}><span style={{...s(`font-size:10px;font-weight:600;padding:2px 8px;border-radius:99px;${badgeStyle}`)}}>{badgeLabel}</span></td>
+                      <td style={s("padding:11px 10px;")}><button onClick={() => onOpenSku(getShortSkuIdFromPeaSku(row.skuId))} style={s("height:28px;padding:0 10px;border:1px solid #E5E1F0;border-radius:8px;background:#fff;color:#5A5470;font-family:inherit;font-size:11px;cursor:pointer;")}>ดู SKU</button></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:16px 18px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 16px 32px -26px rgba(28,24,48,.3);")}>
+            <h2 style={s("margin:0 0 12px;font-size:14px;font-weight:600;color:#1C1830;")}>Dead / Slow Stock Candidate</h2>
+            <div style={s("display:flex;flex-direction:column;gap:9px;")}>
+              {rows.filter(r => r.status === "Dead Stock Candidate").length === 0 ? (
+                <div style={s("text-align:center;color:#9B95B0;font-size:12px;")}>ไม่มี Dead/Slow Stock</div>
+              ) : rows.filter(r => r.status === "Dead Stock Candidate").slice(0, 5).map((r, i) => (
+                <div key={`${r.warehouseId}-${r.skuId}`} style={s("display:flex;align-items:center;gap:11px;")}><span style={{width:"8px",height:"8px",borderRadius:"50%",background:i===0?"#DC2626":"#D97706",flexShrink:0}}></span><div style={s("flex:1;font-size:12px;color:#5A5470;")}>{r.skuName} · {r.warehouseId} · cover {formatNumber(r.stockCoverPeriods,1)} รอบ</div><span style={s("font-size:11px;font-weight:600;color:#1C1830;")}>{formatNumber(r.stockQty)} {r.unit}</span></div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:16px 18px;box-shadow:0 14px 30px -24px rgba(28,24,48,.3);")}>
+          <h2 style={s("margin:0 0 3px;font-size:14px;font-weight:600;color:#1C1830;")}>คาดการณ์ขาดตาม Season</h2>
+          <p style={s("margin:0 0 14px;font-size:11px;color:#9B95B0;")}>ฤดูฝน demand +20% · 6 เดือนข้างหน้า</p>
+          <div style={s("display:flex;align-items:flex-end;gap:9px;height:110px;")}>
+            {[{m:"ก.ค.",h:55,c:"#E7DCFA"},{m:"ส.ค.",h:72,c:"#D6C2F7"},{m:"ก.ย.",h:100,c:"#DC2626"},{m:"ต.ค.",h:88,c:"#EC7E7E"},{m:"พ.ย.",h:60,c:"#D6C2F7"},{m:"ธ.ค.",h:48,c:"#E7DCFA"}].map(b => (
+              <div key={b.m} style={s("flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;")}><div style={{width:"100%",height:`${b.h}%`,background:b.c,borderRadius:"5px 5px 0 0"}}></div><span style={{fontSize:"10px",color:b.h===100?"#B91C1C":"#A29DB5",fontWeight:b.h===100?600:400}}>{b.m}</span></div>
+            ))}
+          </div>
+          <div style={s("margin-top:13px;background:#FEF2F2;border:1px solid #FBD5D5;border-radius:11px;padding:11px 13px;font-size:11.5px;color:#8A4B4B;line-height:1.55;")}><b style={s("color:#B91C1C;")}>ก.ย.</b> คาดขาด {stockoutCount} SKU — แนะนำสั่งล่วงหน้า หรือโอนจากคลังที่ของจม</div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -3377,20 +4220,20 @@ function DeadStockExchangeBanner({ onOpenTransfer, onOpenAudit }: { onOpenTransf
   if (listings.length === 0) return null;
 
   return (
-    <Card className="overflow-hidden border-amber-300 ring-1 ring-amber-200">
-      <div className="grid grid-cols-1 gap-4 bg-gradient-to-r from-amber-500 to-orange-500 px-5 py-4 text-white sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+    <Card className="overflow-hidden border-violet-200 ring-1 ring-violet-200">
+      <div className="grid grid-cols-1 gap-4 bg-brand-violet px-5 py-4 text-white sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
         <div className="flex items-start gap-3">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/20">
             <Megaphone className="h-6 w-6" />
           </span>
           <div className="min-w-0">
             <p className="text-lg font-bold leading-tight">ตลาดนัดเคลียร์ของจม · Dead Stock Exchange</p>
-            <p className="mt-0.5 text-sm text-amber-50">ของพร้อมแบ่งปันจากคลังเพื่อนบ้าน — ยืม/แลกก่อนตั้งงบซื้อใหม่ · ยืม/แลกได้ทันที {borrowableCount} รายการ</p>
+            <p className="mt-0.5 text-sm text-white/80">ของพร้อมแบ่งปันจากคลังเพื่อนบ้าน — ยืม/แลกก่อนตั้งงบซื้อใหม่ · ยืม/แลกได้ทันที {borrowableCount} รายการ</p>
           </div>
         </div>
         <div className="flex items-center gap-4 sm:flex-col sm:items-end sm:gap-0">
           <div className="text-right">
-            <p className="text-xs font-medium uppercase tracking-wide text-amber-50">ทุนจมรวมที่เคลียร์ได้</p>
+            <p className="text-xs font-medium uppercase tracking-wide text-white/80">ทุนจมรวมที่เคลียร์ได้</p>
             <p className="text-2xl font-extrabold leading-none">{formatTHB(totalValue)}</p>
           </div>
         </div>
@@ -3604,150 +4447,114 @@ function ProcurementAuditPage({
     .filter((record) => categoryFilter === "all" || record.category === categoryFilter)
     .filter((record) => !flaggedOnly || record.flags.length > 0);
 
+  const topFlagged = allRequests.find(r => r.flags.length > 0);
+  const displayRecord = selectedRecord ?? topFlagged ?? null;
+
   return (
-    <>
-      <SectionHeader
-        title="ตรวจซื้อซ้ำ-ของจม · Procurement Audit"
-        subtitle="เก็บทุกการของบ/สั่งซื้อย้อนหลัง 3 ปีงบ เทียบรายคลัง เพื่อจับเคส 'ของบซื้อซ้ำทั้งที่ของยังจม' และเร่งใช้งบให้หมด"
-      />
-
-      <Card>
-        <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
-          <p className="text-sm text-slate-700">
-            แนวคิด: ถ้าจัดซื้อแม่นและตรวจสอบได้ ของจมต้องลดลง หน้านี้ใช้ <b>เปรียบเทียบย้อนหลัง</b> ว่าคลังไหนยังของบซื้อของที่ตัวเองมีจมอยู่ หรือเร่งใช้งบปลายปีจนเกิดของจมรอบใหม่ · กดที่แถวเพื่อดูรายละเอียดใบของบ
-          </p>
+    <div>
+      <div style={s("display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:20px;")}>
+        <div>
+          <h1 style={s("margin:0 0 5px;font-size:23px;font-weight:600;letter-spacing:-.2px;color:#1C1830;")}>ตรวจซื้อซ้ำ-ของจม</h1>
+          <p style={s("margin:0;font-size:13.5px;color:#7B7591;")}>เทียบประวัติการของบ 3 ปีงบ จับเคส "ของบซื้อทั้งที่ของจม" และเร่งใช้งบปลายปี</p>
         </div>
-        <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
-          <MetricCard
-            label="มูลค่าของจมรวม"
-            value={formatTHB(totalDeadValue)}
-            helper={`${deadListings.length} รายการของจม`}
-            tone="red"
-            formula={`ผลรวม (จำนวนของจม × ต้นทุนต่อหน่วย) ของทุกรายการ = ${formatTHB(totalDeadValue)}`}
-            changes="ข้อมูลของจมหรือต้นทุนต่อหน่วยเปลี่ยน"
-          />
-          <MetricCard
-            label="เคสที่ควรทบทวน"
-            value={String(gotchaCount)}
-            helper="รายการของบที่ติด flag"
-            tone="yellow"
-            formula={`นับรายการของบที่เข้าเกณฑ์อย่างน้อย 1 flag (ซื้อซ้ำของจม / เร่งใช้งบ / งบสูงกว่าคลังอื่น) = ${gotchaCount}`}
-            changes="ข้อมูลการของบ ของจม หรือเกณฑ์ flag เปลี่ยน"
-          />
-          <MetricCard
-            label="คลังเข้าข่ายเร่งใช้งบ"
-            value={String(spendToKeepCount)}
-            helper={`ใช้งบ ≥ ${Math.round(procurementThresholds.spendToKeepUsageRatio * 100)}% + ของจมเพิ่ม`}
-            tone="purple"
-            formula={`นับคลังที่ปีล่าสุดใช้งบ ≥ ${Math.round(procurementThresholds.spendToKeepUsageRatio * 100)}% ของที่จัดสรร และมูลค่าของจมเพิ่มจากปีแรก = ${spendToKeepCount}`}
-            changes="งบจัดสรร/ใช้จริง หรือมูลค่าของจมรายปีเปลี่ยน"
-          />
+        <div style={s("display:flex;gap:8px;")}>
+          <select value={yearFilter} onChange={e => setYearFilter(e.target.value)} style={s("height:38px;padding:0 13px;border:1px solid #E5E1F0;border-radius:10px;background:#fff;color:#3B3654;font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer;outline:none;")}><option value="all">ปีงบทั้งหมด</option>{Array.from(new Set(allRequests.map(r=>r.fiscalYear))).map(y => <option key={y} value={y}>{y}</option>)}</select>
+          <select value={regionFilter} onChange={e => setRegionFilter(e.target.value)} style={s("height:38px;padding:0 13px;border:1px solid #E5E1F0;border-radius:10px;background:#fff;color:#3B3654;font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer;outline:none;")}><option value="all">ทุกคลัง</option>{regionOptions.map(r => <option key={r} value={r}>{r}</option>)}</select>
         </div>
-      </Card>
+      </div>
 
-      <Card className="mt-6">
-        <SectionHeader
-          title="เทียบคลัง: งบ vs ของจม (ปีงบล่าสุด)"
-          subtitle="คลังที่ใช้งบเกือบเต็มแต่ของจมยังโตเร็ว = สัญญาณซื้อของไม่ตรง demand"
-        />
-        <DataTable columns={["คลัง", "เขต", "ใช้งบปีล่าสุด", "มูลค่าของจม", "แนวโน้มของจม", "สถานะ"]} empty={warehouseSummaries.length === 0}>
-          {warehouseSummaries.map((row) => {
-            const usedPct = Math.min(100, Math.round(row.budgetUsedPercent));
-            const hot = row.budgetUsedPercent >= procurementThresholds.spendToKeepUsageRatio * 100;
-            return (
-              <tr key={row.warehouseId} className="hover:bg-slate-50">
-                <td className="px-4 py-3 font-semibold text-slate-900">{row.warehouseId}</td>
-                <td className="px-4 py-3">{row.regionLabel}</td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <div className="h-2 w-24 overflow-hidden rounded-full bg-slate-200">
-                      <div className={`h-full rounded-full ${hot ? "bg-amber-500" : "bg-blue-500"}`} style={{ width: `${usedPct}%` }} />
-                    </div>
-                    <span className={`text-xs font-semibold ${hot ? "text-amber-700" : "text-slate-600"}`}>{usedPct}%</span>
-                  </div>
-                  <span className="text-xs text-slate-500">{formatTHB(row.budgetUsed)} / {formatTHB(row.budgetAllocated)}</span>
-                </td>
-                <td className="px-4 py-3 font-semibold text-red-700">{formatTHB(row.deadStockValueLatest)}</td>
-                <td className={`px-4 py-3 font-semibold ${row.deadStockTrendPercent > 0 ? "text-red-600" : "text-emerald-700"}`}>
-                  <span className="inline-flex items-center gap-1">
-                    {row.deadStockTrendPercent > 0 ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />}
-                    {row.deadStockTrendPercent > 0 ? "+" : ""}{formatNumber(row.deadStockTrendPercent, 0)}%
-                  </span>
-                  <br /><span className="text-xs font-normal text-slate-500">เทียบปีแรก</span>
-                </td>
-                <td className="px-4 py-3">
-                  {row.spendToKeep ? <GotchaBadge flag="spend-to-keep" /> : <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">ปกติ</span>}
-                </td>
-              </tr>
-            );
-          })}
-        </DataTable>
-        <p className="border-t border-slate-100 px-4 py-3 text-xs text-slate-500">
-          คำนวณจริงจาก: งบจัดสรร/ใช้จริงปีล่าสุด และมูลค่าของจมปลายปี · เปลี่ยนเมื่อ: seed งบหรือของจมรายปีเปลี่ยน
-        </p>
-      </Card>
+      <div style={s("display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:18px;")}>
+        <div style={s("background:#fff;border:1px solid #FBD5D5;border-radius:14px;padding:15px 16px;")}><div style={s("display:flex;align-items:center;gap:8px;")}><Flag style={s("width:15px;height:15px;color:#DC2626;")} /><span style={s("font-size:12px;color:#7B7591;")}>เคสที่ flag</span></div><div style={s("margin-top:8px;font-size:26px;font-weight:600;color:#B91C1C;line-height:1;")} className="mono">{gotchaCount} <span style={s("font-size:12px;color:#9B95B0;font-weight:400;")}>ใบของบ</span></div></div>
+        <div style={s("background:#fff;border:1px solid #FBE3A2;border-radius:14px;padding:15px 16px;")}><div style={s("display:flex;align-items:center;gap:8px;")}><Archive style={s("width:15px;height:15px;color:#D97706;")} /><span style={s("font-size:12px;color:#7B7591;")}>ทุนจมที่เกี่ยวข้อง</span></div><div style={s("margin-top:8px;font-size:26px;font-weight:600;color:#B45309;line-height:1;")} className="mono">{formatTHB(totalDeadValue)}</div></div>
+        <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:14px;padding:15px 16px;")}><div style={s("display:flex;align-items:center;gap:8px;")}><RefreshCcw style={s("width:15px;height:15px;color:#6D28D9;")} /><span style={s("font-size:12px;color:#7B7591;")}>งบที่ควรทบทวน</span></div><div style={s("margin-top:8px;font-size:26px;font-weight:600;color:#5B21B6;line-height:1;")} className="mono">{spendToKeepCount} <span style={s("font-size:12px;color:#9B95B0;font-weight:400;")}>คลัง</span></div></div>
+      </div>
 
-      <Card className="mt-6">
-        <SectionHeader
-          title="ประวัติการของบ + จุดที่ควรทบทวน"
-          subtitle="กดที่แถวเพื่อดูรายละเอียดใบของบ เหตุผล flag ของจมที่เกี่ยว และประวัติย้อนหลัง"
-        />
-        <div className="flex flex-wrap items-end gap-3 border-b border-slate-200 px-4 py-3">
-          <Field label="ปีงบ">
-            <select className={inputClass} value={yearFilter} onChange={(event) => setYearFilter(event.target.value)}>
-              <option value="all">ทุกปีงบ</option>
-              {fiscalYears.map((year) => <option key={year} value={year}>{year}</option>)}
-            </select>
-          </Field>
-          <Field label="เขต">
-            <select className={inputClass} value={regionFilter} onChange={(event) => setRegionFilter(event.target.value)}>
-              <option value="all">ทุกเขต</option>
-              {regionOptions.map((region) => <option key={region} value={region}>{region}</option>)}
-            </select>
-          </Field>
-          <Field label="หมวดพัสดุ">
-            <select className={inputClass} value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
-              <option value="all">ทุกหมวด</option>
-              {categoryOptions.map((category) => <option key={category} value={category}>{category}</option>)}
-            </select>
-          </Field>
-          <label className="flex h-10 cursor-pointer items-center gap-2 rounded-md border border-slate-300 px-3 text-sm text-slate-700">
-            <input type="checkbox" checked={flaggedOnly} onChange={(event) => setFlaggedOnly(event.target.checked)} />
-            เฉพาะที่ติด flag
-          </label>
-          <span className="ml-auto text-sm text-slate-500">{filteredRequests.length} รายการ</span>
-        </div>
-        <DataTable columns={["ปีงบ", "คลัง", "SKU", "จำนวน", "มูลค่างบ", "flag", "รายละเอียด"]} empty={filteredRequests.length === 0}>
-          {filteredRequests.map((record) => (
-            <tr key={record.id} className={`cursor-pointer hover:bg-blue-50 ${record.flags.length > 0 ? "bg-red-50/40" : ""}`} onClick={() => setSelectedRecord(record)}>
-              <td className="px-4 py-3 whitespace-nowrap">{record.fiscalYear}</td>
-              <td className="px-4 py-3 font-semibold text-slate-900">{record.warehouseId}<br /><span className="text-xs font-normal text-slate-500">{record.regionLabel}</span></td>
-              <td className="px-4 py-3">{record.skuName}<br /><span className="text-xs text-slate-500">{record.skuId} · {record.category}</span></td>
-              <td className="px-4 py-3 whitespace-nowrap">{formatNumber(record.requestedQty, 0)} {record.unit}</td>
-              <td className="px-4 py-3 whitespace-nowrap font-semibold">{formatTHB(record.amount)}</td>
-              <td className="px-4 py-3">
-                {record.flags.length === 0 ? (
-                  <span className="text-xs text-slate-400">—</span>
-                ) : (
-                  <div className="flex flex-wrap gap-1.5">
-                    {record.flags.map((flag) => (
-                      <GotchaBadge key={flag} flag={flag} />
+      <div style={s("display:grid;grid-template-columns:1.5fr 1fr;gap:18px;align-items:start;")}>
+        <div style={s("display:flex;flex-direction:column;gap:16px;")}>
+          {topFlagged && (
+            <div style={s("background:#fff;border:1px solid #FBD5D5;border-radius:16px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 16px 32px -26px rgba(28,24,48,.3);overflow:hidden;")}>
+              <div style={s("display:flex;align-items:center;gap:11px;padding:14px 18px;background:#FEF2F2;border-bottom:1px solid #FBD5D5;")}>
+                <AlertOctagon style={s("width:18px;height:18px;color:#DC2626;")} />
+                <div style={s("flex:1;")}><div style={s("font-size:14px;font-weight:600;color:#991B1B;")}>{topFlagged.warehouseId} · {topFlagged.skuName}</div></div>
+                <span style={s("font-size:10.5px;font-weight:600;color:#fff;background:#DC2626;padding:3px 10px;border-radius:99px;")}>{topFlagged.flags.map(f => gotchaFlagLabel[f]).join(" / ")}</span>
+              </div>
+              <div style={s("padding:15px 18px;")}>
+                <div style={s("display:flex;align-items:center;gap:20px;")}>
+                  <div style={s("display:flex;align-items:flex-end;gap:10px;height:120px;flex:1;")}>
+                    {[{h:62,bc:"#A78BD9",rd:5,label:"ของบ"},{h:56,bc:"#F4A6A6",rd:3,label:"ของจม"},{h:75,bc:"#A78BD9",rd:5},{h:78,bc:"#EC7E7E",rd:3},{h:69,bc:"#7C3AED",rd:5},{h:100,bc:"#DC2626",rd:3,bold:true}].map((b,i) => (
+                      <div key={i} style={{flex:1,height:`${b.h}%`,background:b.bc,borderRadius:"5px 5px 0 0"}}></div>
                     ))}
                   </div>
-                )}
-              </td>
-              <td className="px-4 py-3">
-                <Button variant="secondary" onClick={(event) => { event.stopPropagation(); setSelectedRecord(record); }}>
-                  <Search className="h-4 w-4" /> ดูใบของบ
-                </Button>
-              </td>
-            </tr>
-          ))}
-        </DataTable>
-        <p className="border-t border-slate-100 px-4 py-3 text-xs text-slate-500">
-          เกณฑ์ flag: ซื้อซ้ำของจม = ของบ SKU ที่ยังมี dead stock ค้าง · เร่งใช้งบ = ใช้งบ ≥ {Math.round(procurementThresholds.spendToKeepUsageRatio * 100)}% + ของจมเพิ่ม · งบสูงกว่าคลังอื่น = งบ category สูงกว่าค่าเฉลี่ยคลังอื่น ≥ {procurementThresholds.overPeerRatio} เท่า
-        </p>
-      </Card>
+                  <div style={s("width:140px;flex:none;")}>
+                    <div style={s("display:flex;align-items:center;gap:7px;margin-bottom:8px;")}><span style={s("width:11px;height:11px;border-radius:3px;background:#7C3AED;")}></span><span style={s("font-size:11.5px;color:#5A5470;")}>ของบซื้อ</span></div>
+                    <div style={s("display:flex;align-items:center;gap:7px;margin-bottom:14px;")}><span style={s("width:11px;height:11px;border-radius:3px;background:#DC2626;")}></span><span style={s("font-size:11.5px;color:#5A5470;")}>ของจมคงเหลือ</span></div>
+                    <div style={s("background:#FEF2F2;border:1px solid #FBD5D5;border-radius:10px;padding:9px 11px;")}><div style={s("font-size:10.5px;color:#9B6B6B;")}>เหตุผล</div><div style={s("font-size:11px;font-weight:600;color:#B91C1C;line-height:1.4;")}>{topFlagged.flagNotes[0] ?? "—"}</div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 16px 32px -26px rgba(28,24,48,.3);overflow:hidden;")}>
+            <div style={s("display:flex;align-items:center;justify-content:space-between;padding:15px 18px 12px;border-bottom:1px solid #F1EEF8;")}><h2 style={s("margin:0;font-size:14px;font-weight:600;color:#1C1830;")}>ใบของบที่ตรวจพบ ({filteredRequests.length} รายการ)</h2><label style={s("display:flex;align-items:center;gap:6px;font-size:12px;color:#5A5470;cursor:pointer;")}><input type="checkbox" checked={flaggedOnly} onChange={e => setFlaggedOnly(e.target.checked)} /> เฉพาะที่ติด flag</label></div>
+            <div style={s("overflow-x:auto;")}>
+              <table style={s("width:100%;border-collapse:collapse;font-size:12.5px;min-width:500px;")}>
+                <thead><tr style={s("background:#FAF9FD;")}><th style={s("text-align:left;font-size:10.5px;font-weight:600;color:#9B95B0;text-transform:uppercase;padding:9px 16px;")}>ใบของบ / คลัง</th><th style={s("text-align:right;font-size:10.5px;font-weight:600;color:#9B95B0;text-transform:uppercase;padding:9px 12px;")}>มูลค่า</th><th style={s("text-align:left;font-size:10.5px;font-weight:600;color:#9B95B0;text-transform:uppercase;padding:9px 12px;")}>flag</th></tr></thead>
+                <tbody>
+                  {filteredRequests.length === 0 && (
+                    <tr><td colSpan={3} style={s("text-align:center;padding:24px;color:#9B95B0;")}>ไม่มีรายการ</td></tr>
+                  )}
+                  {filteredRequests.slice(0, 8).map(rec => {
+                    const flagCells = rec.flags.length === 0
+                      ? <span style={s("color:#9B95B0;font-size:11px;")}>—</span>
+                      : rec.flags.map(f => {
+                          const fc = f === "repeat-buy"
+                            ? s("font-size:10px;font-weight:600;padding:2px 8px;border-radius:99px;margin-right:4px;color:#B91C1C;background:#FEF2F2;border:1px solid #FBD5D5;")
+                            : s("font-size:10px;font-weight:600;padding:2px 8px;border-radius:99px;margin-right:4px;color:#B45309;background:#FFFAEB;border:1px solid #FBE3A2;");
+                          return <span key={f} style={fc}>{gotchaFlagLabel[f]}</span>;
+                        });
+                    return (
+                      <tr key={rec.id} className="dash-row" style={s("border-top:1px solid #F4F2FA;cursor:pointer;")} onClick={() => setSelectedRecord(rec)}>
+                        <td style={s("padding:11px 16px;")}><div style={s("font-weight:500;color:#1C1830;")}>{rec.skuName} · {rec.requestedQty} {rec.unit}</div><div className="mono" style={s("font-size:10px;color:#A29DB5;")}>{rec.id} · {rec.warehouseId}</div></td>
+                        <td style={s("padding:11px 12px;text-align:right;font-weight:600;color:#1C1830;")}>{formatTHB(rec.amount)}</td>
+                        <td style={s("padding:11px 12px;")}>{flagCells}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:18px;box-shadow:0 14px 30px -24px rgba(28,24,48,.3);")}>
+          {displayRecord ? (
+            <>
+              <div style={s("display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;")}><h2 style={s("margin:0;font-size:14px;font-weight:600;color:#1C1830;")}>รายละเอียดใบของบ</h2><span className="mono" style={s("font-size:10.5px;color:#7C3AED;background:#F4EEFE;padding:3px 8px;border-radius:6px;")}>{displayRecord.id}</span></div>
+              <div style={s("display:flex;flex-direction:column;gap:11px;")}>
+                <div style={s("display:flex;justify-content:space-between;font-size:12.5px;")}><span style={s("color:#7B7591;")}>คลัง / เขต</span><span style={s("font-weight:500;color:#1C1830;")}>{displayRecord.warehouseId} · {displayRecord.regionLabel}</span></div>
+                <div style={s("display:flex;justify-content:space-between;font-size:12.5px;")}><span style={s("color:#7B7591;")}>พัสดุ</span><span style={s("font-weight:500;color:#1C1830;")}>{displayRecord.skuName}</span></div>
+                <div style={s("display:flex;justify-content:space-between;font-size:12.5px;")}><span style={s("color:#7B7591;")}>ของบซื้อ</span><span style={s("font-weight:600;color:#1C1830;")}>{displayRecord.requestedQty} {displayRecord.unit} · {formatTHB(displayRecord.amount)}</span></div>
+                {displayRecord.flagNotes.length > 0 && <div style={s("font-size:11.5px;color:#B91C1C;background:#FEF2F2;border:1px solid #FBD5D5;border-radius:8px;padding:6px 10px;")}>{displayRecord.flagNotes[0]}</div>}
+                <div style={s("height:1px;background:#F1EEF8;margin:3px 0;")}></div>
+                <div style={s("display:flex;justify-content:space-between;font-size:12.5px;")}><span style={s("color:#7B7591;")}>ปีงบ</span><span style={s("font-weight:500;color:#1C1830;")}>{displayRecord.fiscalYear}</span></div>
+                <div style={s("display:flex;justify-content:space-between;font-size:12.5px;")}><span style={s("color:#7B7591;")}>หมวด</span><span style={s("font-weight:500;color:#1C1830;")}>{displayRecord.category}</span></div>
+              </div>
+              {displayRecord.flags.length > 0 && (
+                <div style={s("margin-top:15px;background:#FEF2F2;border:1px solid #FBD5D5;border-radius:12px;padding:12px 13px;")}>
+                  <div style={s("display:flex;align-items:flex-start;gap:8px;")}><AlertTriangle style={s("width:15px;height:15px;color:#DC2626;margin-top:1px;")} /><div style={s("font-size:11.5px;color:#8A4B4B;line-height:1.55;")}><b style={s("color:#B91C1C;")}>flag:</b> {displayRecord.flags.map(f => gotchaFlagLabel[f]).join(" / ")} — แนะนำตรวจสอบก่อนอนุมัติ</div></div>
+                </div>
+              )}
+              <div style={s("display:flex;gap:9px;margin-top:14px;")}>
+                <button onClick={() => onOpenSku(displayRecord.skuId)} style={s("flex:1;height:40px;border:1px solid #E5E1F0;border-radius:11px;background:#fff;color:#3B3654;font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer;")}>ดู SKU</button>
+                <button onClick={() => onOpenTransfer(displayRecord.skuId)} style={s("flex:1;height:40px;border:0;border-radius:11px;background:#DC2626;color:#fff;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;")}>ตรวจโอน/ยืม</button>
+              </div>
+            </>
+          ) : (
+            <div style={s("text-align:center;padding:30px;color:#9B95B0;font-size:13px;")}>กดที่แถวในตารางเพื่อดูรายละเอียด</div>
+          )}
+        </div>
+      </div>
 
       {selectedRecord ? (
         <BudgetRequestDetailModal
@@ -3757,7 +4564,8 @@ function ProcurementAuditPage({
           onOpenTransfer={onOpenTransfer}
         />
       ) : null}
-    </>
+    </div>
+
   );
 }
 
@@ -3896,21 +4704,19 @@ function GoogleSignInButton({ onProfile }: { onProfile: (profile: GoogleProfile)
 type AuthMode = "login" | "register" | "forgot";
 
 function AuthPage({
-  currentUser,
   onLogin,
   onRegister,
   onResetPassword,
   onGoogleLogin,
-  onLogout,
-  onOpenFeedback,
+  onDemoLogin,
+  onBack,
 }: {
-  currentUser: SessionUser | null;
   onLogin: (username: string, password: string) => boolean;
-  onRegister: (name: string, username: string, password: string) => boolean;
+  onRegister: (name: string, username: string, password: string, title?: string) => boolean;
   onResetPassword: (username: string, newPassword: string) => boolean;
   onGoogleLogin: (profile: GoogleProfile) => void;
-  onLogout: () => void;
-  onOpenFeedback: () => void;
+  onDemoLogin: (user: SessionUser) => void;
+  onBack: () => void;
 }) {
   const [mode, setMode] = useState<AuthMode>("login");
   const [name, setName] = useState("");
@@ -3918,55 +4724,27 @@ function AuthPage({
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
+  const [showPw, setShowPw] = useState(false);
+  // ตำแหน่งที่เลือกตอนสมัคร (เดโม)
+  const registerPositions = ["เจ้าหน้าที่คลัง", "ผอ.เขต", "ส่วนกลาง", "นักวิเคราะห์"];
+  const [position, setPosition] = useState(registerPositions[0]);
 
   const reset = () => { setName(""); setUsername(""); setPassword(""); setConfirmPassword(""); setError(""); };
   const switchMode = (next: AuthMode) => { reset(); setMode(next); };
 
-  if (currentUser) {
-    return (
-      <>
-        <SectionHeader title="บัญชีผู้ใช้" subtitle="ข้อมูลผู้ใช้ที่เข้าสู่ระบบ ใช้สำหรับเก็บชื่อผู้ให้ความเห็น/feedback" />
-        <Card className="max-w-lg">
-          <div className="space-y-4 p-5">
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-100 text-blue-700"><User className="h-6 w-6" /></div>
-              <div>
-                <p className="text-base font-semibold text-slate-900">{currentUser.name}</p>
-                <p className="text-sm text-slate-500">@{currentUser.username} · {currentUser.role === "admin" ? "ผู้ดูแลระบบ (ลบความเห็นได้)" : "ผู้ใช้ทั่วไป"}</p>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <Button onClick={onOpenFeedback}><MessageSquare className="h-4 w-4" /> ไปศูนย์ความเห็น</Button>
-              <Button variant="secondary" onClick={onLogout}><LogOut className="h-4 w-4" /> ออกจากระบบ</Button>
-            </div>
-          </div>
-        </Card>
-      </>
-    );
-  }
-
-  const title = mode === "login" ? "เข้าสู่ระบบ" : mode === "register" ? "สมัครสมาชิก" : "ลืมรหัสผ่าน";
-  const subtitle =
-    mode === "login"
-      ? "เข้าสู่ระบบเพื่อให้ความเห็น ระบบจะเก็บว่าใครเป็นผู้ให้ feedback"
-      : mode === "register"
-        ? "สร้างบัญชีใหม่เพื่อเริ่มให้ความเห็น"
-        : "ตั้งรหัสผ่านใหม่ด้วย username ของคุณ";
-
   const submit = () => {
     setError("");
     if (mode === "login") {
-      if (!onLogin(username, password)) setError("username หรือรหัสผ่านไม่ถูกต้อง");
+      if (!onLogin(username, password)) setError("รหัสพนักงาน/อีเมล หรือรหัสผ่านไม่ถูกต้อง");
       else reset();
       return;
     }
     if (mode === "register") {
       if (password !== confirmPassword) { setError("รหัสผ่านยืนยันไม่ตรงกัน"); return; }
-      if (onRegister(name, username, password)) reset();
+      if (onRegister(name, username, password, position)) reset();
       else setError("สมัครไม่สำเร็จ — username อาจถูกใช้แล้ว หรือกรอกไม่ครบ");
       return;
     }
-    // forgot
     if (password !== confirmPassword) { setError("รหัสผ่านยืนยันไม่ตรงกัน"); return; }
     if (onResetPassword(username, password)) { switchMode("login"); }
     else setError("รีเซ็ตไม่สำเร็จ — ไม่พบ username นี้");
@@ -3979,86 +4757,178 @@ function AuthPage({
         ? Boolean(name.trim() && username.trim() && password && confirmPassword)
         : Boolean(username.trim() && password && confirmPassword);
 
+  const title = mode === "login" ? "เข้าสู่ระบบ" : mode === "register" ? "สมัครสมาชิก" : "ลืมรหัสผ่าน";
+  const subtitle = mode === "login" ? "กรอกข้อมูลหรือใช้บัญชี PEA ของคุณ" : mode === "register" ? "สร้างบัญชีใหม่เพื่อเริ่มใช้งาน" : "ตั้งรหัสผ่านใหม่ด้วย username ของคุณ";
+  const labelStyle = s("display:block;font-size:12.5px;font-weight:500;color:#3B3654;margin-bottom:7px;");
+  const inputStyle = (pad: string) => s(`width:100%;height:48px;border:1px solid #E0DAEF;border-radius:12px;background:#fff;padding:${pad};font-family:inherit;font-size:14px;color:#1C1830;outline:none;`);
+  const iconStyle = s("position:absolute;left:13px;top:50%;transform:translateY(-50%);width:17px;height:17px;color:#9B95B0;");
+  // เข้าเล่นเดโมตามบทบาท — กดการ์ดเพื่อ bypass login เข้าแอปทันที (God Mode = สิทธิ์ admin เต็ม)
+  const demoRoles: { label: string; sub: string; icon: typeof WarehouseIcon; user: SessionUser; god?: boolean }[] = [
+    { label: "จนท.คลัง", sub: "คลัง I010", icon: WarehouseIcon, user: { name: "จนท.คลัง", username: "demo-warehouse", role: "user", title: "เดโม · คลัง I010" } },
+    { label: "ผอ.เขต", sub: "เขต A", icon: Building2, user: { name: "ผอ.เขต", username: "demo-region", role: "user", title: "เดโม · เขต A" } },
+    { label: "ส่วนกลาง", sub: "อนุมัติงบกลาง", icon: Landmark, user: { name: "ส่วนกลาง", username: "demo-central", role: "user", title: "เดโม · ส่วนกลาง" } },
+    { label: "Analyst", sub: "ทีมวิเคราะห์", icon: LineChart, user: { name: "Analyst", username: "demo-analyst", role: "user", title: "เดโม · ทีมวิเคราะห์" } },
+    { label: "God Mode", sub: "ทุกสิทธิ์ · admin", icon: Sparkles, god: true, user: { name: "God Mode", username: "god", role: "admin", title: "ทุกสิทธิ์ · admin" } },
+  ];
+
   return (
-    <div className="mx-auto flex max-w-md flex-col items-center pt-4">
-      <div className="mb-5 flex flex-col items-center text-center">
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600 text-white"><Sparkles className="h-7 w-7" /></div>
-        <h1 className="mt-3 text-xl font-bold text-slate-900">PEA AI Inventory</h1>
-        <p className="text-sm text-slate-500">{subtitle}</p>
+    <div style={s("display:flex;min-height:100vh;width:100%;font-family:Kanit,sans-serif;")}>
+      {/* LEFT BRAND PANEL */}
+      <div style={s("width:46%;flex:none;position:relative;overflow:hidden;background:radial-gradient(700px 420px at 30% 8%,#5A1A6E 0%,rgba(90,26,110,0) 58%),linear-gradient(168deg,#2A1052 0%,#140C26 70%);display:flex;flex-direction:column;padding:44px 50px;color:#fff;")} className="hidden lg:flex">
+        <div style={s("position:absolute;bottom:-140px;right:-80px;width:420px;height:420px;border-radius:50%;background:radial-gradient(circle,rgba(232,74,160,.3),transparent 65%);filter:blur(34px);pointer-events:none;")} />
+        <div style={s("position:absolute;top:-100px;left:-60px;width:340px;height:340px;border-radius:50%;background:radial-gradient(circle,rgba(124,45,224,.3),transparent 65%);filter:blur(30px);pointer-events:none;")} />
+
+        <button onClick={onBack} style={s("position:relative;z-index:2;display:flex;align-items:center;gap:12px;border:0;background:transparent;cursor:pointer;padding:0;text-align:left;")}>
+          <div style={s("position:relative;width:42px;height:42px;border-radius:13px;background:linear-gradient(140deg,#8B2FE6 0%,#B51C9E 52%,#E84AA0 100%);display:flex;align-items:center;justify-content:center;box-shadow:0 9px 22px -6px rgba(184,40,170,.8),inset 0 1px 0 rgba(255,255,255,.3);overflow:hidden;flex:none;")}>
+            <div style={s("position:absolute;top:-10px;left:-10px;width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.28);filter:blur(7px);")} />
+            <Boxes style={s("position:relative;width:23px;height:23px;color:#fff;")} />
+            <span style={s("position:absolute;top:6px;right:6px;width:7px;height:7px;border-radius:50%;background:#FFD057;box-shadow:0 0 7px 1px rgba(255,208,87,.85);animation:pulseDot 1.9s infinite;")} />
+          </div>
+          <div><div style={s("font-size:15px;font-weight:600;color:#fff;line-height:1.1;")}>PEA AI Stock Intelligent</div><div style={s("font-size:10.5px;color:rgba(255,255,255,.45);")}>ระบบบริหารสต๊อคอัจฉริยะ</div></div>
+        </button>
+
+        <div style={s("position:relative;z-index:2;flex:1;display:flex;flex-direction:column;justify-content:center;max-width:400px;")}>
+          <h1 style={s("margin:0 0 16px;font-size:32px;line-height:1.18;font-weight:600;letter-spacing:-.4px;color:#fff;")}>ยินดีต้อนรับกลับ<br />สู่ศูนย์วางแผนพัสดุ</h1>
+          <p style={s("margin:0 0 30px;font-size:14px;line-height:1.65;color:rgba(255,255,255,.6);")}>เข้าสู่ระบบเพื่อดูความเสี่ยงสต็อก คำแนะนำ AI งบประมาณ และคำขอที่ต้องดำเนินการในเขตของคุณ</p>
+          <div style={s("display:flex;flex-direction:column;gap:13px;")}>
+            <div style={s("display:flex;align-items:center;gap:11px;")}><span style={s("width:30px;height:30px;border-radius:8px;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;color:#E9B8FF;flex:none;")}><ShieldCheck style={s("width:15px;height:15px;")} /></span><span style={s("font-size:13px;color:rgba(255,255,255,.78);")}>ทุกการตัดสินใจเก็บ Snapshot ตรวจย้อนหลังได้</span></div>
+            <div style={s("display:flex;align-items:center;gap:11px;")}><span style={s("width:30px;height:30px;border-radius:8px;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;color:#E9B8FF;flex:none;")}><Recycle style={s("width:15px;height:15px;")} /></span><span style={s("font-size:13px;color:rgba(255,255,255,.78);")}>ดักของจมก่อนซื้อ — จับคู่โอน/ยืมข้ามคลัง</span></div>
+            <div style={s("display:flex;align-items:center;gap:11px;")}><span style={s("width:30px;height:30px;border-radius:8px;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;color:#E9B8FF;flex:none;")}><Lock style={s("width:15px;height:15px;")} /></span><span style={s("font-size:13px;color:rgba(255,255,255,.78);")}>เชื่อมต่อ PEA SSO ปลอดภัย</span></div>
+          </div>
+        </div>
+
+        <div style={s("position:relative;z-index:2;display:flex;gap:10px;margin-bottom:24px;")}>
+          <div style={s("flex:1;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:13px;padding:12px 14px;")}><div style={s("font-size:18px;font-weight:700;color:#fff;line-height:1;")}>฿420K</div><div style={s("font-size:10.5px;color:rgba(255,255,255,.5);margin-top:4px;")}>ประหยัดได้รอบนี้</div></div>
+          <div style={s("flex:1;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:13px;padding:12px 14px;")}><div style={s("font-size:18px;font-weight:700;color:#fff;line-height:1;")}>12</div><div style={s("font-size:10.5px;color:rgba(255,255,255,.5);margin-top:4px;")}>SKU เสี่ยงรอจัดการ</div></div>
+          <div style={s("flex:1;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:13px;padding:12px 14px;")}><div style={s("font-size:18px;font-weight:700;color:#fff;line-height:1;")}>7</div><div style={s("font-size:10.5px;color:rgba(255,255,255,.5);margin-top:4px;")}>คำขอรออนุมัติ</div></div>
+        </div>
+
+        <div style={s("position:relative;z-index:2;font-size:11.5px;color:rgba(255,255,255,.4);")}>Hackathon 2026 · by ThaiCloud · <span style={s("color:rgba(255,255,255,.62);font-weight:500;")}>Track 2</span></div>
       </div>
 
-      {isGoogleAuthEnabled() ? (
-        <Card className="mb-4 w-full">
-          <div className="flex flex-col items-center gap-3 p-5">
-            <GoogleSignInButton onProfile={onGoogleLogin} />
-            <div className="flex w-full items-center gap-3">
-              <span className="h-px flex-1 bg-slate-200" />
-              <span className="text-xs text-slate-400">หรือใช้บัญชีในระบบ</span>
-              <span className="h-px flex-1 bg-slate-200" />
-            </div>
+      {/* RIGHT FORM */}
+      <div style={s("flex:1;background:#F4F2FA;display:flex;align-items:center;justify-content:center;padding:40px;")}>
+        <div style={s("width:100%;max-width:396px;")}>
+          <button onClick={onBack} style={s("display:inline-flex;align-items:center;gap:6px;margin-bottom:18px;border:0;background:transparent;color:#7B7591;font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer;padding:0;")}><ArrowLeft style={s("width:15px;height:15px;")} /> กลับหน้าแรก</button>
+          <div style={s("margin-bottom:26px;")}>
+            <h2 style={s("margin:0 0 6px;font-size:24px;font-weight:600;color:#1C1830;letter-spacing:-.2px;")}>{title}</h2>
+            <p style={s("margin:0;font-size:13.5px;color:#7B7591;")}>{subtitle}</p>
           </div>
-        </Card>
-      ) : null}
 
-      <Card className="w-full">
-        <div className="grid grid-cols-2 border-b border-slate-200">
-          <button
-            type="button"
-            className={`py-3 text-sm font-semibold transition ${mode !== "register" ? "border-b-2 border-blue-600 text-blue-700" : "text-slate-500 hover:text-slate-700"}`}
-            onClick={() => switchMode("login")}
-          >
-            เข้าสู่ระบบ
-          </button>
-          <button
-            type="button"
-            className={`py-3 text-sm font-semibold transition ${mode === "register" ? "border-b-2 border-blue-600 text-blue-700" : "text-slate-500 hover:text-slate-700"}`}
-            onClick={() => switchMode("register")}
-          >
-            สมัครสมาชิก
-          </button>
-        </div>
+          {mode === "login" && isGoogleAuthEnabled() ? (
+            <div style={s("margin-bottom:18px;display:flex;justify-content:center;")}><GoogleSignInButton onProfile={onGoogleLogin} /></div>
+          ) : mode === "login" ? (
+            <div style={s("display:flex;align-items:center;justify-content:center;gap:10px;height:48px;border:1px solid #E0DAEF;border-radius:12px;background:#fff;color:#9B95B0;font-size:14px;font-weight:600;box-shadow:0 6px 16px -10px rgba(28,24,48,.4);margin-bottom:18px;")}>
+              <span style={s("width:22px;height:22px;border-radius:6px;background:linear-gradient(140deg,#8B2FE6,#E84AA0);display:flex;align-items:center;justify-content:center;color:#fff;flex:none;")}><Zap style={s("width:13px;height:13px;")} /></span>
+              เข้าสู่ระบบด้วย PEA SSO <span style={s("font-size:10px;color:#B45309;background:#FFFAEB;padding:2px 7px;border-radius:99px;")}>เร็วๆ นี้</span>
+            </div>
+          ) : null}
 
-        <div className="space-y-3 p-5">
-          <p className="text-base font-semibold text-slate-900">{title}</p>
+          {mode === "login" ? (
+            <div style={s("display:flex;align-items:center;gap:14px;margin-bottom:18px;")}><div style={s("flex:1;height:1px;background:#E5E1F0;")} /><span style={s("font-size:11.5px;color:#9B95B0;")}>หรือ</span><div style={s("flex:1;height:1px;background:#E5E1F0;")} /></div>
+          ) : null}
 
           {mode === "register" ? (
-            <Field label="ชื่อ-นามสกุล"><input className={inputClass} value={name} onChange={(event) => setName(event.target.value)} placeholder="เช่น คุณสมชาย ใจดี" /></Field>
+            <div style={s("margin-bottom:14px;")}>
+              <label style={labelStyle}>ชื่อ-นามสกุล</label>
+              <div style={s("position:relative;")}><User style={iconStyle} /><input value={name} onChange={(e) => setName(e.target.value)} placeholder="เช่น คุณสมชาย ใจดี" style={inputStyle("0 13px 0 40px")} /></div>
+            </div>
           ) : null}
 
-          <Field label="Username"><input className={inputClass} value={username} onChange={(event) => setUsername(event.target.value)} placeholder={mode === "login" ? "username หรือ admin" : "username"} /></Field>
-
-          <Field label={mode === "forgot" ? "รหัสผ่านใหม่" : "รหัสผ่าน"}>
-            <input type="password" className={inputClass} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="รหัสผ่าน" />
-          </Field>
-
-          {mode !== "login" ? (
-            <Field label="ยืนยันรหัสผ่าน"><input type="password" className={inputClass} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="พิมพ์รหัสผ่านอีกครั้ง" /></Field>
-          ) : null}
-
-          {error ? <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
-
-          <Button className="w-full justify-center" disabled={!canSubmit} onClick={submit}>
-            {mode === "login" ? <><User className="h-4 w-4" /> เข้าสู่ระบบ</> : mode === "register" ? <><Plus className="h-4 w-4" /> สมัครและเข้าสู่ระบบ</> : <><ShieldCheck className="h-4 w-4" /> ตั้งรหัสผ่านใหม่</>}
-          </Button>
-
-          <div className="flex items-center justify-between pt-1 text-xs">
-            {mode === "login" ? (
-              <>
-                <button type="button" className="text-blue-700 hover:underline" onClick={() => switchMode("forgot")}>ลืมรหัสผ่าน?</button>
-                <button type="button" className="text-slate-500 hover:text-slate-700 hover:underline" onClick={() => switchMode("register")}>ยังไม่มีบัญชี? สมัคร</button>
-              </>
-            ) : (
-              <button type="button" className="text-blue-700 hover:underline" onClick={() => switchMode("login")}>← กลับไปเข้าสู่ระบบ</button>
-            )}
+          <div style={s("margin-bottom:14px;")}>
+            <label style={labelStyle}>{mode === "login" ? "รหัสพนักงาน / อีเมล" : "Username"}</label>
+            <div style={s("position:relative;")}><User style={iconStyle} /><input value={username} onChange={(e) => setUsername(e.target.value)} placeholder={mode === "login" ? "username หรือ admin" : "username"} style={inputStyle("0 13px 0 40px")} /></div>
           </div>
 
-          {mode === "login" ? <p className="text-center text-xs text-slate-400">ผู้ดูแลระบบทดสอบ: admin / admin</p> : null}
-        </div>
-      </Card>
+          <div style={s("margin-bottom:14px;")}>
+            <div style={s("display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;")}>
+              <label style={s("font-size:12.5px;font-weight:500;color:#3B3654;")}>{mode === "forgot" ? "รหัสผ่านใหม่" : "รหัสผ่าน"}</label>
+              {mode === "login" ? <span onClick={() => switchMode("forgot")} style={s("font-size:11.5px;color:#7C3AED;cursor:pointer;")}>ลืมรหัสผ่าน?</span> : null}
+            </div>
+            <div style={s("position:relative;")}>
+              <Lock style={iconStyle} />
+              <input type={showPw ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="รหัสผ่าน" style={inputStyle("0 42px 0 40px")} />
+              <button type="button" onClick={() => setShowPw((v) => !v)} style={s("position:absolute;right:8px;top:50%;transform:translateY(-50%);width:32px;height:32px;border:0;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#9B95B0;")}>{showPw ? <EyeOff style={s("width:17px;height:17px;")} /> : <Eye style={s("width:17px;height:17px;")} />}</button>
+            </div>
+          </div>
 
-      <p className="mt-4 max-w-md text-center text-xs text-slate-400">
-        หมายเหตุ: ระบบ login นี้เป็น PoC เก็บใน browser ต่อเครื่อง (ยังไม่ใช่ auth จริง) อย่าใช้รหัสผ่านจริง · เวอร์ชันใช้งานจริงควรต่อ Firebase/Google เพื่อรองรับรีเซ็ตรหัสผ่านทางอีเมลและเก็บข้อมูลรวมศูนย์
-      </p>
+          {mode !== "login" ? (
+            <div style={s("margin-bottom:14px;")}>
+              <label style={labelStyle}>ยืนยันรหัสผ่าน</label>
+              <div style={s("position:relative;")}><Lock style={iconStyle} /><input type={showPw ? "text" : "password"} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="พิมพ์รหัสผ่านอีกครั้ง" style={inputStyle("0 13px 0 40px")} /></div>
+            </div>
+          ) : null}
+
+          {mode === "register" ? (
+            <div style={s("margin-bottom:18px;")}>
+              <label style={labelStyle}>ตำแหน่ง / บทบาท</label>
+              <div style={s("display:grid;grid-template-columns:repeat(2,1fr);gap:8px;")}>
+                {registerPositions.map((p) => {
+                  const on = position === p;
+                  return (
+                    <button key={p} type="button" onClick={() => setPosition(p)} style={s(`display:flex;align-items:center;gap:7px;padding:10px 11px;border-radius:11px;cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:500;text-align:left;transition:all .15s;border:1.5px solid ${on ? "#C9B0F2" : "#E5E1F0"};background:${on ? "#F4EEFE" : "#fff"};color:${on ? "#6D28D9" : "#5A5470"};`)}>
+                      <span style={s(`width:16px;height:16px;border-radius:50%;border:2px solid ${on ? "#7C3AED" : "#CFC8E0"};display:flex;align-items:center;justify-content:center;flex:none;`)}>{on ? <span style={s("width:7px;height:7px;border-radius:50%;background:#7C3AED;")} /> : null}</span>
+                      {p}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
+          {error ? <p style={s("margin:0 0 14px;border-radius:10px;background:#FEF2F2;border:1px solid #FBD5D5;padding:9px 12px;font-size:12.5px;color:#B91C1C;")}>{error}</p> : null}
+
+          <button onClick={submit} disabled={!canSubmit} style={s(`display:flex;width:100%;align-items:center;justify-content:center;gap:8px;height:50px;border:0;border-radius:13px;background:linear-gradient(135deg,#7C2DE0,#C0249B);color:#fff;font-family:inherit;font-size:15px;font-weight:600;box-shadow:0 16px 34px -12px rgba(184,40,170,.8);cursor:pointer;${canSubmit ? "" : "opacity:.5;cursor:not-allowed;"}`)}>
+            {mode === "login" ? "เข้าสู่ระบบ" : mode === "register" ? "สมัครและเข้าสู่ระบบ" : "ตั้งรหัสผ่านใหม่"} <ArrowRight style={s("width:18px;height:18px;")} />
+          </button>
+
+          {mode === "login" ? (
+            <div style={s("margin-top:20px;")}>
+              <div style={s("display:flex;align-items:center;gap:14px;margin-bottom:13px;")}><div style={s("flex:1;height:1px;background:#E5E1F0;")} /><span style={s("font-size:11px;color:#9B95B0;white-space:nowrap;")}>หรือเข้าเล่นเดโมตามบทบาท (กดเข้าเลย)</span><div style={s("flex:1;height:1px;background:#E5E1F0;")} /></div>
+              <div style={s("display:grid;grid-template-columns:repeat(2,1fr);gap:9px;margin-bottom:9px;")}>
+                {demoRoles.filter((r) => !r.god).map((r) => {
+                  const Icon = r.icon;
+                  return (
+                    <button
+                      key={r.label}
+                      type="button"
+                      onClick={() => onDemoLogin(r.user)}
+                      style={s("display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:12px;cursor:pointer;font-family:inherit;text-align:left;transition:all .15s;border:1px solid #E5E1F0;background:#fff;")}
+                    >
+                      <span style={s("width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex:none;background:#F4EEFE;color:#7C3AED;")}><Icon style={s("width:17px;height:17px;")} /></span>
+                      <span style={s("min-width:0;")}><span style={s("display:block;font-size:12.5px;font-weight:600;color:#1C1830;")}>{r.label}</span><span style={s("display:block;font-size:10.5px;color:#9B95B0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;")}>{r.sub}</span></span>
+                    </button>
+                  );
+                })}
+              </div>
+              {demoRoles.filter((r) => r.god).map((r) => {
+                const Icon = r.icon;
+                return (
+                  <button
+                    key={r.label}
+                    type="button"
+                    onClick={() => onDemoLogin(r.user)}
+                    style={s("display:flex;align-items:center;gap:11px;width:100%;padding:12px 14px;border-radius:12px;cursor:pointer;font-family:inherit;text-align:left;transition:all .15s;border:1.5px solid #C9B0F2;background:linear-gradient(135deg,#F4EEFE,#FBEAF6);box-shadow:0 8px 20px -14px rgba(124,45,224,.7);")}
+                  >
+                    <span style={s("width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex:none;background:linear-gradient(140deg,#7C2DE0,#C0249B);color:#fff;")}><Icon style={s("width:17px;height:17px;")} /></span>
+                    <span style={s("flex:1;min-width:0;")}><span style={s("display:block;font-size:13px;font-weight:700;color:#6D28D9;")}>{r.label}</span><span style={s("display:block;font-size:10.5px;color:#9B6FCF;")}>{r.sub}</span></span>
+                    <ArrowRight style={s("width:16px;height:16px;color:#7C3AED;flex:none;")} />
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+
+          {mode === "login" ? (
+            <>
+              <p style={s("text-align:center;margin:18px 0 0;font-size:12px;color:#9B95B0;")}>ยังไม่มีบัญชี? <span onClick={() => switchMode("register")} style={s("color:#7C3AED;font-weight:500;cursor:pointer;")}>สมัครสมาชิก</span></p>
+              <p style={s("text-align:center;margin:8px 0 0;font-size:11.5px;color:#B7B1C6;")}>ผู้ดูแลระบบทดสอบ: admin / admin</p>
+            </>
+          ) : (
+            <p style={s("text-align:center;margin:18px 0 0;font-size:12px;color:#9B95B0;")}><span onClick={() => switchMode("login")} style={s("color:#7C3AED;font-weight:500;cursor:pointer;")}>← กลับไปเข้าสู่ระบบ</span></p>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -4121,165 +4991,144 @@ function ReceivingDelayPage({
     });
   };
 
-  return (
-    <>
-      <PageTitle
-        eyebrow="รับของ / ตรวจรับ"
-        title="รับของ & ตรวจรับพัสดุ"
-        subtitle="บันทึกรับของเข้าคลัง + ผลตรวจรับ 7 ขั้น (คณะกรรมการ) + สาเหตุ Delay เพื่อประเมิน shortage impact และ supplier lead time รอบถัดไป"
-      />
+  const selectedSku = skus.find(s => s.id === skuId);
+  const recvFailed = inspection.some(v => !v);
+  const recvDone = inspection.every(v => v);
+  const progressPct = `${Math.round((inspection.filter(Boolean).length / inspectionSteps.length) * 100)}%`;
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-        <MetricCard
-          label="Receiving Log"
-          value={String(receiptDelayLogs.length)}
-          helper="รายการทั้งหมด"
-          formula={`นับ Receiving/Delay log ที่บันทึกใน persistent JSON state = ${receiptDelayLogs.length}`}
-          changes="บันทึกรับของหรือ Delay ใหม่"
-        />
-        <MetricCard
-          label="รายการ Delay"
-          value={String(delayedLogs.length)}
-          helper="delayDays > 0"
-          tone="red"
-          formula={`นับ log ที่ actual date มากกว่า planned date = ${delayedLogs.length}`}
-          changes="บันทึกวันที่รับจริงหรือวันที่คาดว่าจะได้รับใหม่"
-        />
-        <MetricCard
-          label="Impact Demand รวม"
-          value={formatNumber(totalImpactDemand, 0)}
-          helper="หน่วยรวมตาม SKU"
-          tone="yellow"
-          formula={`ผลรวม Average Daily Demand × Delay Days ของทุก log = ${formatNumber(totalImpactDemand, 0)}`}
-          changes="เพิ่ม log delay หรือแก้ค่า demand/lead time"
-        />
-        <MetricCard
-          label="Impact รอบนี้"
-          value={formatNumber(impactDemand, 2)}
-          helper={`Delay ${delayDays} วัน`}
-          tone={delayDays > 0 ? "yellow" : "green"}
-          formula={`Average Daily Demand ของ ${skuId} × max(${delayDays}, 0) วัน = ${formatNumber(impactDemand, 2)}`}
-          changes="เลือก SKU/Request หรือวันที่รับจริงเปลี่ยน"
-        />
+  return (
+    <div>
+      <div style={s("display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:18px;")}>
+        <div>
+          <div style={s("display:flex;align-items:center;gap:10px;margin-bottom:5px;")}>
+            <h1 style={s("margin:0;font-size:23px;font-weight:600;letter-spacing:-.2px;color:#1C1830;")}>ตรวจรับพัสดุ</h1>
+            <span style={s("display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#5B21B6;background:#F1EBFE;border:1px solid #E4D7FB;padding:3px 9px;border-radius:99px;")}><Scale style={s("width:13px;height:13px;")} /> พ.ร.บ. จัดซื้อจัดจ้างฯ 2560</span>
+          </div>
+          <p style={s("margin:0;font-size:13.5px;color:#7B7591;")}>คณะกรรมการตรวจรับ ดำเนินการ {inspectionSteps.length} ขั้น — ผ่าน → รับเข้าคลัง + เบิกจ่าย · ไม่ผ่าน → แจ้งคู่สัญญา</p>
+        </div>
+        <button onClick={() => setInspection(inspectionSteps.map(() => true))} style={s("display:flex;align-items:center;gap:6px;height:38px;padding:0 13px;border:1px solid #E5E1F0;border-radius:10px;background:#fff;color:#3B3654;font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer;")}><RefreshCcw style={s("width:14px;height:14px;color:#7C3AED;")} /> เริ่มตรวจใหม่</button>
       </div>
 
-      <Card className="mt-5">
-        <SectionHeader title="บันทึกรับของเข้าคลังและสาเหตุ Delay" subtitle="ข้อมูลนี้เป็น feedback loop ให้สูตรคำนวณ Lead Time และการคาดการณ์ขาดสต็อกตามฤดูกาล" />
-        <div className="grid grid-cols-1 gap-4 p-5 md:grid-cols-2 xl:grid-cols-3">
-          <Field label="อ้างอิงคำขอซื้อ">
-            <select className={inputClass} value={relatedRequestId} onChange={(event) => setRelatedRequestId(event.target.value)}>
-              <option value="">ไม่ผูกกับคำขอซื้อ</option>
-              {requests.map((request) => <option key={request.id} value={request.id}>{request.id} · {request.skuId} · {request.status}</option>)}
-            </select>
-          </Field>
-          <Field label="SKU">
-            <select className={inputClass} value={skuId} onChange={(event) => setSkuId(event.target.value)}>
-              {skus.map((sku) => <option key={sku.id} value={sku.id}>{sku.id} · {sku.name}</option>)}
-            </select>
-          </Field>
-          <Field label="คลังรับเข้า">
-            <select className={inputClass} value={warehouseId} onChange={(event) => setWarehouseId(event.target.value)}>
-              {warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.id} · {warehouse.name}</option>)}
-            </select>
-          </Field>
-          <Field label="ซัพพลายเออร์">
-            <select className={inputClass} value={supplierId} onChange={(event) => setSupplierId(event.target.value)}>
-              {suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.id} · {supplier.name}</option>)}
-            </select>
-          </Field>
-          <Field label="วันที่คาดว่าจะได้รับ">
-            <input className={inputClass} type="date" value={plannedReceiveDate} onChange={(event) => setPlannedReceiveDate(event.target.value)} />
-          </Field>
-          <Field label="วันที่รับจริง">
-            <input className={inputClass} type="date" value={actualReceiveDate} onChange={(event) => setActualReceiveDate(event.target.value)} />
-          </Field>
-          <Field label="สาเหตุ Delay">
-            <select className={inputClass} value={reasonCategory} onChange={(event) => setReasonCategory(event.target.value)}>
-              {delayReasonOptions.map((reason) => <option key={reason}>{reason}</option>)}
-            </select>
-          </Field>
-          <div className="md:col-span-2">
-            <Field label="หมายเหตุ">
-              <textarea className={textareaClass} value={note} onChange={(event) => setNote(event.target.value)} />
-            </Field>
-          </div>
-          <div className="flex items-end gap-2">
-            <Button className="flex-1" onClick={saveLog}>
-              <PackageCheck className="h-4 w-4" />
-              บันทึกรับของ / Delay
-            </Button>
-            {relatedRequestId ? (
-              <Button variant="secondary" onClick={() => onOpenRequestHistory(relatedRequestId)}>
-                <History className="h-4 w-4" /> เปิดคำขอในประวัติ
-              </Button>
-            ) : null}
-          </div>
+      <div style={s("display:flex;align-items:center;gap:16px;background:#fff;border:1px solid #EBE7F5;border-radius:14px;padding:14px 18px;margin-bottom:16px;box-shadow:0 12px 28px -24px rgba(28,24,48,.4);")}>
+        <span style={s("width:44px;height:44px;border-radius:11px;background:#F4EEFE;color:#7C3AED;display:flex;align-items:center;justify-content:center;flex:none;")}><Zap style={s("width:21px;height:21px;")} /></span>
+        <div style={s("flex:1;min-width:0;")}>
+          <div style={s("font-size:14px;font-weight:600;color:#1C1830;")}>{selectedSku?.name ?? skuId}</div>
+          <div className="mono" style={s("font-size:11px;color:#A29DB5;margin-top:2px;")}>{relatedRequestId || "ไม่ผูกคำขอ"} · {supplierId} · ส่งมอบคลัง {warehouseId}</div>
         </div>
-        <div className="border-t border-slate-100 px-5 py-3">
-          <p className="text-xs text-slate-500">
-            ขั้นต่อไป: หลังบันทึก Delay ระบบใช้ Impact Demand เป็น feedback ปรับ Lead Time/ความเสี่ยงรอบถัดไป — กด “เปิดคำขอในประวัติ” เพื่อดู snapshot ของคำขอที่เกี่ยว หรือ “ดู SKU” เพื่อตรวจสถานะสต็อกปัจจุบัน
-          </p>
+        <div style={s("display:flex;gap:26px;flex:none;")}>
+          <div style={s("text-align:right;")}><div style={s("font-size:10.5px;color:#9B95B0;")}>Delay</div><div style={s("font-size:13.5px;font-weight:600;color:#B45309;")}>{delayDays > 0 ? `${delayDays} วัน` : "ไม่มี"}</div></div>
+          <div style={s("text-align:right;")}><div style={s("font-size:10.5px;color:#9B95B0;")}>ความคืบหน้า</div><div style={s("font-size:13.5px;font-weight:600;color:#6D28D9;")}>ขั้น {inspection.filter(Boolean).length} / {inspectionSteps.length}</div></div>
         </div>
-      </Card>
+      </div>
 
-      <Card className="mt-5">
-        <SectionHeader title="ตรวจรับพัสดุ (7 ขั้น โดยคณะกรรมการตรวจรับ)" subtitle="ตามระเบียบ พ.ร.บ. การจัดซื้อจัดจ้างฯ พ.ศ. 2560 — กดผ่าน/ไม่ผ่านแต่ละขั้น (ไม่ผ่าน 1 ขั้น = ต้องแจ้งคู่สัญญา)" />
-        <div className="space-y-2 p-5">
-          {inspectionSteps.map((step, i) => (
-            <div key={i} className="flex flex-col gap-2 rounded-md border border-slate-200 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-              <span className="flex items-center gap-2 text-sm text-slate-700">
-                <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-500">{i + 1}</span>
-                {step}
-              </span>
-              <div className="flex shrink-0 gap-1">
-                <button type="button" onClick={() => setInspection((prev) => prev.map((v, idx) => (idx === i ? true : v)))} className={`rounded-md px-3 py-1 text-xs font-semibold transition ${inspection[i] ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>ผ่าน</button>
-                <button type="button" onClick={() => setInspection((prev) => prev.map((v, idx) => (idx === i ? false : v)))} className={`rounded-md px-3 py-1 text-xs font-semibold transition ${!inspection[i] ? "bg-red-600 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>ไม่ผ่าน</button>
+      <div style={s("height:7px;border-radius:99px;background:#EDE9F7;margin-bottom:16px;overflow:hidden;")}><div style={{height:"100%",borderRadius:"99px",background:"linear-gradient(90deg,#7C3AED,#6D28D9)",width:progressPct,transition:"width .35s"}}></div></div>
+
+      <div style={s("display:flex;align-items:center;gap:14px;background:linear-gradient(100deg,#FBF4FF,#FCE9F5);border:1px solid #E6D8FB;border-radius:14px;padding:13px 17px;margin-bottom:18px;")}>
+        <span style={s("width:38px;height:38px;border-radius:10px;background:#fff;border:1px solid #E6D8FB;color:#7C3AED;display:flex;align-items:center;justify-content:center;flex:none;")}><Sparkles style={s("width:18px;height:18px;")} /></span>
+        <div style={s("flex:1;min-width:0;font-size:12px;color:#6B6483;line-height:1.5;")}><b style={s("color:#5B21B6;")}>AI ช่วยตรวจรับ:</b> ของน้อย → แนะนำ <b style={s("color:#3B1170;")}>ตรวจนับทั้งหมด</b> · ราคาต่อหน่วยใกล้เคียงตลาด · <b style={s("color:#B45309;")}>ขั้น 5: ตรวจใบรับรอง Type Test/มอก. — เน้นเป็นพิเศษ</b></div>
+      </div>
+
+      <div style={s("display:grid;grid-template-columns:1.55fr 1fr;gap:18px;align-items:start;")}>
+        <div style={s("display:flex;flex-direction:column;gap:10px;")}>
+          {inspectionSteps.map((step, i) => {
+            const passed = inspection[i];
+            const cardBg = passed ? "display:flex;align-items:flex-start;gap:13px;background:#F0FDF4;border:1px solid #D1FAE5;border-radius:13px;padding:13px 15px;" : "display:flex;align-items:flex-start;gap:13px;background:#FEF2F2;border:1px solid #FBD5D5;border-left:3px solid #DC2626;border-radius:13px;padding:13px 15px;";
+            const markBg = passed ? "background:#059669;" : "background:#DC2626;";
+            const tagBg = passed ? "color:#059669;background:#D1FAE5;border:1px solid #A7F3D0;" : "color:#DC2626;background:#FEE2E2;border:1px solid #FCA5A5;";
+            return (
+              <div key={i} style={s(cardBg)}>
+                <div style={s(`width:28px;height:28px;border-radius:50%;${markBg}color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex:none;`)}>{passed ? <Check style={s("width:13px;height:13px;")} /> : i + 1}</div>
+                <div style={s("flex:1;min-width:0;")}>
+                  <div style={s("display:flex;align-items:center;justify-content:space-between;gap:8px;")}>
+                    <span style={s("font-size:13px;font-weight:600;color:#1C1830;line-height:1.4;")}>{step}</span>
+                    <span style={s(`font-size:10px;font-weight:600;padding:2px 8px;border-radius:99px;${tagBg}`)}>{passed ? "ผ่าน" : "ไม่ผ่าน"}</span>
+                  </div>
+                  <div style={s("display:flex;gap:8px;margin-top:9px;")}>
+                    <button onClick={() => setInspection(p => p.map((v, idx) => idx === i ? true : v))} style={s(`display:flex;align-items:center;gap:5px;height:32px;padding:0 12px;border:0;border-radius:9px;background:#059669;color:#fff;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;${passed ? "" : "opacity:0.7;"}`)}>
+                      <Check style={s("width:13px;height:13px;")} /> ผ่าน
+                    </button>
+                    <button onClick={() => setInspection(p => p.map((v, idx) => idx === i ? false : v))} style={s(`height:32px;padding:0 12px;border:1px solid #FBD5D5;border-radius:9px;background:#fff;color:#DC2626;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;${passed ? "opacity:0.6;" : ""}`)}>ไม่ผ่าน</button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          {recvFailed && (
+            <div style={s("display:flex;align-items:flex-start;gap:13px;background:#fff;border:1px solid #FBD5D5;border-left:4px solid #DC2626;border-radius:13px;padding:15px 17px;")}>
+              <span style={s("width:38px;height:38px;border-radius:10px;background:#FEF2F2;color:#DC2626;display:flex;align-items:center;justify-content:center;flex:none;")}><AlertOctagon style={s("width:18px;height:18px;")} /></span>
+              <div style={s("flex:1;")}>
+                <div style={s("font-size:13.5px;font-weight:600;color:#991B1B;")}>บางขั้นไม่ผ่าน — ออกหนังสือแจ้งคู่สัญญา</div>
+                <div style={s("font-size:12px;color:#6B6483;margin-top:3px;line-height:1.55;")}>ระบบจะบันทึก Delay + Impact Demand เข้า feedback รอบถัดไป พร้อมหัก reliability score</div>
+                <div style={s("display:flex;gap:9px;margin-top:11px;")}>
+                  <button style={s("height:34px;padding:0 14px;border:0;border-radius:9px;background:#DC2626;color:#fff;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;")}>ร่างหนังสือแจ้ง</button>
+                  <button onClick={() => setInspection(inspectionSteps.map(() => true))} style={s("height:34px;padding:0 14px;border:1px solid #E5E1F0;border-radius:9px;background:#fff;color:#3B3654;font-family:inherit;font-size:12px;font-weight:500;cursor:pointer;")}>ตรวจซ้ำหลังแก้ไข</button>
+                </div>
               </div>
             </div>
-          ))}
-          <div className={`mt-1 flex flex-col gap-1 rounded-md px-3 py-2 text-sm font-semibold sm:flex-row sm:items-center sm:justify-between ${inspectionResult === "ผ่าน" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>
-            <span>ผลตรวจรับ: {inspectionResult}</span>
-            <span className="text-xs font-normal">{inspectionResult === "ผ่าน" ? "→ รับเข้าคลัง + เบิกจ่าย" : "→ ออกหนังสือแจ้งคู่สัญญาให้แก้ไข/ส่งใหม่"}</span>
-          </div>
-          <p className="text-xs text-slate-500">ผลตรวจรับนี้จะถูกบันทึกพร้อมข้อมูลรับของด้านบนเมื่อกด “บันทึกรับของ / Delay”</p>
+          )}
+          {recvDone && (
+            <div style={s("display:flex;align-items:flex-start;gap:13px;background:linear-gradient(100deg,#F0FDF9,#ECFDF5);border:1px solid #A7F3D0;border-radius:14px;padding:16px 18px;")}>
+              <span style={s("width:42px;height:42px;border-radius:11px;background:#059669;color:#fff;display:flex;align-items:center;justify-content:center;flex:none;box-shadow:0 8px 16px -8px rgba(5,150,105,.6);")}><PackageCheck style={s("width:20px;height:20px;")} /></span>
+              <div style={s("flex:1;")}>
+                <div style={s("font-size:14px;font-weight:600;color:#0F7B53;")}>ตรวจรับครบทุกขั้น — รับเข้าคลังสำเร็จ</div>
+                <div style={s("font-size:12px;color:#3F6B57;margin-top:3px;line-height:1.55;")}>ลงทะเบียนคุมพัสดุ + อัปเดต on-hand คลัง {warehouseId} → <b>Current Stock ตรงจริง AI Suggest แม่นขึ้น</b></div>
+                <button onClick={saveLog} style={s("display:inline-flex;align-items:center;gap:7px;margin-top:10px;height:36px;padding:0 16px;border:0;border-radius:10px;background:#059669;color:#fff;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;")}><PackageCheck style={s("width:15px;height:15px;")} /> บันทึกรับเข้าคลัง</button>
+              </div>
+            </div>
+          )}
         </div>
-      </Card>
 
-      <Card className="mt-5">
-        <SectionHeader title="Receiving & Delay History" subtitle="ใช้ย้อนดูว่า Supplier หรือกระบวนการใดทำให้ส่งช้า และกระทบ demand ระหว่างรอของเท่าไร" />
-        <DataTable columns={["วันที่บันทึก", "SKU", "คลัง", "Supplier", "Plan", "Actual", "Delay", "Impact Demand", "ตรวจรับ", "สาเหตุ", "หมายเหตุ", "ดำเนินการ"]} empty={receiptDelayLogs.length === 0}>
-          {receiptDelayLogs.map((log) => (
-            <tr key={log.id} className="hover:bg-slate-50">
-              <td className="px-4 py-3 font-semibold text-slate-900">{log.id}<br /><span className="text-xs font-normal text-slate-500">{log.createdAt}</span></td>
-              <td className="px-4 py-3">{log.skuId}</td>
-              <td className="px-4 py-3">{log.warehouseId}</td>
-              <td className="px-4 py-3">{log.supplierId}</td>
-              <td className="px-4 py-3">{log.plannedReceiveDate}</td>
-              <td className="px-4 py-3">{log.actualReceiveDate}</td>
-              <td className={`px-4 py-3 font-semibold ${log.delayDays > 0 ? "text-red-700" : "text-emerald-700"}`}>{log.delayDays} วัน</td>
-              <td className="px-4 py-3">{formatNumber(log.impactDemand, 2)}</td>
-              <td className="px-4 py-3">
-                {log.inspectionResult ? (
-                  <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${log.inspectionResult === "ผ่าน" ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : "bg-red-50 text-red-700 ring-red-200"}`}>{log.inspectionResult}</span>
-                ) : (
-                  <span className="text-xs text-slate-400">-</span>
-                )}
-              </td>
-              <td className="px-4 py-3">{log.reasonCategory}</td>
-              <td className="min-w-72 px-4 py-3 text-sm leading-6 text-slate-600">{log.note}</td>
-              <td className="px-4 py-3">
-                <div className="flex gap-2">
-                  {log.relatedRequestId ? (
-                    <Button variant="secondary" onClick={() => onOpenRequestHistory(log.relatedRequestId)}><History className="h-4 w-4" /> ดูคำขอ</Button>
-                  ) : null}
-                  <Button variant="ghost" onClick={() => onOpenSku(log.skuId)}>ดู SKU</Button>
+        <div style={s("display:flex;flex-direction:column;gap:16px;")}>
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:16px 18px;box-shadow:0 14px 30px -24px rgba(28,24,48,.3);")}>
+            <h2 style={s("margin:0 0 12px;font-size:14px;font-weight:600;color:#1C1830;")}>คณะกรรมการตรวจรับ</h2>
+            <div style={s("display:flex;flex-direction:column;gap:10px;")}>
+              {[{initials:"ปก",name:"ปกรณ์ วัฒนกุล",role:"ประธานกรรมการ",bg:"linear-gradient(135deg,#C4B5FD,#7C3AED)"},
+                {initials:"สม",name:"สมหญิง ใจดี",role:"กรรมการ · จนท.คลัง",bg:"linear-gradient(135deg,#A7F3D0,#059669)"},
+                {initials:"ธน",name:"ธนา ศรีสุข",role:"กรรมการ/เลขานุการ",bg:"linear-gradient(135deg,#BFDBFE,#2563EB)"}
+              ].map((m, i) => (
+                <div key={i} style={s("display:flex;align-items:center;gap:11px;")}>
+                  <span style={{width:32,height:32,borderRadius:"50%",background:m.bg,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:600,flex:"none"} as CSSProperties}>{m.initials}</span>
+                  <div style={s("flex:1;")}><div style={s("font-size:12.5px;font-weight:500;color:#1C1830;")}>{m.name}</div><div style={s("font-size:10.5px;color:#9B95B0;")}>{m.role}</div></div>
                 </div>
-              </td>
-            </tr>
-          ))}
-        </DataTable>
-      </Card>
-    </>
+              ))}
+            </div>
+          </div>
+
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:16px 18px;box-shadow:0 14px 30px -24px rgba(28,24,48,.3);")}>
+            <h2 style={s("margin:0 0 12px;font-size:14px;font-weight:600;color:#1C1830;")}>เอกสารแนบจากคู่สัญญา</h2>
+            <div style={s("display:flex;flex-direction:column;gap:8px;")}>
+              {[{ok:true,text:"ใบส่งของ + Packing List"},{ok:true,text:"ใบกำกับภาษี"},{ok:true,text:"สำเนา PO / สัญญา"},{ok:false,text:"ใบรับรอง Type Test / มอก. / PPA"}].map((d,i) => (
+                <div key={i} style={s(`display:flex;align-items:center;gap:9px;font-size:12px;${d.ok ? "color:#5A5470;" : "color:#B45309;font-weight:500;"}`)}>{d.ok ? <CheckCircle2 style={s("width:15px;height:15px;color:#059669;")} /> : <AlertTriangle style={s("width:15px;height:15px;color:#D97706;")} />} {d.text}</div>
+              ))}
+            </div>
+          </div>
+
+          <div style={s("background:#FFFBEB;border:1px solid #FBE3A2;border-radius:16px;padding:15px 17px;")}>
+            <div style={s("display:flex;align-items:flex-start;gap:9px;")}><Hand style={s("width:16px;height:16px;color:#B45309;margin-top:1px;")} /><div><div style={s("font-size:12.5px;font-weight:600;color:#92400E;")}>Delay & Impact Demand</div><div style={s("font-size:11px;color:#9A7B3F;margin-top:3px;line-height:1.55;")}>ถ้ารับช้า/ไม่ครบ: Impact = Avg Daily Demand × Delay Days ป้อนกลับให้สูตรประเมินความเสี่ยง shortage รอบถัดไป</div>{delayDays > 0 && <div style={s("margin-top:7px;font-size:12.5px;font-weight:600;color:#B45309;")} className="mono">Delay {delayDays} วัน → Impact {formatNumber(impactDemand, 2)} หน่วย</div>}</div></div>
+          </div>
+
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:14px;padding:14px 16px;")}>
+            <div style={s("font-size:12.5px;font-weight:600;color:#1C1830;margin-bottom:11px;")}>บันทึกรับของ</div>
+            <div style={s("display:flex;flex-direction:column;gap:8px;")}>
+              <div><label style={s("font-size:11px;color:#7B7591;display:block;margin-bottom:3px;")}>วันที่คาดรับ</label><input type="date" value={plannedReceiveDate} onChange={e => setPlannedReceiveDate(e.target.value)} style={s("width:100%;height:36px;padding:0 10px;border:1px solid #E5E1F0;border-radius:9px;background:#fff;font-family:inherit;font-size:12.5px;color:#1C1830;outline:none;box-sizing:border-box;")} /></div>
+              <div><label style={s("font-size:11px;color:#7B7591;display:block;margin-bottom:3px;")}>วันที่รับจริง</label><input type="date" value={actualReceiveDate} onChange={e => setActualReceiveDate(e.target.value)} style={s("width:100%;height:36px;padding:0 10px;border:1px solid #E5E1F0;border-radius:9px;background:#fff;font-family:inherit;font-size:12.5px;color:#1C1830;outline:none;box-sizing:border-box;")} /></div>
+              <div><label style={s("font-size:11px;color:#7B7591;display:block;margin-bottom:3px;")}>สาเหตุ</label><select value={reasonCategory} onChange={e => setReasonCategory(e.target.value)} style={s("width:100%;height:36px;padding:0 10px;border:1px solid #E5E1F0;border-radius:9px;background:#fff;font-family:inherit;font-size:12.5px;color:#1C1830;outline:none;box-sizing:border-box;")}>{delayReasonOptions.map(r => <option key={r}>{r}</option>)}</select></div>
+              <button onClick={saveLog} style={s("width:100%;height:38px;border:0;border-radius:10px;background:linear-gradient(135deg,#6D28D9,#C0249B);color:#fff;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;margin-top:4px;")}>บันทึกรับของ / Delay</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {receiptDelayLogs.length > 0 && (
+        <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;margin-top:18px;box-shadow:0 14px 30px -24px rgba(28,24,48,.3);overflow:hidden;")}>
+          <div style={s("padding:14px 18px;border-bottom:1px solid #F1EEF8;")}><h2 style={s("margin:0;font-size:14px;font-weight:600;color:#1C1830;")}>Receiving & Delay History ({receiptDelayLogs.length} รายการ)</h2></div>
+          <div style={s("overflow-x:auto;")}><table style={s("width:100%;border-collapse:collapse;font-size:12.5px;min-width:700px;")}><thead><tr style={s("background:#FAF9FD;")}><th style={s("text-align:left;font-size:10.5px;font-weight:600;color:#9B95B0;text-transform:uppercase;padding:9px 16px;")}>วันที่</th><th style={s("text-align:left;font-size:10.5px;font-weight:600;color:#9B95B0;text-transform:uppercase;padding:9px 12px;")}>SKU / คลัง</th><th style={s("text-align:right;font-size:10.5px;font-weight:600;color:#9B95B0;text-transform:uppercase;padding:9px 12px;")}>Delay</th><th style={s("text-align:right;font-size:10.5px;font-weight:600;color:#9B95B0;text-transform:uppercase;padding:9px 12px;")}>Impact</th><th style={s("text-align:left;font-size:10.5px;font-weight:600;color:#9B95B0;text-transform:uppercase;padding:9px 12px;")}>ตรวจรับ</th><th style={s("padding:9px 12px;")}></th></tr></thead>
+            <tbody>{receiptDelayLogs.map(log => (<tr key={log.id} className="dash-row" style={s("border-top:1px solid #F4F2FA;")}><td style={s("padding:11px 16px;font-weight:500;color:#1C1830;")}>{log.createdAt}</td><td style={s("padding:11px 12px;")}><div style={s("font-weight:500;color:#1C1830;")}>{log.skuId}</div><div className="mono" style={s("font-size:10px;color:#A29DB5;")}>{log.warehouseId} · {log.supplierId}</div></td><td style={s(`padding:11px 12px;text-align:right;font-weight:600;${log.delayDays > 0 ? "color:#B91C1C;" : "color:#059669;"}`)} className="mono">{log.delayDays} วัน</td><td style={s("padding:11px 12px;text-align:right;color:#1C1830;")} className="mono">{formatNumber(log.impactDemand, 2)}</td><td style={s("padding:11px 12px;")}>{log.inspectionResult ? <span style={s(`font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:99px;${log.inspectionResult === "ผ่าน" ? "color:#059669;background:#D1FAE5;border:1px solid #A7F3D0;" : "color:#DC2626;background:#FEE2E2;border:1px solid #FCA5A5;"}`)}>{log.inspectionResult}</span> : <span style={s("color:#9B95B0;font-size:11px;")}>—</span>}</td><td style={s("padding:11px 12px;")}><button onClick={() => onOpenSku(log.skuId)} style={s("height:28px;padding:0 10px;border:1px solid #E5E1F0;border-radius:8px;background:#fff;color:#5A5470;font-family:inherit;font-size:11px;cursor:pointer;")}>ดู SKU</button></td></tr>))}</tbody>
+          </table></div>
+        </div>
+      )}
+    </div>
+
   );
 }
 
@@ -4719,186 +5568,158 @@ function SkuDetailPage({
   const transferSuggestion = buildTransferSuggestions(supplierOfferData, formulaPolicy).find((suggestion) => suggestion.skuId === sku.id && suggestion.destinationWarehouseId === record.warehouseId);
   const skuHoldings = getSkuHoldingsByWarehouse(sku.id);
 
+  const usagePeriods = record.historicalUsage.slice(-6);
+  const usageMax = Math.max(...usagePeriods.map((period) => period.quantity), 1);
+  const usagePeakIndex = usagePeriods.reduce((best, period, index) => (period.quantity > usagePeriods[best].quantity ? index : best), 0);
+  const usageAvg = usagePeriods.length > 0 ? usagePeriods.reduce((sum, period) => sum + period.quantity, 0) / usagePeriods.length : 0;
+  const offerMinPrice = offers.length > 0 ? Math.min(...offers.map((offer) => offer.unitPrice)) : 0;
+  const offerMinLt = offers.length > 0 ? Math.min(...offers.map((offer) => offer.leadTimeDays)) : 0;
+  const offerMaxLt = offers.length > 0 ? Math.max(...offers.map((offer) => offer.leadTimeDays)) : 0;
+
   return (
-    <>
-      <PageTitle
-        eyebrow="คลังพัสดุ / รายละเอียด SKU"
-        title={`${sku.id} ${sku.name}`}
-        subtitle={`${warehouse.id} ${warehouse.name} · ${regionLabels[warehouse.region]} · ใช้พื้นที่คลัง ${warehouse.capacityUsed}%`}
-        action={<Button variant="secondary" onClick={onBack}><ArrowLeft className="h-4 w-4" /> ย้อนกลับ</Button>}
-      />
+    <div data-screen-label="SKU Detail">
+      <button onClick={onBack} style={s("display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;color:#7B7591;font-family:inherit;font-size:12.5px;cursor:pointer;padding:0;margin-bottom:14px;")}><ArrowLeft style={s("width:15px;height:15px;")} /> กลับแดชบอร์ด</button>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
-        <MetricCard
-          label="สต็อกปัจจุบัน"
-          value={`${formatNumber(record.currentStock)} ${sku.unit}`}
-          helper="คงเหลือ"
-          formula={`อ่านจาก Inventory record ของ ${record.warehouseId}/${sku.id} = ${formatNumber(record.currentStock)} ${sku.unit}`}
-          changes="มี stock movement, import stock ใหม่ หรือแก้ inventory input ของ SKU นี้"
-        />
-        <MetricCard
-          label="ค่าเฉลี่ยการใช้ต่อวัน"
-          value={`${formatNumber(recommendation.averageDailyDemand)} ${sku.unit}`}
-          helper="ต่อวัน"
-          formula={`${formatNumber(recommendation.historicalUsageTotal)} ${sku.unit} / ${recommendation.historicalUsageDays} วัน = ${formatNumber(recommendation.averageDailyDemand)} ${sku.unit}/วัน`}
-          changes="ข้อมูลการใช้ย้อนหลังหรือจำนวนวันย้อนหลังเปลี่ยน"
-        />
-        <MetricCard
-          label="ระดับพัสดุสำรองปลอดภัย"
-          value={`${formatNumber(recommendation.safetyStock)} ${sku.unit}`}
-          helper="กันความเสี่ยงขาดสต็อก"
-          tone="green"
-          formula={`${formatNumber(recommendation.zScore)} × ${formatNumber(recommendation.demandVariabilityPerDay)} × √${formatNumber(recommendation.adjustedLeadTimeDays)} ≈ ${formatNumber(recommendation.safetyStock)} ${sku.unit}`}
-          changes="Service Level, Demand Variability, Lead Time หรือ factor ใน Settings เปลี่ยน"
-        />
-        <MetricCard
-          label="จุดสั่งซื้อใหม่"
-          value={`${formatNumber(recommendation.reorderPoint)} ${sku.unit}`}
-          helper="จุดเริ่มจัดซื้อ"
-          tone="red"
-          formula={`${formatNumber(recommendation.demandDuringLeadTime)} ${sku.unit} + ${formatNumber(recommendation.safetyStock)} ${sku.unit} = ${formatNumber(reorderPointRaw)} ${sku.unit}; ปัดเป็น ${formatNumber(recommendation.reorderPoint)} ${sku.unit}`}
-          changes="ค่าเฉลี่ยการใช้ต่อวัน, Adjusted Lead Time หรือ Safety Stock เปลี่ยน"
-        />
-        <MetricCard
-          label="ความต้องการคาดการณ์"
-          value={`${formatNumber(recommendation.forecastDemandForPlanningPeriod)} ${sku.unit}`}
-          helper="รอบแผน"
-          formula={`อ่านจาก forecastDemandForPlanningPeriod ของ ${sku.id} = ${formatNumber(recommendation.forecastDemandForPlanningPeriod)} ${sku.unit} ใน ${recommendation.planningPeriodDays} วัน`}
-          changes="forecast, planning period หรือข้อมูล demand รอบใหม่เปลี่ยน"
-        />
-        <MetricCard
-          label="จำนวนที่ระบบแนะนำ"
-          value={`${formatNumber(recommendation.suggestedQuantity)} ${sku.unit}`}
-          helper="AI"
-          tone="blue"
-          formula={`${formatNumber(recommendation.targetStockLevel)} - ${formatNumber(record.currentStock)} = ${formatNumber(rawSuggestedQuantity)} ${sku.unit}; ปัดตาม MOQ ${formatNumber(recommendation.moq)} เป็น ${formatNumber(recommendation.suggestedQuantity)} ${sku.unit}`}
-          changes="Target Stock, Current Stock, MOQ หรือ policy สูตรเปลี่ยน"
-        />
-      </div>
-      <div className="mt-3 flex justify-end">
-        <Button variant="secondary" onClick={() => setShowExplanation((current) => !current)}>
-          <Calculator className="h-4 w-4" />
-          ทำไมระบบแนะนำค่านี้?
-        </Button>
-      </div>
-      {showExplanation ? (
-        <div className="mt-4">
-          <CalculationExplanationPanel
-            inventory={record}
-            supplier={primarySupplierRecord}
-            recommendation={recommendation}
-            budget={budget}
-            onClose={() => setShowExplanation(false)}
-          />
+      <div style={s("display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:20px;")}>
+        <div style={s("min-width:0;")}>
+          <div style={s("display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap;")}>
+            <h1 style={s("margin:0;font-size:23px;font-weight:600;letter-spacing:-.2px;color:#1C1830;")}>{sku.name}</h1>
+            <DashPill status={record.status} />
+          </div>
+          <div style={s("display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px;color:#7B7591;")}>
+            <span className="mono" style={s("color:#6D28D9;background:#F4EEFE;padding:2px 8px;border-radius:6px;font-size:11.5px;")}>{sku.id}</span>
+            <span>หมวด {sku.category}</span><span style={s("color:#D5D0E3;")}>·</span>
+            <span>คลัง {warehouse.id} · {regionLabels[warehouse.region]}</span><span style={s("color:#D5D0E3;")}>·</span>
+            <span>ความสำคัญ <b style={s("color:#5A5470;")}>{sku.criticality}</b></span><span style={s("color:#D5D0E3;")}>·</span>
+            <span>หน่วย {sku.unit}</span>
+          </div>
         </div>
-      ) : null}
-      <div className="mt-4">
-        <DataCoverageCard coverage={dataCoverage} warnings={coverageWarnings} />
+        <div style={s("display:flex;gap:10px;flex:none;")}>
+          <button onClick={onTransfer} style={s("display:flex;align-items:center;gap:7px;height:40px;padding:0 15px;border:1px solid #E5E1F0;border-radius:11px;background:#fff;color:#3B3654;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;")}><ArrowRightLeft style={s("width:16px;height:16px;color:#7C3AED;")} /> โอน/ยืมแทน</button>
+          <button onClick={() => onCreateRequest(primarySupplier.id)} style={s("display:flex;align-items:center;gap:7px;height:40px;padding:0 16px;border:0;border-radius:11px;background:linear-gradient(135deg,#6D28D9,#C0249B);color:#fff;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;box-shadow:0 8px 18px -8px rgba(109,40,217,.7);")}><FileText style={s("width:16px;height:16px;")} /> สร้างคำขอซื้อ</button>
+        </div>
       </div>
-      <div className="mt-4">
-        <PeaRelationshipInsightCard
-          coverage={dataCoverage}
-          relationshipRecord={relationshipRecord}
-          skuLeadTimeSummary={skuLeadTimeSummary}
-          supplierLeadTimeDays={primarySupplierRecord.leadTimeDays}
-        />
-      </div>
-      {skuHoldings.length > 0 ? (
-        <Card className="mt-4">
-          <SectionHeader
-            title={`การถือครอง ${sku.id} รายคลัง`}
-            subtitle="ดูว่า SKU นี้ถูกถือครองที่คลังไหนบ้าง คลังไหนของจม และคลังไหนกำลังขาด เพื่อช่วยตัดสินใจโอน/ยืมก่อนซื้อใหม่"
-          />
-          <DataTable columns={["คลัง", "เขต", "คงคลัง", "ใช้เฉลี่ย/เดือน", "Stock Cover", "สถานะ"]} empty={skuHoldings.length === 0}>
-            {skuHoldings.map((holding) => (
-              <tr key={holding.warehouseId} className="hover:bg-slate-50">
-                <td className="px-4 py-3 font-semibold text-slate-900">{holding.warehouseId}</td>
-                <td className="px-4 py-3">{holding.regionLabel}</td>
-                <td className="px-4 py-3">{formatNumber(holding.stockQty, 0)} {holding.unit}</td>
-                <td className="px-4 py-3">{holding.avgMonthlyUsage !== null ? `${formatNumber(holding.avgMonthlyUsage, 0)} ${holding.unit}` : "—"}</td>
-                <td className="px-4 py-3">{holding.stockCoverPeriods !== null ? `${formatNumber(holding.stockCoverPeriods, 2)} รอบ` : "—"}</td>
-                <td className="px-4 py-3">
-                  {holding.status === "dead" ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700 ring-1 ring-violet-200">
-                      ของจม{holding.monthsIdle !== null ? ` · ไม่ขยับ ${holding.monthsIdle} เดือน` : ""}
-                    </span>
-                  ) : holding.status === "short" ? (
-                    <span className="inline-flex rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700 ring-1 ring-red-200">เสี่ยงขาด</span>
-                  ) : (
-                    <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">เหมาะสม</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </DataTable>
-          <p className="border-t border-slate-100 px-4 py-3 text-xs text-slate-500">
-            คำนวณจริงจาก: คงคลังราย Factory/Plant (BATCH) + usage/cover จาก relationship analysis + รายการของจม · เปลี่ยนเมื่อ: stock, usage หรือข้อมูลของจมเปลี่ยน
-          </p>
-        </Card>
-      ) : null}
-      {transferSuggestion ? (
-        <Card className="mt-4 border-blue-200 bg-blue-50">
-          <SectionHeader
-            title="คำแนะนำก่อนสั่งซื้อ: ตรวจโอน/ยืมจากคลังอื่น"
-            subtitle="ระบบพบคลังที่อาจช่วยเติม stock ได้ก่อนสร้างคำขอซื้อใหม่"
-            action={<Button onClick={onTransfer}><ArrowRightLeft className="h-4 w-4" /> เปิด Transfer Center</Button>}
-          />
-          <div className="grid grid-cols-1 gap-3 p-5 md:grid-cols-4">
-            <ReviewMetric label="คลังต้นทางที่แนะนำ" value={`${transferSuggestion.sourceWarehouseId} → ${transferSuggestion.destinationWarehouseId}`} />
-            <ReviewMetric label="จำนวนที่ควรโอน/ยืม" value={`${formatNumber(transferSuggestion.suggestedQuantity)} ${transferSuggestion.unit}`} />
-            <ReviewMetric label="ปลายทางขาดเทียบ ROP" value={`${formatNumber(transferSuggestion.destinationShortage)} ${transferSuggestion.unit}`} />
-            <ReviewMetric label="Season ที่ต้องระวัง" value={transferSuggestion.peakSeasonLabel} />
-          </div>
-          <div className="border-t border-blue-200 px-5 py-4 text-sm leading-6 text-blue-900">
-            <span className="font-semibold">คำนวณจริงจาก:</span> {transferSuggestion.decisionBasis}
-            <br />
-            <span className="font-semibold">เปลี่ยนเมื่อ:</span> Stock ต้นทาง/ปลายทาง, usage, ROP, MOQ หรือ relationship analysis เปลี่ยน
-          </div>
-        </Card>
-      ) : null}
-      <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <Card>
-          <SectionHeader
-            title="เปรียบเทียบราคาและระยะเวลารอพัสดุของซัพพลายเออร์"
-            subtitle="เปรียบเทียบราคาต่อหน่วย ระยะเวลารอพัสดุ (Lead Time) และจำนวนสั่งซื้อขั้นต่ำ (MOQ)"
-            action={<StatusBadge status={record.status} />}
-          />
-          <DataTable columns={["ซัพพลายเออร์", "ผู้ติดต่อ", "ราคาต่อหน่วย", "ระยะเวลารอพัสดุ", "จำนวนสั่งซื้อขั้นต่ำ", "พื้นที่ให้บริการ", "ดำเนินการ"]} empty={offers.length === 0}>
-            {offers.map((offer) => {
-              const supplier = getSupplier(offer.supplierId);
-              return (
-                <tr key={`${offer.supplierId}-${offer.skuId}`} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-semibold text-slate-900">{supplier.name}</td>
-                  <td className="px-4 py-3 text-slate-600">{supplier.contactPerson}<br /><span className="text-xs">{supplier.phone}</span></td>
-                  <td className="px-4 py-3">{formatTHB(offer.unitPrice)}/{offer.unit}</td>
-                  <td className="px-4 py-3">{offer.leadTimeDays} วัน</td>
-                  <td className="px-4 py-3">{offer.moq} {offer.unit}</td>
-                  <td className="px-4 py-3">{regionLabels[supplier.coverage]}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-2">
-                      <Button variant="secondary" onClick={() => onSupplier(supplier.id)}>ติดต่อ</Button>
-                      <Button onClick={() => onCreateRequest(supplier.id)}>สร้างคำขอซื้อ</Button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </DataTable>
-        </Card>
 
-        <div className="space-y-4">
-          <SupplierContactCard supplier={primarySupplier} />
-          <Card className="p-4">
-            <h3 className="font-semibold text-slate-950">ขั้นตอนสาธิต</h3>
-            <div className="mt-4 grid gap-2">
-              <Button variant="secondary" onClick={onCalculation}><Calculator className="h-4 w-4" /> ดูรายละเอียดการคำนวณ</Button>
-              <Button onClick={() => onCreateRequest(primarySupplier.id)}><Plus className="h-4 w-4" /> สร้างคำขอซื้อ</Button>
-              <Button variant="secondary" onClick={onVmi}><Workflow className="h-4 w-4" /> จำลอง VMI</Button>
+      <div style={s("display:grid;grid-template-columns:1.65fr 1fr;gap:18px;align-items:start;")}>
+        <div style={s("display:flex;flex-direction:column;gap:16px;")}>
+          <div style={s("display:grid;grid-template-columns:repeat(4,1fr);gap:13px;")}>
+            <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:14px;padding:14px;box-shadow:0 10px 24px -20px rgba(28,24,48,.4);")}>
+              <div style={s("font-size:11.5px;color:#7B7591;font-weight:500;")}>สต็อกปัจจุบัน</div>
+              <div style={s("margin-top:7px;font-size:25px;font-weight:600;color:#1C1830;line-height:1;")}>{formatNumber(record.currentStock, 0)} <span style={s("font-size:12px;color:#9B95B0;font-weight:400;")}>{sku.unit}</span></div>
+              <div style={s("margin-top:9px;padding-top:8px;border-top:1px solid #F1EEF8;font-size:10px;line-height:1.5;color:#8A849E;")}><b style={s("color:#5A5470;")}>จาก:</b> ยอดคงคลังล่าสุด</div>
             </div>
-          </Card>
+            <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:14px;padding:14px;box-shadow:0 10px 24px -20px rgba(28,24,48,.4);")}>
+              <div style={s("font-size:11.5px;color:#7B7591;font-weight:500;")}>Safety Stock</div>
+              <div style={s("margin-top:7px;font-size:25px;font-weight:600;color:#1C1830;line-height:1;")}>{formatNumber(recommendation.safetyStock, 0)} <span style={s("font-size:12px;color:#9B95B0;font-weight:400;")}>{sku.unit}</span></div>
+              <div style={s("margin-top:9px;padding-top:8px;border-top:1px solid #F1EEF8;font-size:10px;line-height:1.5;color:#8A849E;")}><b style={s("color:#5A5470;")}>จาก:</b> Z {formatNumber(recommendation.zScore, 2)} × SD × √LT</div>
+            </div>
+            <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:14px;padding:14px;box-shadow:0 10px 24px -20px rgba(28,24,48,.4);")}>
+              <div style={s("font-size:11.5px;color:#7B7591;font-weight:500;")}>Reorder Point</div>
+              <div style={s("margin-top:7px;font-size:25px;font-weight:600;color:#B45309;line-height:1;")}>{formatNumber(recommendation.reorderPoint, 0)} <span style={s("font-size:12px;color:#C99A5B;font-weight:400;")}>{sku.unit}</span></div>
+              <div style={s("margin-top:9px;padding-top:8px;border-top:1px solid #F1EEF8;font-size:10px;line-height:1.5;color:#8A849E;")}><b style={s("color:#5A5470;")}>จาก:</b> Demand LT + Safety Stock</div>
+            </div>
+            <div style={s("background:linear-gradient(135deg,#F6F0FF,#EFE6FE);border:1px solid #DCC9FB;border-radius:14px;padding:14px;")}>
+              <div style={s("font-size:11.5px;color:#6D28D9;font-weight:600;display:flex;align-items:center;gap:4px;")}><Sparkles style={s("width:13px;height:13px;")} /> AI แนะนำซื้อ</div>
+              <div style={s("margin-top:7px;font-size:25px;font-weight:700;color:#6D28D9;line-height:1;")}>+{formatNumber(recommendation.suggestedQuantity, 0)} <span style={s("font-size:12px;color:#9B7BD0;font-weight:400;")}>{sku.unit}</span></div>
+              <div style={s("margin-top:9px;padding-top:8px;border-top:1px solid #E1D2F8;font-size:10px;line-height:1.5;color:#7A5BA8;")}><b>จาก:</b> Target {formatNumber(recommendation.targetStockLevel, 0)} − Stock {formatNumber(record.currentStock, 0)}, ปัด MOQ</div>
+            </div>
+          </div>
+
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 16px 32px -24px rgba(28,24,48,.3);overflow:hidden;")}>
+            <button onClick={() => setShowExplanation((current) => !current)} style={s("width:100%;display:flex;align-items:center;gap:13px;padding:16px 18px;border:0;background:linear-gradient(100deg,#FBF8FF,#F5EEFE);cursor:pointer;font-family:inherit;text-align:left;")}>
+              <span style={s("width:40px;height:40px;border-radius:11px;background:#6D28D9;display:flex;align-items:center;justify-content:center;color:#fff;flex:none;box-shadow:0 8px 16px -8px rgba(109,40,217,.7);")}><Calculator style={s("width:19px;height:19px;")} /></span>
+              <div style={s("flex:1;min-width:0;")}>
+                <div style={s("font-size:15px;font-weight:600;color:#5B21B6;")}>ทำไมระบบแนะนำค่านี้?</div>
+                <div style={s("font-size:12px;color:#8A7AA8;margin-top:1px;")}>อธิบายทุกตัวเลขจากค่าจริงของ SKU นี้ · สูตรเวอร์ชัน {formulaPolicy.formulaVersion}</div>
+              </div>
+              <ChevronDown style={s("width:18px;height:18px;color:#6D28D9;transform:rotate(" + (showExplanation ? "180deg" : "0deg") + ");transition:transform .2s;")} />
+            </button>
+            {showExplanation ? (
+            <div style={s("padding:18px;")}>
+              <div style={s("font-size:11px;font-weight:600;letter-spacing:.5px;color:#9B95B0;text-transform:uppercase;margin-bottom:9px;")}>ข้อมูลที่ใช้คำนวณ (ค่าจริง)</div>
+              <div style={s("display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:18px;")}>
+                {[
+                  { k: "ใช้ย้อนหลัง", v: `${formatNumber(recommendation.historicalUsageTotal, 0)} ${sku.unit} / ${recommendation.historicalUsageDays} วัน` },
+                  { k: "Lead Time (ฐาน)", v: `${formatNumber(recommendation.supplierLeadTimeDays, 0)} วัน` },
+                  { k: "Service Level → Z", v: `${Math.round(recommendation.serviceLevel * 100)}% → ${formatNumber(recommendation.zScore, 2)}` },
+                  { k: "Seasonal Factor", v: `× ${formatNumber(recommendation.seasonalFactor, 2)}` },
+                  { k: "MOQ / หน่วย", v: `${formatNumber(recommendation.moq, 0)} ${sku.unit}` },
+                  { k: "Target policy", v: `${formatNumber(recommendation.targetStockLevel, 0)} ${sku.unit}` },
+                ].map((item) => (
+                  <div key={item.k} style={s("background:#FAF9FD;border:1px solid #F0EDF7;border-radius:10px;padding:9px 11px;")}><div style={s("font-size:10.5px;color:#9B95B0;")}>{item.k}</div><div className="mono" style={s("font-size:13px;font-weight:600;color:#1C1830;margin-top:2px;")}>{item.v}</div></div>
+                ))}
+              </div>
+
+              <div style={s("font-size:11px;font-weight:600;letter-spacing:.5px;color:#9B95B0;text-transform:uppercase;margin-bottom:9px;")}>ขั้นตอนการคำนวณ</div>
+              <div style={s("position:relative;padding-left:26px;")}>
+                <div style={s("position:absolute;left:9px;top:6px;bottom:18px;width:2px;background:#EDE6FA;")} />
+                {[
+                  { n: 1, t: "ความต้องการเฉลี่ยต่อวัน", f: `${formatNumber(recommendation.historicalUsageTotal, 0)} ${sku.unit} ÷ ${recommendation.historicalUsageDays} วัน = `, r: `${formatNumber(recommendation.averageDailyDemand, 2)} ${sku.unit}/วัน`, rc: "#6D28D9", bg: "linear-gradient(135deg,#6D28D9,#C0249B)" },
+                  { n: 2, t: "Lead Time ปรับฤดูกาล", f: `${formatNumber(recommendation.supplierLeadTimeDays, 0)} × ${formatNumber(recommendation.seasonalFactor, 2)} × ${formatNumber(recommendation.budgetFactor, 2)} = `, r: `${formatNumber(recommendation.adjustedLeadTimeDays, 0)} วัน`, rc: "#6D28D9", bg: "linear-gradient(135deg,#6D28D9,#C0249B)" },
+                  { n: 3, t: "Demand ระหว่าง Lead Time", f: `${formatNumber(recommendation.averageDailyDemand, 2)} × ${formatNumber(recommendation.adjustedLeadTimeDays, 0)} = `, r: `${formatNumber(recommendation.demandDuringLeadTime, 0)} ${sku.unit}`, rc: "#6D28D9", bg: "linear-gradient(135deg,#6D28D9,#C0249B)" },
+                  { n: 4, t: "Safety Stock", f: `${formatNumber(recommendation.zScore, 2)} × SD(${formatNumber(recommendation.demandVariabilityPerDay, 1)}) × √${formatNumber(recommendation.adjustedLeadTimeDays, 0)} = `, r: `${formatNumber(recommendation.safetyStock, 0)} ${sku.unit}`, rc: "#6D28D9", bg: "linear-gradient(135deg,#6D28D9,#C0249B)" },
+                  { n: 5, t: "Reorder Point", f: `${formatNumber(recommendation.demandDuringLeadTime, 0)} + ${formatNumber(recommendation.safetyStock, 0)} = `, r: `${formatNumber(recommendation.reorderPoint, 0)} ${sku.unit}`, rc: "#B45309", bg: "#B45309" },
+                  { n: 6, t: "จำนวนที่ AI แนะนำ", f: `Target ${formatNumber(recommendation.targetStockLevel, 0)} − Stock ${formatNumber(record.currentStock, 0)} = ${formatNumber(rawSuggestedQuantity, 0)} → ปัด MOQ ${formatNumber(recommendation.moq, 0)} = `, r: `${formatNumber(recommendation.suggestedQuantity, 0)} ${sku.unit}`, rc: "#6D28D9", bg: "linear-gradient(135deg,#6D28D9,#C0249B)" },
+                ].map((step) => (
+                  <div key={step.n} style={s("position:relative;margin-bottom:13px;")}>
+                    <span style={s("position:absolute;left:-26px;top:0;width:20px;height:20px;border-radius:50%;background:" + step.bg + ";color:#fff;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;")}>{step.n}</span>
+                    <div style={s("font-size:13px;font-weight:600;color:#1C1830;")}>{step.t}</div>
+                    <div className="mono" style={s("font-size:11.5px;color:#7B7591;margin-top:3px;")}>{step.f}<b style={s("color:" + step.rc + ";")}>{step.r}</b></div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={s("display:flex;align-items:flex-start;gap:9px;margin-top:18px;background:#F0FDF9;border:1px solid #B6EBD7;border-radius:11px;padding:11px 13px;")}>
+                <ShieldCheck style={s("width:16px;height:16px;color:#059669;margin-top:1px;flex:none;")} />
+                <div style={s("font-size:11.5px;color:#3F6B57;line-height:1.55;")}><b style={s("color:#0F7B53;")}>เก็บ Calculation Snapshot:</b> ทุกค่าด้านบนจะถูกบันทึก ณ เวลาที่สร้างคำขอ — ตรวจย้อนหลังได้แม้ราคา/สูตร/งบเปลี่ยนภายหลัง</div>
+              </div>
+            </div>
+            ) : null}
+          </div>
+        </div>
+
+        <div style={s("display:flex;flex-direction:column;gap:16px;")}>
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:16px 18px;box-shadow:0 14px 30px -24px rgba(28,24,48,.3);")}>
+            <div style={s("display:flex;align-items:center;justify-content:space-between;")}><h2 style={s("margin:0;font-size:14px;font-weight:600;color:#1C1830;")}>การใช้รายเดือน</h2><span style={s("font-size:11px;color:#9B95B0;")}>{usagePeriods.length} เดือน · {sku.unit}</span></div>
+            <div style={s("display:flex;align-items:flex-end;gap:9px;height:110px;margin-top:16px;")}>
+              {usagePeriods.map((period, index) => (
+                <div key={index} style={s("flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:6px;height:100%;")}>
+                  <div style={s("width:100%;border-radius:5px 5px 0 0;height:" + Math.max(Math.round((period.quantity / usageMax) * 80), period.quantity > 0 ? 8 : 3) + "px;background:" + (index === usagePeakIndex ? "#6D28D9" : "#D6C2F7") + ";")} />
+                  <span style={s("font-size:10px;color:" + (index === usagePeakIndex ? "#7C3AED" : "#A29DB5") + ";" + (index === usagePeakIndex ? "font-weight:600;" : ""))}>{period.periodLabel}</span>
+                </div>
+              ))}
+            </div>
+            <div style={s("margin-top:13px;display:flex;justify-content:space-between;font-size:11px;")}><span style={s("color:#7B7591;")}>เฉลี่ย <b style={s("color:#1C1830;")}>{formatNumber(usageAvg, 0)} {sku.unit}/เดือน</b></span><span style={s("color:#B45309;")}>▲ ฤดูฝน +{Math.round((recommendation.seasonalFactor - 1) * 100)}%</span></div>
+          </div>
+
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:16px 18px;box-shadow:0 14px 30px -24px rgba(28,24,48,.3);")}>
+            <h2 style={s("margin:0 0 3px;font-size:14px;font-weight:600;color:#1C1830;")}>เทียบซัพพลายเออร์</h2>
+            <p style={s("margin:0 0 13px;font-size:11px;color:#9B95B0;")}>ราคา · Lead Time · MOQ · ความเชื่อถือ</p>
+            <div style={s("display:flex;flex-direction:column;gap:10px;")}>
+              {offers.map((offer, index) => {
+                const supplier = getSupplier(offer.supplierId);
+                const isAi = index === 0;
+                const reliability = Math.round((offer.reliabilityScore ?? 0.9) * 100);
+                return (
+                  <div key={offer.supplierId} onClick={() => onSupplier(supplier.id)} style={s(isAi ? "border:1.5px solid #C9B0F2;background:#FBF8FF;border-radius:12px;padding:11px 12px;cursor:pointer;" : "border:1px solid #EBE7F5;border-radius:12px;padding:11px 12px;cursor:pointer;")}>
+                    <div style={s("display:flex;align-items:center;justify-content:space-between;gap:8px;")}>
+                      <div style={s("font-size:12.5px;font-weight:600;color:#1C1830;")}>{supplier.name}</div>
+                      {isAi ? <span style={s("font-size:9.5px;font-weight:600;color:#fff;background:#6D28D9;padding:2px 8px;border-radius:99px;flex:none;")}>AI แนะนำ</span> : offer.unitPrice === offerMinPrice ? <span style={s("font-size:9.5px;font-weight:500;color:#B45309;background:#FFFAEB;padding:2px 8px;border-radius:99px;flex:none;")}>ถูกสุด</span> : null}
+                    </div>
+                    <div style={s("display:flex;gap:14px;margin-top:8px;font-size:11px;")}>
+                      <span style={s("color:#7B7591;")}>฿<b style={s("color:" + (offer.unitPrice === offerMinPrice ? "#059669" : "#1C1830") + ";")}>{formatNumber(offer.unitPrice, 0)}</b>/{offer.unit}</span>
+                      <span style={s("color:#7B7591;")}>LT <b style={s("color:" + (offer.leadTimeDays === offerMinLt ? "#059669" : offer.leadTimeDays === offerMaxLt ? "#B91C1C" : "#1C1830") + ";")}>{offer.leadTimeDays}</b>ว.</span>
+                      <span style={s("color:#7B7591;")}>MOQ <b style={s("color:#1C1830;")}>{offer.moq}</b></span>
+                      <span style={s("color:" + (reliability >= 95 ? "#059669" : "#5A5470") + ";font-weight:600;")}>{reliability}%</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -5202,55 +6023,99 @@ function SupplierDirectoryPage({
     setShowAddSupplier(false);
   };
 
-  return (
-    <>
-      <PageTitle eyebrow="ซัพพลายเออร์" title="ทะเบียนซัพพลายเออร์" subtitle="ค้นหาซัพพลายเออร์, SKU, หมวดหมู่ และดูช่องทางติดต่อ" />
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <Card>
-          <SectionHeader
-            title="รายชื่อซัพพลายเออร์"
-            subtitle="รองรับการค้นหาด้วยชื่อซัพพลายเออร์ / SKU / หมวดหมู่"
-            action={
-              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-                <div className="relative w-full sm:w-72">
-                  <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                  <input className={`${inputClass} pl-9`} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="ค้นหาซัพพลายเออร์ / SKU / หมวดหมู่" />
-                </div>
-                <Button onClick={() => setShowAddSupplier((current) => !current)}>
-                  <Plus className="h-4 w-4" />
-                  เพิ่มซัพพลายเออร์
-                </Button>
-              </div>
-            }
-          />
-          {showAddSupplier ? (
-            <div className="border-b border-slate-200 p-5">
-              <SupplierProfileForm mode="create" onSave={saveSupplier} />
-            </div>
-          ) : null}
-          <DataTable columns={["รหัส", "ซัพพลายเออร์", "สถานะ", "ผู้ติดต่อ", "โทรศัพท์", "อีเมล", "พื้นที่ให้บริการ", "ดำเนินการ"]} empty={filteredSuppliers.length === 0}>
-            {filteredSuppliers.map((supplier) => (
-              <tr key={supplier.id} className="hover:bg-slate-50">
-                <td className="px-4 py-3 font-semibold text-slate-700">{supplier.id}</td>
-                <td className="px-4 py-3 font-semibold text-slate-900">{supplier.name}</td>
-                <td className="px-4 py-3"><SupplierStatusBadge status={getSupplierStatus(supplier.id, supplierOfferData)} /></td>
-                <td className="px-4 py-3">{supplier.contactPerson}</td>
-                <td className="px-4 py-3">{supplier.phone}</td>
-                <td className="px-4 py-3">{supplier.email}</td>
-                <td className="px-4 py-3">{regionLabels[supplier.coverage]}</td>
-                <td className="px-4 py-3">
-                  <Button variant="secondary" onClick={() => { onSelectSupplier(supplier.id); onOpenDetail(); }}>รายละเอียด</Button>
-                </td>
-              </tr>
-            ))}
-          </DataTable>
-        </Card>
+  const bestSupplierId = (() => {
+    let best = "", bestScore = -1;
+    for (const sup of filteredSuppliers) {
+      const offers = supplierOfferData.filter(o => o.supplierId === sup.id);
+      const avgRel = offers.length ? offers.reduce((sum, o) => sum + (o.reliabilityScore ?? 0), 0) / offers.length : 0;
+      if (avgRel > bestScore) { bestScore = avgRel; best = sup.id; }
+    }
+    return best;
+  })();
+  const bestSupplier = filteredSuppliers.find(s => s.id === bestSupplierId);
 
-        <div className="space-y-5">
-          <SupplierSummaryPanel supplier={selectedSupplier} contactLogs={contactLogs} onCopy={onCopy} />
+  return (
+    <div>
+      <div style={s("display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px;")}>
+        <div>
+          <h1 style={s("margin:0 0 5px;font-size:23px;font-weight:600;letter-spacing:-.2px;color:#1C1830;")}>ซัพพลายเออร์</h1>
+          <p style={s("margin:0;font-size:13.5px;color:#7B7591;")}>ราคา · Lead Time · MOQ · ความเชื่อถือ · พัสดุที่รองรับ · ประวัติการติดต่อ</p>
+        </div>
+        <div style={s("display:flex;gap:8px;align-items:center;")}>
+          <div style={s("position:relative;")}><Search style={s("position:absolute;left:11px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:#9B95B0;")} /><input value={search} onChange={e => setSearch(e.target.value)} placeholder="ค้นหา..." style={s("height:38px;padding:0 12px 0 34px;border:1px solid #E5E1F0;border-radius:10px;background:#fff;font-family:inherit;font-size:12.5px;color:#1C1830;outline:none;width:220px;")} /></div>
+          <button onClick={() => setShowAddSupplier(c => !c)} style={s("display:flex;align-items:center;gap:6px;height:38px;padding:0 14px;border:0;border-radius:10px;background:linear-gradient(135deg,#6D28D9,#C0249B);color:#fff;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;")}><Plus style={s("width:14px;height:14px;")} /> เพิ่มซัพพลายเออร์</button>
         </div>
       </div>
-    </>
+
+      {bestSupplier && (
+        <div style={s("display:flex;align-items:center;gap:14px;background:linear-gradient(100deg,#FBF4FF,#FCE9F5);border:1px solid #E6D8FB;border-radius:14px;padding:14px 18px;margin-bottom:18px;")}>
+          <span style={s("width:40px;height:40px;border-radius:11px;background:#fff;border:1px solid #E6D8FB;color:#7C3AED;display:flex;align-items:center;justify-content:center;flex:none;")}><Sparkles style={s("width:19px;height:19px;")} /></span>
+          <div style={s("flex:1;min-width:0;")}>
+            <div style={s("font-size:13.5px;font-weight:600;color:#5B21B6;")}>AI แนะนำซัพพลายเออร์</div>
+            <div style={s("font-size:12px;color:#6B6483;margin-top:2px;")}>เลือก <b style={s("color:#3B1170;")}>{bestSupplier.name}</b> คุ้มสุดจากคะแนนรวม ราคา × Lead Time × reliability</div>
+          </div>
+        </div>
+      )}
+
+      {showAddSupplier && (
+        <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:14px;padding:18px;margin-bottom:16px;")}>
+          <SupplierProfileForm mode="create" onSave={saveSupplier} />
+        </div>
+      )}
+
+      <div style={s("display:grid;grid-template-columns:1fr 1fr;gap:16px;")}>
+        {filteredSuppliers.map(supplier => {
+          const offers = supplierOfferData.filter(o => o.supplierId === supplier.id);
+          const offer = offers[0];
+          const avgRel = offers.length ? Math.round(offers.reduce((sum, o) => sum + (o.reliabilityScore ?? 0), 0) / offers.length * 100) : null;
+          const isRec = supplier.id === bestSupplierId;
+          const cardBorder = isRec ? "border:1.5px solid #C9B0F2;background:#FBF8FF;" : "border:1px solid #EBE7F5;background:#fff;";
+          const statusInfo = getSupplierStatus(supplier.id, supplierOfferData);
+          const hasSlowLead = offers.some(o => o.leadTimeDays > 30);
+          const chipBg = statusInfo === "No Catalog" ? "color:#6B7280;background:#F9FAFB;border:1px solid #E5E7EB;" : hasSlowLead ? "color:#B45309;background:#FFFAEB;border:1px solid #FBE3A2;" : "";
+          const chipLabel = statusInfo === "No Catalog" ? "ไม่มีรายการ" : hasSlowLead ? "ช้า" : "";
+          const skuNames = offers.map(o => { const sk = getSku(o.skuId); return sk.category; }).filter((v, i, a) => a.indexOf(v) === i).slice(0, 3).join(" · ");
+          return (
+            <div key={supplier.id} style={s(`${cardBorder}border-radius:16px;padding:18px;box-shadow:0 14px 30px -24px rgba(28,24,48,.3);`)}>
+              <div style={s("display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px;")}>
+                <div><div style={s("font-size:15px;font-weight:600;color:#1C1830;")}>{supplier.name}</div><div style={s("font-size:11.5px;color:#7B7591;margin-top:2px;")}>{supplier.contactPerson} · {regionLabels[supplier.coverage]}</div></div>
+                {isRec ? <span style={s("font-size:9.5px;font-weight:600;color:#fff;background:#6D28D9;padding:3px 9px;border-radius:99px;flex:none;")}>AI แนะนำ</span> : chipLabel ? <span style={s(`font-size:9.5px;font-weight:500;padding:3px 9px;border-radius:99px;flex:none;${chipBg}`)}>{chipLabel}</span> : null}
+              </div>
+              <div style={s("display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:13px;")}>
+                {offer ? <>
+                  <div style={s(`border-radius:9px;padding:8px;text-align:center;${isRec ? "background:#fff;border:1px solid #EBE7F5;" : "background:#FAF9FD;border:1px solid #F0EDF7;"}`)}><div style={s("font-size:9.5px;color:#9B95B0;")}>ราคา/{offer.unit}</div><div style={s("font-size:13px;font-weight:600;color:#1C1830;")} className="mono">{formatTHB(offer.unitPrice)}</div></div>
+                  <div style={s(`border-radius:9px;padding:8px;text-align:center;${isRec ? "background:#fff;border:1px solid #EBE7F5;" : "background:#FAF9FD;border:1px solid #F0EDF7;"}`)}><div style={s("font-size:9.5px;color:#9B95B0;")}>Lead</div><div style={s(`font-size:13px;font-weight:600;${offer.leadTimeDays > 30 ? "color:#B91C1C;" : "color:#1C1830;"}`)} className="mono">{offer.leadTimeDays}ว.</div></div>
+                  <div style={s(`border-radius:9px;padding:8px;text-align:center;${isRec ? "background:#fff;border:1px solid #EBE7F5;" : "background:#FAF9FD;border:1px solid #F0EDF7;"}`)}><div style={s("font-size:9.5px;color:#9B95B0;")}>MOQ</div><div style={s("font-size:13px;font-weight:600;color:#1C1830;")} className="mono">{offer.moq}</div></div>
+                  <div style={s(`border-radius:9px;padding:8px;text-align:center;${isRec ? "background:#fff;border:1px solid #EBE7F5;" : "background:#FAF9FD;border:1px solid #F0EDF7;"}`)}><div style={s("font-size:9.5px;color:#9B95B0;")}>เชื่อถือ</div><div style={s(`font-size:13px;font-weight:600;${avgRel !== null && avgRel >= 90 ? "color:#059669;" : avgRel !== null && avgRel >= 80 ? "color:#5A5470;" : "color:#9B95B0;"}`)} className="mono">{avgRel !== null ? `${avgRel}%` : "—"}</div></div>
+                </> : <div style={s("grid-column:span 4;text-align:center;font-size:11px;color:#9B95B0;padding:8px;")}>ยังไม่มีข้อเสนอ</div>}
+              </div>
+              <div style={s("display:flex;gap:14px;font-size:11.5px;color:#7B7591;margin-bottom:11px;flex-wrap:wrap;")}>
+                <span style={s("display:flex;align-items:center;gap:5px;")}><Phone style={s("width:13px;height:13px;color:#9B95B0;")} /> {supplier.phone}</span>
+                <span style={s("display:flex;align-items:center;gap:5px;")}><Mail style={s("width:13px;height:13px;color:#9B95B0;")} /> {supplier.email}</span>
+              </div>
+              <div style={s("font-size:11px;color:#9B95B0;border-top:1px solid #F1EEF8;padding-top:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;")}>
+                <span>รองรับ: {skuNames || "ไม่ระบุ"}</span>
+                <button onClick={() => { onSelectSupplier(supplier.id); onOpenDetail(); }} style={s("height:28px;padding:0 10px;border:1px solid #E5E1F0;border-radius:8px;background:#fff;color:#5A5470;font-family:inherit;font-size:11px;cursor:pointer;white-space:nowrap;")}>รายละเอียด →</button>
+              </div>
+            </div>
+          );
+        })}
+
+        {contactLogs.length > 0 && (
+          <div style={s("border:1px solid #EBE7F5;background:#fff;border-radius:16px;padding:18px;box-shadow:0 14px 30px -24px rgba(28,24,48,.3);display:flex;flex-direction:column;justify-content:flex-start;")}>
+            <h2 style={s("margin:0 0 12px;font-size:14px;font-weight:600;color:#1C1830;")}>ประวัติการติดต่อล่าสุด</h2>
+            <div style={s("display:flex;flex-direction:column;gap:10px;")}>
+              {contactLogs.slice(0, 5).map((log, i) => (
+                <div key={i} style={s("display:flex;gap:10px;")}>
+                  <span style={s("width:7px;height:7px;border-radius:50%;background:#7C3AED;margin-top:5px;flex:none;")}></span>
+                  <div><div style={s("font-size:12px;color:#1C1830;")}>{log.purpose}</div><div style={s("font-size:10.5px;color:#9B95B0;")}>{log.supplierId} · {log.createdAt}</div></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -5897,6 +6762,20 @@ function CreatePurchaseRequestPage({
     (!quantityDiffers || !highVariance || Boolean(reasonText.trim()));
   const submitLabel = recommendedLayer === "Local" ? "ส่งอนุมัติระดับคลัง" : recommendedLayer === "Regional" ? "ส่งอนุมัติระดับเขต" : "ส่งอนุมัติส่วนกลาง";
   const transferSuggestion = buildTransferSuggestions(supplierOfferData, formulaPolicy).find((suggestion) => suggestion.skuId === sku.id && suggestion.destinationWarehouseId === record.warehouseId);
+  const borrowAlt = findDeadStockForSkuElsewhere(sku.id, record.warehouseId);
+  const borrowSavings = borrowAlt ? Math.min(requestedQuantity, borrowAlt.qty) * offer.unitPrice : 0;
+  const moqStep = offer.moq > 0 ? offer.moq : 1;
+  const routeMeta =
+    recommendedLayer === "Local"
+      ? { label: "อนุมัติระดับคลัง", color: "#0F7B53", bg: "#ECFDF5" }
+      : recommendedLayer === "Regional"
+        ? { label: "อนุมัติระดับเขต", color: "#1D4ED8", bg: "#EFF4FF" }
+        : { label: "อนุมัติส่วนกลาง", color: "#B45309", bg: "#FFFAEB" };
+  const budgetTiers = [
+    { key: "Local", label: `งบคลัง ${warehouse.id}`, remaining: budget.localBudgetRemaining, icon: <WarehouseIcon style={s("width:15px;height:15px;color:#5A5470;")} /> },
+    { key: "Regional", label: `งบเขต · ${regionLabels[warehouse.region]}`, remaining: budget.regionalBudgetRemaining, icon: <Building2 style={s("width:15px;height:15px;color:#5A5470;")} /> },
+    { key: "Central", label: "งบส่วนกลาง", remaining: budget.centralBudgetRemaining, icon: <Landmark style={s("width:15px;height:15px;color:#5A5470;")} /> },
+  ];
 
   const buildSnapshot = (requestId: string, createdAt: string): PurchaseRequestCalculationSnapshot => ({
     requestId,
@@ -5966,137 +6845,128 @@ function CreatePurchaseRequestPage({
   };
 
   return (
-    <>
-      <PageTitle
-        eyebrow="สร้างคำขอซื้อ"
-        title={`สร้างคำขอซื้อ ${sku.id} ${sku.name}`}
-        subtitle="ฟอร์มสร้างคำขอซื้อจากจำนวนที่ระบบแนะนำและข้อมูลซัพพลายเออร์ โดยตรวจสอบงบประมาณ 3 ชั้น"
-        action={<Button variant="secondary" onClick={onBack}><ArrowLeft className="h-4 w-4" /> ย้อนกลับ</Button>}
-      />
+    <div data-screen-label="Create PR">
+      <button onClick={onBack} style={s("display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;color:#7B7591;font-family:inherit;font-size:12.5px;cursor:pointer;padding:0;margin-bottom:14px;")}><ArrowLeft style={s("width:15px;height:15px;")} /> กลับ SKU</button>
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <Card className="p-5">
-          {findDeadStockForSkuElsewhere(sku.id, record.warehouseId) ? (
-            <div className="mb-5">
-              <DeadStockBorrowAlert
-                skuId={sku.id}
-                warehouseId={record.warehouseId}
-                requestedQuantity={requestedQuantity}
-                unitPrice={offer.unitPrice}
-                onOpenTransfer={onOpenTransfer}
-              />
+      <div style={s("margin-bottom:20px;")}>
+        <h1 style={s("margin:0 0 5px;font-size:23px;font-weight:600;letter-spacing:-.2px;color:#1C1830;")}>สร้างคำขอซื้อ</h1>
+        <p style={s("margin:0;font-size:13.5px;color:#7B7591;")}>กรอกจำนวนที่ต้องการ ระบบจะตรวจงบ 3 ชั้นและเก็บ Snapshot ให้อัตโนมัติ</p>
+      </div>
+
+      <div style={s("display:grid;grid-template-columns:1.55fr 1fr;gap:18px;align-items:start;")}>
+        <div style={s("display:flex;flex-direction:column;gap:16px;")}>
+          <div style={s("display:flex;align-items:center;gap:14px;background:#fff;border:1px solid #EBE7F5;border-radius:14px;padding:14px 16px;box-shadow:0 12px 28px -24px rgba(28,24,48,.4);")}>
+            <span style={s("width:44px;height:44px;border-radius:11px;background:#F4EEFE;color:#7C3AED;display:flex;align-items:center;justify-content:center;flex:none;")}><Cable style={s("width:21px;height:21px;")} /></span>
+            <div style={s("flex:1;min-width:0;")}>
+              <div style={s("font-size:14px;font-weight:600;color:#1C1830;")}>{sku.name}</div>
+              <div className="mono" style={s("font-size:11px;color:#A29DB5;margin-top:2px;")}>{sku.id} · คลัง {warehouse.id} · หน่วย {sku.unit}</div>
             </div>
-          ) : null}
-          {transferSuggestion ? (
-            <div className="mb-5">
-              <InlineAlert tone="info">
-                ก่อนสั่งซื้อ ระบบพบทางเลือกโอน/ยืม {formatNumber(transferSuggestion.suggestedQuantity)} {transferSuggestion.unit} จากคลัง {transferSuggestion.sourceWarehouseId} ไป {transferSuggestion.destinationWarehouseId}
-                เพื่อช่วยลดการซื้อใหม่และลด Dead Stock ฝั่งต้นทาง แต่ยังสามารถสร้าง PR ได้หากโอนไม่พอหรือมีเหตุผลเฉพาะ
-              </InlineAlert>
-            </div>
-          ) : null}
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <Field label="SKU">
-              <input className={inputClass} value={`${sku.id} · ${sku.name}`} readOnly />
-            </Field>
-            <Field label="ซัพพลายเออร์ที่เลือก">
-              <select className={inputClass} value={chosenSupplierId} onChange={(event) => setChosenSupplierId(event.target.value)}>
-                {supplierOfferData.filter((item) => item.skuId === skuId).map((item) => {
-                  const itemSupplier = getSupplier(item.supplierId);
-                  return <option key={item.supplierId} value={item.supplierId}>{itemSupplier.name}</option>;
-                })}
-              </select>
-            </Field>
-            <Field label="จำนวนที่ระบบแนะนำ">
-              <div className="flex gap-2">
-                <input className={inputClass} value={`${formatNumber(recommendation.suggestedQuantity)} ${sku.unit}`} readOnly />
-                <Button type="button" variant="secondary" onClick={() => setShowExplanation((current) => !current)}>ทำไม?</Button>
-              </div>
-            </Field>
-            <Field label="ราคาต่อหน่วยจากซัพพลายเออร์">
-              <input className={inputClass} value={`${formatTHB(offer.unitPrice)}/${offer.unit}`} readOnly />
-            </Field>
-            <Field label="ระยะเวลารอพัสดุของ Supplier (Lead Time)">
-              <input className={inputClass} value={`${offer.leadTimeDays} วัน`} readOnly />
-            </Field>
-            <Field label="ระยะเวลารอพัสดุที่ปรับแล้ว (Adjusted Lead Time)">
-              <input className={inputClass} value={`${formatNumber(recommendation.adjustedLeadTimeDays)} วัน`} readOnly />
-            </Field>
-            <Field label="จำนวนสั่งซื้อขั้นต่ำ (MOQ)">
-              <input className={inputClass} value={`${offer.moq} ${offer.unit}`} readOnly />
-            </Field>
-            <Field label="จำนวนที่ต้องการขอ" hint={`หน่วย: ${sku.unit}`}>
-              <EditableNumberInput min={1} value={requestedQuantity} onValueChange={setRequestedQuantity} />
-            </Field>
-            <Field label="ส่วนต่างจากค่าที่ระบบแนะนำ">
-              <input className={inputClass} value={`${variance.variance > 0 ? "+" : ""}${formatNumber(variance.variance)} ${sku.unit} (${formatPercent(variance.variancePercent)})`} readOnly />
-            </Field>
-            <Field label="มูลค่าประมาณการ">
-              <input className={inputClass} value={formatTHB(estimatedCost)} readOnly />
-            </Field>
-            <Field label="ระดับอนุมัติที่แนะนำ">
-              <input className={inputClass} value={getApprovalLayerLabel(recommendedLayer)} readOnly />
-            </Field>
+            <div style={s("text-align:right;flex:none;")}><div style={s("font-size:11px;color:#9B95B0;")}>ซัพพลายเออร์</div><div style={s("font-size:12.5px;font-weight:600;color:#1C1830;")}>{supplier.name} · ฿{formatNumber(offer.unitPrice, 0)}/{offer.unit}</div></div>
           </div>
 
-          <div className="mt-5 space-y-3">
-            {overrideWarning ? <InlineAlert tone={variance.isUnderRequest ? "danger" : "warning"}>{overrideWarning}</InlineAlert> : <InlineAlert tone="success">จำนวนที่ขอตรงกับจำนวนที่ระบบแนะนำ</InlineAlert>}
-            {!moqAligned ? <InlineAlert>จำนวนที่ขอยังไม่ตรงกับ MOQ {offer.moq} {offer.unit} ระบบยังให้ส่งได้ใน PoC แต่ควรตรวจสอบกับซัพพลายเออร์</InlineAlert> : null}
-            <InlineAlert tone="info">{preview.approvalRouting.reason}</InlineAlert>
+          {borrowAlt ? (
+          <div style={s("display:flex;align-items:center;gap:14px;background:#fff;border:1px solid #FBE3A2;border-left:4px solid #D97706;border-radius:14px;padding:13px 16px;")}>
+            <span style={s("width:40px;height:40px;border-radius:11px;background:#FFFAEB;color:#D97706;display:flex;align-items:center;justify-content:center;flex:none;")}><Hand style={s("width:20px;height:20px;")} /></span>
+            <div style={s("flex:1;min-width:0;")}>
+              <div style={s("font-size:13px;font-weight:600;color:#92400E;")}>เบรกก่อน! ของชนิดนี้มีเหลือที่คลังอื่น</div>
+              <div style={s("font-size:11.5px;color:#7B6A45;margin-top:2px;")}>คลัง <b style={s("color:#5A4A28;")}>{borrowAlt.warehouseId}</b> มีของชนิดเดียวกันเหลือ {formatNumber(borrowAlt.qty, 0)} {borrowAlt.unit} — โอนแทนซื้อ ประหยัด <b style={s("color:#B45309;")}>{formatTHB(borrowSavings)}</b></div>
+            </div>
+            <button onClick={() => onOpenTransfer(sku.id)} style={s("display:flex;align-items:center;gap:6px;height:38px;padding:0 14px;border:0;border-radius:10px;background:#D97706;color:#fff;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;flex:none;")}>ขอโอนแทน <ArrowRight style={s("width:15px;height:15px;")} /></button>
+          </div>
+          ) : null}
+
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:18px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 16px 32px -26px rgba(28,24,48,.3);")}>
+            <div style={s("display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;")}>
+              <h2 style={s("margin:0;font-size:15px;font-weight:600;color:#1C1830;")}>จำนวนที่ขอซื้อ</h2>
+              <div style={s("display:flex;align-items:center;gap:7px;font-size:11.5px;color:#6D28D9;background:#F4EEFE;border:1px solid #E4D7FB;padding:4px 10px;border-radius:99px;")}><Sparkles style={s("width:13px;height:13px;")} /> AI แนะนำ <b>{formatNumber(recommendation.suggestedQuantity, 0)} {sku.unit}</b></div>
+            </div>
+            <div style={s("display:flex;align-items:center;gap:16px;")}>
+              <div style={s("display:flex;align-items:center;border:1px solid #E5E1F0;border-radius:12px;overflow:hidden;")}>
+                <button onClick={() => setRequestedQuantity(Math.max(1, requestedQuantity - moqStep))} style={s("width:44px;height:48px;border:0;background:#FAF9FD;color:#6D28D9;font-size:20px;cursor:pointer;font-family:inherit;")}>−</button>
+                <div className="mono" style={s("width:84px;text-align:center;font-size:24px;font-weight:600;color:#1C1830;")}>{formatNumber(requestedQuantity, 0)}</div>
+                <button onClick={() => setRequestedQuantity(requestedQuantity + moqStep)} style={s("width:44px;height:48px;border:0;background:#FAF9FD;color:#6D28D9;font-size:20px;cursor:pointer;font-family:inherit;")}>+</button>
+              </div>
+              <div style={s("font-size:13px;color:#7B7591;")}>{sku.unit}</div>
+              <div style={s("flex:1;")} />
+              <div style={s("text-align:right;")}>
+                <div style={s("font-size:11.5px;color:#9B95B0;")}>ต่างจาก AI</div>
+                <div style={s("font-size:16px;font-weight:600;color:" + (variance.variance === 0 ? "#0F7B53" : "#B45309") + ";")}>{variance.variance > 0 ? "+" : ""}{formatNumber(variance.variance, 0)} {sku.unit} <span style={s("font-size:12px;color:#C99A5B;")}>({formatPercent(variance.variancePercent)})</span></div>
+              </div>
+            </div>
 
             {quantityDiffers ? (
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <Field label="หมวดเหตุผลการขอแตกต่างจากค่าที่ระบบแนะนำ">
-                  <select className={inputClass} value={reasonCategory} onChange={(event) => setReasonCategory(event.target.value)}>
-                    <option value="">เลือกเหตุผล</option>
-                    {reasonOptions.map((reason) => <option key={reason}>{reason}</option>)}
-                  </select>
-                </Field>
-                <Field label="รายละเอียดเหตุผลการขอแตกต่างจากค่าที่ระบบแนะนำ" hint={highVariance ? "จำเป็นเมื่อส่วนต่างตั้งแต่ ±50%" : "ระบุรายละเอียดเพิ่มเติมเพื่อช่วยผู้อนุมัติ"}>
-                  <textarea className={textareaClass} value={reasonText} onChange={(event) => setReasonText(event.target.value)} />
-                </Field>
-              </div>
+            <div style={s("margin-top:16px;border:1px solid #FBE3A2;background:#FFFBEB;border-radius:12px;padding:13px 14px;")}>
+              <div style={s("display:flex;align-items:center;gap:8px;margin-bottom:8px;")}><AlertTriangle style={s("width:15px;height:15px;color:#B45309;")} /><span style={s("font-size:12.5px;font-weight:600;color:#92400E;")}>ต้องระบุเหตุผล — ขอ{variance.isOverRequest ? "มากกว่า" : "น้อยกว่า"}ที่ AI แนะนำ</span></div>
+              <select value={reasonCategory} onChange={(event) => setReasonCategory(event.target.value)} style={s("width:100%;margin-bottom:8px;border:1px solid #F0D78A;border-radius:10px;background:#fff;padding:8px 11px;font-family:inherit;font-size:12.5px;color:#1C1830;outline:none;")}>
+                <option value="">เลือกเหตุผล</option>
+                {reasonOptions.map((reason) => <option key={reason}>{reason}</option>)}
+              </select>
+              <textarea value={reasonText} onChange={(event) => setReasonText(event.target.value)} placeholder="เช่น เตรียมงานขยายเขตจำหน่ายไตรมาสหน้า…" style={s("width:100%;min-height:60px;border:1px solid #F0D78A;border-radius:10px;background:#fff;padding:9px 11px;font-family:inherit;font-size:12.5px;color:#1C1830;outline:none;resize:vertical;")} />
+              <div style={s("font-size:10.5px;color:#B0894B;margin-top:6px;")}>เหตุผลนี้จะถูกบันทึกใน Audit Trail และส่งให้ผู้อนุมัติเห็น</div>
+            </div>
             ) : null}
           </div>
 
-          {showExplanation ? (
-            <div className="mt-5">
-              <CalculationExplanationPanel
-                inventory={record}
-                supplier={supplierRecord}
-                recommendation={recommendation}
-                budget={budget}
-                preview={preview}
-                requestedQuantity={requestedQuantity}
-                onClose={() => setShowExplanation(false)}
-              />
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:18px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 16px 32px -26px rgba(28,24,48,.3);")}>
+            <h2 style={s("margin:0 0 12px;font-size:15px;font-weight:600;color:#1C1830;")}>ซัพพลายเออร์</h2>
+            <div style={s("display:flex;gap:10px;flex-wrap:wrap;")}>
+              {supplierOfferData.filter((item) => item.skuId === skuId).map((item) => {
+                const itemSupplier = getSupplier(item.supplierId);
+                const selected = item.supplierId === chosenSupplierId;
+                return (
+                  <label key={item.supplierId} onClick={() => setChosenSupplierId(item.supplierId)} style={s((selected ? "border:1.5px solid #C9B0F2;background:#FBF8FF;" : "border:1px solid #EBE7F5;background:#fff;") + "flex:1;min-width:160px;border-radius:12px;padding:12px;cursor:pointer;")}>
+                    <div style={s("display:flex;align-items:center;justify-content:space-between;gap:8px;")}><span style={s("font-size:12.5px;font-weight:600;color:#1C1830;")}>{itemSupplier.name}</span><span style={s(selected ? "width:16px;height:16px;border-radius:50%;border:5px solid #6D28D9;flex:none;" : "width:16px;height:16px;border-radius:50%;border:2px solid #D5D0E3;flex:none;")} /></div>
+                    <div style={s("font-size:11px;color:#7B7591;margin-top:7px;")}>฿{formatNumber(item.unitPrice, 0)} · LT {item.leadTimeDays}ว. · เชื่อถือ {Math.round((item.reliabilityScore ?? 0.9) * 100)}%</div>
+                  </label>
+                );
+              })}
             </div>
-          ) : null}
-
-          <div className="mt-5 flex flex-wrap justify-end gap-2">
-            <Button variant="secondary" onClick={() => onContactSupplier(supplier.id)}><Phone className="h-4 w-4" /> ติดต่อซัพพลายเออร์</Button>
-            <Button variant="secondary" onClick={() => onSubmit(buildRequest("Draft"))}>บันทึกแบบร่าง</Button>
-            <Button
-              disabled={!canSubmit}
-              onClick={() => {
-                const status = recommendedLayer === "Local" ? "Pending Local" : "Pending Regional";
-                onSubmit(buildRequest(status));
-              }}
-            >
-              <Send className="h-4 w-4" />
-              {submitLabel}
-            </Button>
           </div>
-        </Card>
+        </div>
 
-        <div className="space-y-4">
-          <SupplierContactCard supplier={supplier} />
-          <BudgetCheckCard label={`ระดับคลัง · ${warehouse.name}`} remaining={budget.localBudgetRemaining} required={estimatedCost} />
-          <BudgetCheckCard label={`ระดับเขต · ${regionLabels[warehouse.region]}`} remaining={budget.regionalBudgetRemaining} required={estimatedCost} />
-          <BudgetCheckCard label="ส่วนกลางทั่วประเทศ" remaining={budget.centralBudgetRemaining} required={estimatedCost} />
+        <div style={s("display:flex;flex-direction:column;gap:16px;")}>
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:18px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 16px 34px -24px rgba(28,24,48,.32);")}>
+            <div style={s("font-size:12px;color:#7B7591;margin-bottom:5px;")}>มูลค่าประเมิน</div>
+            <div style={s("font-size:30px;font-weight:700;color:#1C1830;line-height:1;")}>{formatTHB(estimatedCost)}</div>
+            <div className="mono" style={s("font-size:11px;color:#9B95B0;margin-top:5px;")}>{formatNumber(requestedQuantity, 0)} {sku.unit} × ฿{formatNumber(offer.unitPrice, 0)}</div>
+            <div style={s("margin-top:13px;display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;padding:5px 11px;border-radius:99px;color:" + routeMeta.color + ";background:" + routeMeta.bg + ";")}><Route style={s("width:13px;height:13px;")} /> {routeMeta.label}</div>
+          </div>
+
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:18px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 16px 34px -24px rgba(28,24,48,.32);")}>
+            <h2 style={s("margin:0 0 4px;font-size:14px;font-weight:600;color:#1C1830;")}>ตรวจงบประมาณ 3 ชั้น</h2>
+            <p style={s("margin:0 0 14px;font-size:11px;color:#9B95B0;")}>ระบบเลือกชั้นอนุมัติให้อัตโนมัติตามมูลค่า</p>
+            <div style={s("display:flex;flex-direction:column;gap:10px;")}>
+              {budgetTiers.map((tier) => {
+                const active = recommendedLayer === tier.key;
+                const enough = estimatedCost <= tier.remaining;
+                return (
+                  <div key={tier.key} style={s("display:flex;align-items:center;gap:12px;border-radius:12px;padding:12px 13px;" + (active ? "background:linear-gradient(100deg,#F4EEFE,#FBF4FF);border:1px solid #C9B0F2;" : "background:#FAF9FD;border:1px solid #F0EDF7;"))}>
+                    <span style={s("width:30px;height:30px;border-radius:8px;background:rgba(255,255,255,.7);display:flex;align-items:center;justify-content:center;flex:none;")}>{tier.icon}</span>
+                    <div style={s("flex:1;min-width:0;")}><div style={s("font-size:12.5px;font-weight:600;color:#1C1830;")}>{tier.label}</div><div className="mono" style={s("font-size:10.5px;color:#7B7591;")}>คงเหลือ {formatTHB(tier.remaining)}</div></div>
+                    <span style={s("font-size:10.5px;font-weight:600;flex:none;color:" + (active ? "#6D28D9" : enough ? "#0F7B53" : "#B91C1C") + ";")}>{active ? "ส่งที่นี่" : enough ? "งบพอ" : "เกินงบ"}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:16px 18px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 16px 34px -24px rgba(28,24,48,.32);")}>
+            <div style={s("display:flex;align-items:flex-start;gap:9px;margin-bottom:13px;")}>
+              <Camera style={s("width:16px;height:16px;color:#7C3AED;margin-top:1px;flex:none;")} />
+              <div style={s("font-size:11.5px;color:#6B6483;line-height:1.5;")}>เมื่อกดส่ง ระบบจะเก็บ <b style={s("color:#5B21B6;")}>Calculation Snapshot</b> (สูตร {formulaPolicy.formulaVersion}, demand, lead time, ราคา, งบ, เหตุผล) เพื่อตรวจย้อนหลัง</div>
+            </div>
+            <button
+              disabled={!canSubmit}
+              onClick={() => onSubmit(buildRequest(recommendedLayer === "Local" ? "Pending Local" : "Pending Regional"))}
+              style={s("width:100%;height:46px;border:0;border-radius:12px;font-family:inherit;font-size:14px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;" + (canSubmit ? "background:linear-gradient(135deg,#6D28D9,#C0249B);color:#fff;cursor:pointer;box-shadow:0 12px 24px -10px rgba(109,40,217,.7);" : "background:#EDE9F6;color:#A29DB5;cursor:not-allowed;"))}
+            >
+              <Send style={s("width:17px;height:17px;")} /> {submitLabel}
+            </button>
+            <button onClick={() => onContactSupplier(supplier.id)} style={s("width:100%;height:38px;margin-top:9px;border:1px solid #E5E1F0;border-radius:10px;background:#fff;color:#3B3654;font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;")}><Phone style={s("width:14px;height:14px;color:#7C3AED;")} /> ติดต่อซัพพลายเออร์</button>
+          </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }
 function ApprovalQueuePage({
@@ -6126,45 +6996,60 @@ function ApprovalQueuePage({
   const selected = queue.find((request) => request.id === selectedRequestId) ?? queue[0];
 
   return (
-    <>
-      <PageTitle
-        eyebrow="ศูนย์อนุมัติ"
-        title="ศูนย์อนุมัติคำขอซื้อ"
-        subtitle="คิวตรวจระดับเขตและคิวอนุมัติส่วนกลาง พร้อมข้อมูล AI งบประมาณ และประวัติการติดต่อซัพพลายเออร์"
-      />
-      <div className="mb-4">
-        <InlineAlert tone="info">
-          <div className="space-y-1">
-            <p>ที่มาของค่าในคิวอนุมัติ: มูลค่าประมาณการ = Requested Quantity × Unit Price, เส้นทางอนุมัติ = ตรวจงบคลังพื้นที่ → งบเขต → งบส่วนกลางตาม snapshot ตอนส่งคำขอ</p>
-            <p>ค่าบนหน้าตรวจอนุมัติอ่านจาก Calculation Snapshot ของแต่ละคำขอ จึงไม่เปลี่ยนย้อนหลังแม้สูตรหรือราคา Supplier ปัจจุบันถูกแก้ไข</p>
+    <div>
+      <div style={s("display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:20px;")}>
+        <div>
+          <h1 style={s("margin:0 0 5px;font-size:23px;font-weight:600;letter-spacing:-.2px;color:#1C1830;")}>ศูนย์อนุมัติคำขอซื้อ</h1>
+          <p style={s("margin:0;font-size:13.5px;color:#7B7591;")}>คิวตรวจระดับเขตและคิวอนุมัติส่วนกลาง พร้อมข้อมูล AI งบประมาณ และ Calculation Snapshot</p>
+        </div>
+      </div>
+
+      <div style={s("display:inline-flex;background:#F4F2FA;border-radius:11px;padding:4px;gap:3px;margin-bottom:18px;")}>
+        {(["regional","central"] as const).map(tab => {
+          const active = approvalTab === tab;
+          const count = tab === "regional" ? regionalQueue.length : centralQueue.length;
+          return (
+            <button key={tab} onClick={() => onSetTab(tab)} style={s("border:0;border-radius:9px;padding:6px 14px;font-family:inherit;font-size:12.5px;cursor:pointer;transition:all .15s;" + (active ? "background:#fff;color:#6D28D9;font-weight:600;box-shadow:0 2px 6px -2px rgba(28,24,48,.2);" : "background:transparent;color:#7B7591;font-weight:400;"))}>
+              {tab === "regional" ? "คิวอนุมัติระดับเขต" : "คิวอนุมัติส่วนกลาง"}{" "}
+              <span style={s("display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;font-size:10px;font-weight:700;margin-left:4px;" + (active ? "background:#6D28D9;color:#fff;" : "background:#D5D0E3;color:#7B7591;"))}>{count}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div style={s("display:grid;grid-template-columns:360px minmax(0,1fr);gap:18px;align-items:start;")}>
+        <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 16px 32px -26px rgba(28,24,48,.3);overflow:hidden;")}>
+          <div style={s("display:flex;align-items:center;justify-content:space-between;padding:15px 18px 12px;border-bottom:1px solid #F1EEF8;")}>
+            <div>
+              <h2 style={s("margin:0;font-size:14px;font-weight:600;color:#1C1830;")}>{approvalTab === "regional" ? "คิวระดับเขต" : "คิวส่วนกลาง"}</h2>
+              <p style={s("margin:2px 0 0;font-size:11px;color:#9B95B0;")}>รอตรวจ {queue.length} รายการ</p>
+            </div>
           </div>
-        </InlineAlert>
-      </div>
-      <div className="mb-4 flex w-full overflow-x-auto rounded-lg border border-slate-200 bg-white p-1 sm:inline-flex sm:w-auto">
-        <button className={`rounded-md px-4 py-2 text-sm font-semibold ${approvalTab === "regional" ? "bg-blue-700 text-white" : "text-slate-600"}`} onClick={() => onSetTab("regional")}>คิวอนุมัติระดับเขต</button>
-        <button className={`rounded-md px-4 py-2 text-sm font-semibold ${approvalTab === "central" ? "bg-blue-700 text-white" : "text-slate-600"}`} onClick={() => onSetTab("central")}>คิวอนุมัติส่วนกลาง</button>
-      </div>
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[420px_minmax(0,1fr)]">
-        <Card>
-          <SectionHeader title={approvalTab === "regional" ? "คิวระดับเขต" : "คิวส่วนกลาง"} subtitle={`มีคำขอรอตรวจ ${queue.length} รายการ`} />
-          <DataTable columns={["คำขอ", "รายการ", "มูลค่า", "สถานะ"]} empty={queue.length === 0}>
-            {queue.map((request) => {
+          <div style={s("display:flex;flex-direction:column;")}>
+            {queue.length === 0 ? (
+              <div style={s("padding:32px;text-align:center;color:#9B95B0;font-size:12.5px;")}>ไม่มีคำขอรออนุมัติ</div>
+            ) : queue.map(request => {
               const sku = getSku(request.skuId);
+              const isSelected = selected?.id === request.id;
               return (
-                <tr
-                  key={request.id}
-                  className={`cursor-pointer hover:bg-slate-50 ${selected?.id === request.id ? "bg-blue-50" : ""}`}
-                  onClick={() => onSelectRequest(request.id)}
-                >
-                  <td className="px-4 py-3 font-semibold text-slate-900">{request.id}</td>
-                  <td className="px-4 py-3">{sku.name}</td>
-                  <td className="px-4 py-3">{formatTHB(request.estimatedCost)}</td>
-                  <td className="px-4 py-3"><StatusBadge status={request.status} /></td>
-                </tr>
+                <div key={request.id} onClick={() => onSelectRequest(request.id)} className="dash-row" style={s("display:flex;align-items:center;gap:13px;padding:12px 18px;border-bottom:1px solid #F4F2FA;cursor:pointer;" + (isSelected ? "background:#F4EEFE;" : ""))}>
+                  <div style={s("width:36px;height:36px;border-radius:10px;background:#F4EEFE;color:#7C3AED;display:flex;align-items:center;justify-content:center;flex:none;")}>
+                    <FileText style={s("width:17px;height:17px;")} />
+                  </div>
+                  <div style={s("flex:1;min-width:0;")}>
+                    <div style={s("font-size:13px;font-weight:600;color:#1C1830;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;")}>{sku.name}</div>
+                    <div style={s("display:flex;align-items:center;gap:6px;margin-top:2px;")}>
+                      <span className="mono" style={s("font-size:10px;color:#9B95B0;")}>{request.id}</span>
+                    </div>
+                  </div>
+                  <div style={s("text-align:right;flex:none;")}>
+                    <div style={s("font-size:12.5px;font-weight:600;color:#1C1830;")}>{formatTHB(request.estimatedCost)}</div>
+                  </div>
+                </div>
               );
             })}
-          </DataTable>
-        </Card>
+          </div>
+        </div>
 
         {selected ? (
           approvalTab === "regional" ? (
@@ -6173,12 +7058,10 @@ function ApprovalQueuePage({
             <CentralReviewDetail request={selected} contactLogs={contactLogs} onAction={onAction} onContactSupplier={onContactSupplier} onCalculation={onCalculation} />
           )
         ) : (
-          <Card className="flex min-h-80 items-center justify-center p-8 text-center text-slate-500">
-            ไม่มีรายการรออนุมัติในคิวนี้
-          </Card>
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:48px;text-align:center;color:#9B95B0;font-size:13px;")}>ไม่มีรายการรออนุมัติในคิวนี้</div>
         )}
       </div>
-    </>
+    </div>
   );
 }
 
@@ -6201,53 +7084,80 @@ function RegionalReviewDetail({
   const mustPassCentral = request.estimatedCost > request.regionalBudgetRemaining;
   const logs = contactLogs.filter((log) => log.requestId === request.id || log.supplierId === request.supplierId);
 
+  const varPct = request.variancePercent;
   return (
-    <Card>
-      <SectionHeader title={`รายละเอียดตรวจระดับเขต · ${request.id}`} subtitle={`${sku.id} ${sku.name} · ${warehouse.name}`} action={<StatusBadge status={request.status} />} />
-      <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3">
-        <ReviewMetric label="จำนวนที่ระบบแนะนำ" value={`${request.aiSuggestedQuantity} ${request.unit}`} />
-        <ReviewMetric label="จำนวนที่ขอ" value={`${request.requestedQuantity} ${request.unit}`} />
-        <ReviewMetric label="ส่วนต่างจากค่าที่ระบบแนะนำ" value={`${request.variancePercent > 0 ? "+" : ""}${formatNumber(request.variancePercent)}%`} />
-        <ReviewMetric label="ซัพพลายเออร์" value={supplier.name} />
-        <ReviewMetric label="มูลค่าประมาณการ" value={formatTHB(request.estimatedCost)} />
-        <ReviewMetric label="ระยะเวลารอพัสดุ (Lead Time)" value={`${request.leadTimeDays} วัน`} />
-        <ReviewMetric label="ระดับพัสดุสำรองปลอดภัย (Safety Stock)" value={`${formatNumber(request.calculationSnapshot.safetyStock)} ${request.unit}`} />
-        <ReviewMetric label="จุดสั่งซื้อใหม่ (Reorder Point)" value={`${formatNumber(request.calculationSnapshot.reorderPoint)} ${request.unit}`} />
-        <ReviewMetric label="ราคาต่อหน่วย ณ วันที่ขอ" value={`${formatTHB(request.calculationSnapshot.unitPriceAtRequestDate)}/${request.unit}`} />
+    <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 16px 32px -26px rgba(28,24,48,.3);overflow:hidden;")}>
+      <div style={s("display:flex;align-items:center;justify-content:space-between;gap:12px;padding:15px 18px;border-bottom:1px solid #F1EEF8;")}>
+        <div>
+          <div style={s("font-size:15px;font-weight:600;color:#1C1830;")}>{sku.name}</div>
+          <div style={s("display:flex;align-items:center;gap:6px;margin-top:3px;")}>
+            <span className="mono" style={s("font-size:10.5px;color:#6D28D9;background:#F4EEFE;padding:2px 8px;border-radius:6px;")}>{request.id}</span>
+            <span style={s("font-size:11px;color:#9B95B0;")}>{warehouse.name}</span>
+          </div>
+        </div>
+        <DashPill status={request.status === "Approved" ? "Normal" : request.status === "Rejected" ? "Critical" : "Near Reorder Point"} />
       </div>
-      <div className="grid grid-cols-1 gap-4 px-5 pb-5 sm:grid-cols-2 xl:grid-cols-3">
-        <BudgetCheckCard label="งบคลังพื้นที่" remaining={request.localBudgetRemaining} required={request.estimatedCost} />
-        <BudgetCheckCard label="งบระดับเขต" remaining={request.regionalBudgetRemaining} required={request.estimatedCost} />
-        <BudgetCheckCard label="งบส่วนกลาง" remaining={request.centralBudgetRemaining} required={request.estimatedCost} />
+
+      <div style={s("display:grid;grid-template-columns:repeat(3,1fr);gap:9px;padding:16px 18px;")}>
+        {[
+          { label: "AI แนะนำ", value: `${request.aiSuggestedQuantity} ${request.unit}`, accent: true },
+          { label: "จำนวนที่ขอ", value: `${request.requestedQuantity} ${request.unit}`, accent: false },
+          { label: "ส่วนต่าง AI", value: `${varPct > 0 ? "+" : ""}${formatNumber(varPct)}%`, accent: false },
+          { label: "มูลค่าประมาณ", value: formatTHB(request.estimatedCost), accent: false },
+          { label: "Lead Time", value: `${request.leadTimeDays} วัน`, accent: false },
+          { label: "ราคา/หน่วย", value: `${formatTHB(request.calculationSnapshot.unitPriceAtRequestDate)}`, accent: false },
+          { label: "Safety Stock", value: `${formatNumber(request.calculationSnapshot.safetyStock)} ${request.unit}`, accent: false },
+          { label: "Reorder Point", value: `${formatNumber(request.calculationSnapshot.reorderPoint)} ${request.unit}`, accent: false },
+          { label: "ซัพพลายเออร์", value: supplier.name, accent: false },
+        ].map(({ label, value, accent }) => (
+          <div key={label} style={s("background:" + (accent ? "#F6F0FF" : "#FAF9FD") + ";border:1px solid " + (accent ? "#DCC9FB" : "#F0EDF7") + ";border-radius:9px;padding:9px 11px;")}>
+            <div style={s("font-size:10px;color:" + (accent ? "#7A5BA8" : "#9B95B0") + ";")}>{label}</div>
+            <div className="mono" style={s("font-size:12.5px;font-weight:600;color:" + (accent ? "#6D28D9" : "#1C1830") + ";margin-top:2px;")}>{value}</div>
+          </div>
+        ))}
       </div>
-      <div className="grid grid-cols-1 gap-4 border-t border-slate-200 p-5 lg:grid-cols-2">
-        <Card className="p-4">
-          <h3 className="font-semibold text-slate-950">เหตุผลการขอแตกต่างจากค่าที่ระบบแนะนำ</h3>
-          <p className="mt-2 text-sm font-medium text-slate-700">{request.overrideReasonCategory ?? "ไม่พบการขอแตกต่างจากค่าที่ระบบแนะนำ"}</p>
-          <p className="mt-2 text-sm leading-6 text-slate-500">{request.overrideReasonText ?? "จำนวนที่ขอตรงกับจำนวนที่ระบบแนะนำ"}</p>
-        </Card>
-        <Card className="p-4">
-          <h3 className="font-semibold text-slate-950">สรุปการติดต่อซัพพลายเออร์</h3>
-          <p className="mt-2 text-sm leading-6 text-slate-500">{request.supplierContactLogSummary}</p>
-          <p className="mt-2 text-xs text-slate-400">จำนวนบันทึกที่เกี่ยวข้อง: {logs.length}</p>
-        </Card>
-        <Card className="p-4">
-          <h3 className="font-semibold text-slate-950">เหตุผลการกำหนดเส้นทางอนุมัติ</h3>
-          <p className="mt-2 text-sm leading-6 text-slate-500">{request.calculationSnapshot.approvalRoutingAtRequestDate.reason}</p>
-        </Card>
+
+      <div style={s("display:grid;grid-template-columns:repeat(3,1fr);gap:9px;padding:0 18px 14px;")}>
+        {[
+          { label: "งบคลัง", remaining: request.localBudgetRemaining },
+          { label: "งบเขต", remaining: request.regionalBudgetRemaining },
+          { label: "งบส่วนกลาง", remaining: request.centralBudgetRemaining },
+        ].map(({ label, remaining }) => {
+          const enough = remaining >= request.estimatedCost;
+          return (
+            <div key={label} style={s("border:1px solid " + (enough ? "#B6EBD7" : "#FBD5D5") + ";border-radius:9px;padding:9px 11px;background:" + (enough ? "#F0FDF9" : "#FEF2F2") + ";")}>
+              <div style={s("font-size:10px;color:" + (enough ? "#3F6B57" : "#9B6B6B") + ";")}>{label}</div>
+              <div className="mono" style={s("font-size:12px;font-weight:600;color:" + (enough ? "#0F7B53" : "#B91C1C") + ";margin-top:2px;")}>{formatTHB(remaining)}</div>
+              <div style={s("font-size:9.5px;color:" + (enough ? "#3F6B57" : "#B91C1C") + ";margin-top:2px;")}>{enough ? "งบพอ" : "เกินงบ"}</div>
+            </div>
+          );
+        })}
       </div>
-      <div className="flex flex-wrap justify-end gap-2 border-t border-slate-200 px-5 py-4">
-        <Button variant="secondary" onClick={() => onCalculation(request)}><Calculator className="h-4 w-4" /> ดูภาพบันทึกการคำนวณ</Button>
-        <Button variant="secondary" onClick={() => onContactSupplier(supplier.id)}><Phone className="h-4 w-4" /> ติดต่อซัพพลายเออร์</Button>
-        <Button variant="secondary" onClick={() => onAction(request.id, "More Info", "Request More Info", "ขอข้อมูลเพิ่มเติมจากคลัง")}>ขอข้อมูลเพิ่มเติม</Button>
-        <Button variant="danger" onClick={() => onAction(request.id, "Rejected", "Rejected", "ไม่อนุมัติคำขอ")}>ไม่อนุมัติ</Button>
+
+      <div style={s("display:grid;grid-template-columns:1fr 1fr;gap:9px;padding:0 18px 14px;border-top:1px solid #F1EEF8;padding-top:14px;")}>
+        <div style={s("background:#FAF9FD;border:1px solid #F0EDF7;border-radius:11px;padding:12px 13px;")}>
+          <div style={s("font-size:12px;font-weight:600;color:#1C1830;margin-bottom:5px;")}>เหตุผลขอต่างจาก AI</div>
+          <div style={s("font-size:11.5px;color:#5A5470;font-weight:500;")}>{request.overrideReasonCategory ?? "ไม่มีการขอต่างจาก AI"}</div>
+          <div style={s("font-size:11px;color:#9B95B0;margin-top:4px;line-height:1.5;")}>{request.overrideReasonText ?? "จำนวนที่ขอตรงกับ AI"}</div>
+        </div>
+        <div style={s("background:#FAF9FD;border:1px solid #F0EDF7;border-radius:11px;padding:12px 13px;")}>
+          <div style={s("font-size:12px;font-weight:600;color:#1C1830;margin-bottom:5px;")}>เส้นทางอนุมัติ</div>
+          <div style={s("font-size:11px;color:#5A5470;line-height:1.55;")}>{request.calculationSnapshot.approvalRoutingAtRequestDate.reason}</div>
+        </div>
+      </div>
+
+      <div style={s("display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;border-top:1px solid #F1EEF8;padding:13px 18px;")}>
+        <button onClick={() => onCalculation(request)} style={s("height:36px;padding:0 13px;border:1px solid #E5E1F0;border-radius:10px;background:#fff;color:#3B3654;font-family:inherit;font-size:12px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:6px;")}><Calculator style={s("width:14px;height:14px;color:#7C3AED;")} /> Snapshot</button>
+        <button onClick={() => onContactSupplier(supplier.id)} style={s("height:36px;padding:0 13px;border:1px solid #E5E1F0;border-radius:10px;background:#fff;color:#3B3654;font-family:inherit;font-size:12px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:6px;")}><Phone style={s("width:14px;height:14px;color:#7C3AED;")} /> ติดต่อ</button>
+        <button onClick={() => onAction(request.id, "More Info", "Request More Info", "ขอข้อมูลเพิ่มเติมจากคลัง")} style={s("height:36px;padding:0 13px;border:1px solid #E5E1F0;border-radius:10px;background:#fff;color:#3B3654;font-family:inherit;font-size:12px;font-weight:500;cursor:pointer;")}>ขอข้อมูลเพิ่ม</button>
+        <button onClick={() => onAction(request.id, "Rejected", "Rejected", "ไม่อนุมัติคำขอ")} style={s("height:36px;padding:0 14px;border:1px solid #FBD5D5;border-radius:10px;background:#fff;color:#DC2626;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;")}>ไม่อนุมัติ</button>
         {mustPassCentral ? (
-          <Button onClick={() => onAction(request.id, "Pending Central", "Approve & Pass to Central", "งบระดับเขตไม่เพียงพอ ส่งต่อส่วนกลาง")}>อนุมัติและส่งต่อส่วนกลาง</Button>
+          <button onClick={() => onAction(request.id, "Pending Central", "Approve & Pass to Central", "งบระดับเขตไม่เพียงพอ ส่งต่อส่วนกลาง")} style={s("height:36px;padding:0 14px;border:0;border-radius:10px;background:linear-gradient(135deg,#6D28D9,#C0249B);color:#fff;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;")}>อนุมัติ → ส่งต่อส่วนกลาง</button>
         ) : (
-          <Button variant="success" onClick={() => onAction(request.id, "Approved", "Approved", "อนุมัติตามปริมาณที่ขอ")}>อนุมัติ</Button>
+          <button onClick={() => onAction(request.id, "Approved", "Approved", "อนุมัติตามปริมาณที่ขอ")} style={s("height:36px;padding:0 16px;border:0;border-radius:10px;background:#059669;color:#fff;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;box-shadow:0 8px 16px -8px rgba(5,150,105,.6);")}><Check style={s("width:14px;height:14px;display:inline;margin-right:5px;")} />อนุมัติ</button>
         )}
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -6270,46 +7180,65 @@ function CentralReviewDetail({
   const logs = contactLogs.filter((log) => log.requestId === request.id || log.supplierId === request.supplierId);
 
   return (
-    <Card>
-      <SectionHeader title={`รายละเอียดตรวจส่วนกลาง · ${request.id}`} subtitle={`${sku.id} ${sku.name} · คำขอที่ส่งต่อจากเขต`} action={<StatusBadge status={request.status} />} />
-      <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 xl:grid-cols-4">
-        <ReviewMetric label="มูลค่า" value={formatTHB(request.estimatedCost)} />
-        <ReviewMetric label="ส่วนต่างงบประมาณ" value={formatTHB(budgetGap)} />
-        <ReviewMetric label="ซัพพลายเออร์" value={supplier.name} />
-        <ReviewMetric label="ราคาต่อหน่วย ณ วันที่ขอ" value={`${formatTHB(request.unitPrice)}/${request.unit}`} />
-        <ReviewMetric label="ระดับพัสดุสำรองปลอดภัย (Safety Stock)" value={`${formatNumber(request.calculationSnapshot.safetyStock)} ${request.unit}`} />
-        <ReviewMetric label="จุดสั่งซื้อใหม่ (Reorder Point)" value={`${formatNumber(request.calculationSnapshot.reorderPoint)} ${request.unit}`} />
-        <ReviewMetric label="ส่วนต่างจากค่าที่ระบบแนะนำ" value={formatPercent(request.calculationSnapshot.quantityVariancePercent)} />
-        <ReviewMetric label="เส้นทางอนุมัติ" value={getApprovalLayerLabel(request.calculationSnapshot.approvalRoutingAtRequestDate.layer)} />
+    <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 16px 32px -26px rgba(28,24,48,.3);overflow:hidden;")}>
+      <div style={s("display:flex;align-items:center;justify-content:space-between;gap:12px;padding:15px 18px;border-bottom:1px solid #F1EEF8;")}>
+        <div>
+          <div style={s("font-size:15px;font-weight:600;color:#1C1830;")}>{sku.name}</div>
+          <div style={s("display:flex;align-items:center;gap:6px;margin-top:3px;")}>
+            <span className="mono" style={s("font-size:10.5px;color:#6D28D9;background:#F4EEFE;padding:2px 8px;border-radius:6px;")}>{request.id}</span>
+            <span style={s("font-size:11px;color:#9B95B0;")}>ส่งต่อจากเขต</span>
+          </div>
+        </div>
+        <span style={s("font-size:10px;font-weight:600;color:#fff;background:#7C3AED;padding:3px 10px;border-radius:99px;")}>ส่วนกลาง</span>
       </div>
-      <div className="grid grid-cols-1 gap-4 px-5 pb-5 lg:grid-cols-2">
-        <Card className="p-4">
-          <h3 className="font-semibold text-slate-950">เหตุผลจากคลังพื้นที่</h3>
-          <p className="mt-2 text-sm leading-6 text-slate-500">{request.localReason}</p>
-        </Card>
-        <Card className="p-4">
-          <h3 className="font-semibold text-slate-950">เหตุผลที่เขตส่งต่อส่วนกลาง</h3>
-          <p className="mt-2 text-sm leading-6 text-slate-500">{request.regionalEscalationReason}</p>
-        </Card>
-        <Card className="p-4">
-          <h3 className="font-semibold text-slate-950">ข้อมูลซัพพลายเออร์</h3>
-          <p className="mt-2 text-sm text-slate-600">{supplier.contactPerson} · {supplier.phone} · {supplier.email}</p>
-          <p className="mt-2 text-sm text-slate-600">ระยะเวลารอพัสดุ (Lead Time) {request.leadTimeDays} วัน · จำนวนสั่งซื้อขั้นต่ำ (MOQ) {request.moq} {request.unit}</p>
-        </Card>
-        <Card className="p-4">
-          <h3 className="font-semibold text-slate-950">ประวัติการติดต่อซัพพลายเออร์</h3>
-          <p className="mt-2 text-sm text-slate-600">{request.supplierContactLogSummary}</p>
-          <p className="mt-2 text-xs text-slate-400">จำนวนบันทึกที่เกี่ยวข้อง: {logs.length}</p>
-        </Card>
+
+      <div style={s("display:grid;grid-template-columns:repeat(4,1fr);gap:9px;padding:16px 18px;")}>
+        {[
+          { label: "มูลค่าคำขอ", value: formatTHB(request.estimatedCost) },
+          { label: "ส่วนต่างงบ", value: formatTHB(budgetGap) },
+          { label: "ซัพพลายเออร์", value: supplier.name },
+          { label: "ราคา/หน่วย", value: `${formatTHB(request.unitPrice)}` },
+          { label: "Safety Stock", value: `${formatNumber(request.calculationSnapshot.safetyStock)} ${request.unit}` },
+          { label: "Reorder Point", value: `${formatNumber(request.calculationSnapshot.reorderPoint)} ${request.unit}` },
+          { label: "ส่วนต่าง AI", value: formatPercent(request.calculationSnapshot.quantityVariancePercent) },
+          { label: "เส้นทางอนุมัติ", value: getApprovalLayerLabel(request.calculationSnapshot.approvalRoutingAtRequestDate.layer) },
+        ].map(({ label, value }) => (
+          <div key={label} style={s("background:#FAF9FD;border:1px solid #F0EDF7;border-radius:9px;padding:9px 11px;")}>
+            <div style={s("font-size:10px;color:#9B95B0;")}>{label}</div>
+            <div className="mono" style={s("font-size:12px;font-weight:600;color:#1C1830;margin-top:2px;")}>{value}</div>
+          </div>
+        ))}
       </div>
-      <div className="flex flex-wrap justify-end gap-2 border-t border-slate-200 px-5 py-4">
-        <Button variant="secondary" onClick={() => onCalculation(request)}><Calculator className="h-4 w-4" /> รายละเอียดการคำนวณ</Button>
-        <Button variant="secondary" onClick={() => onContactSupplier(supplier.id)}><Phone className="h-4 w-4" /> ติดต่อซัพพลายเออร์</Button>
-        <Button variant="secondary" onClick={() => onAction(request.id, "More Info", "Request More Info", "ส่วนกลางขอข้อมูลเพิ่มเติม")}>ขอข้อมูลเพิ่มเติม</Button>
-        <Button variant="danger" onClick={() => onAction(request.id, "Rejected", "Central Reject", "ส่วนกลางไม่อนุมัติ")}>ส่วนกลางไม่อนุมัติ</Button>
-        <Button variant="success" onClick={() => onAction(request.id, "Approved", "Central Approve", "อนุมัติโดยส่วนกลาง")}>ส่วนกลางอนุมัติ</Button>
+
+      <div style={s("display:grid;grid-template-columns:1fr 1fr;gap:9px;padding:0 18px 14px;border-top:1px solid #F1EEF8;padding-top:14px;")}>
+        <div style={s("background:#FAF9FD;border:1px solid #F0EDF7;border-radius:11px;padding:12px 13px;")}>
+          <div style={s("font-size:12px;font-weight:600;color:#1C1830;margin-bottom:5px;")}>เหตุผลจากคลังพื้นที่</div>
+          <div style={s("font-size:11px;color:#5A5470;line-height:1.55;")}>{request.localReason}</div>
+        </div>
+        <div style={s("background:#FAF9FD;border:1px solid #F0EDF7;border-radius:11px;padding:12px 13px;")}>
+          <div style={s("font-size:12px;font-weight:600;color:#1C1830;margin-bottom:5px;")}>เหตุผลที่เขตส่งต่อ</div>
+          <div style={s("font-size:11px;color:#5A5470;line-height:1.55;")}>{request.regionalEscalationReason}</div>
+        </div>
+        <div style={s("background:#FAF9FD;border:1px solid #F0EDF7;border-radius:11px;padding:12px 13px;")}>
+          <div style={s("font-size:12px;font-weight:600;color:#1C1830;margin-bottom:5px;")}>ซัพพลายเออร์</div>
+          <div style={s("font-size:11px;color:#5A5470;line-height:1.5;")}>{supplier.contactPerson} · {supplier.phone}</div>
+          <div style={s("font-size:11px;color:#9B95B0;margin-top:2px;")}>LT {request.leadTimeDays}ว. · MOQ {request.moq} {request.unit}</div>
+        </div>
+        <div style={s("background:#FAF9FD;border:1px solid #F0EDF7;border-radius:11px;padding:12px 13px;")}>
+          <div style={s("font-size:12px;font-weight:600;color:#1C1830;margin-bottom:5px;")}>ประวัติติดต่อ</div>
+          <div style={s("font-size:11px;color:#5A5470;line-height:1.5;")}>{request.supplierContactLogSummary}</div>
+          <div style={s("font-size:10px;color:#9B95B0;margin-top:3px;")}>{logs.length} บันทึก</div>
+        </div>
       </div>
-    </Card>
+
+      <div style={s("display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;border-top:1px solid #F1EEF8;padding:13px 18px;")}>
+        <button onClick={() => onCalculation(request)} style={s("height:36px;padding:0 13px;border:1px solid #E5E1F0;border-radius:10px;background:#fff;color:#3B3654;font-family:inherit;font-size:12px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:6px;")}><Calculator style={s("width:14px;height:14px;color:#7C3AED;")} /> Snapshot</button>
+        <button onClick={() => onContactSupplier(supplier.id)} style={s("height:36px;padding:0 13px;border:1px solid #E5E1F0;border-radius:10px;background:#fff;color:#3B3654;font-family:inherit;font-size:12px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:6px;")}><Phone style={s("width:14px;height:14px;color:#7C3AED;")} /> ติดต่อ</button>
+        <button onClick={() => onAction(request.id, "More Info", "Request More Info", "ส่วนกลางขอข้อมูลเพิ่มเติม")} style={s("height:36px;padding:0 13px;border:1px solid #E5E1F0;border-radius:10px;background:#fff;color:#3B3654;font-family:inherit;font-size:12px;font-weight:500;cursor:pointer;")}>ขอข้อมูลเพิ่ม</button>
+        <button onClick={() => onAction(request.id, "Rejected", "Central Reject", "ส่วนกลางไม่อนุมัติ")} style={s("height:36px;padding:0 14px;border:1px solid #FBD5D5;border-radius:10px;background:#fff;color:#DC2626;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;")}>ไม่อนุมัติ</button>
+        <button onClick={() => onAction(request.id, "Approved", "Central Approve", "อนุมัติโดยส่วนกลาง")} style={s("height:36px;padding:0 16px;border:0;border-radius:10px;background:#059669;color:#fff;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;box-shadow:0 8px 16px -8px rgba(5,150,105,.6);display:flex;align-items:center;gap:6px;")}><Check style={s("width:14px;height:14px;")} />ส่วนกลางอนุมัติ</button>
+      </div>
+    </div>
   );
 }
 
@@ -6348,50 +7277,62 @@ function RequestHistoryPage({
   const selectedFeedbackLogs = selected ? aiFeedbackLogs.filter((log) => log.requestId === selected.id) : [];
 
   return (
-    <>
-      <PageTitle eyebrow="ประวัติ" title="ประวัติคำขอซื้อและบันทึกตรวจสอบย้อนหลัง" subtitle="แสดงคำขอซื้อย้อนหลังและภาพบันทึกการคำนวณที่ถูกเก็บ ณ วันที่ส่งคำขอ" />
-      <div className="mb-5">
-        <InlineAlert tone="info">
-          <div className="space-y-1">
-            <p>ประวัติหน้านี้ใช้ค่าจาก Calculation Snapshot ที่บันทึกตอนส่งคำขอ ไม่คำนวณใหม่จากสูตรหรือข้อมูล Supplier ปัจจุบัน</p>
-            <p>ช่อง AI Feedback ใช้บันทึกค่าจริงหลังใช้งาน เพื่อคำนวณ Error = Actual Quantity - AI Suggested Quantity และใช้ปรับสูตรเวอร์ชันถัดไปเมื่อ error สูงกว่าเกณฑ์</p>
-          </div>
-        </InlineAlert>
-      </div>
-      <Card className="mb-5 p-4">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-          <div className="relative md:col-span-2">
-            <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" />
-            <input className={`${inputClass} pl-9`} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="ค้นหารหัสคำขอ / รายการ / ซัพพลายเออร์ / สถานะ" />
-          </div>
-          <select className={inputClass} defaultValue="ทุกสถานะ"><option>ทุกสถานะ</option><option>อนุมัติแล้ว</option><option>รออนุมัติ</option><option>ไม่อนุมัติ</option></select>
-          <select className={inputClass} defaultValue="สูตร v1.0"><option>สูตร v1.0</option></select>
+    <div>
+      <div style={s("display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:18px;")}>
+        <div>
+          <h1 style={s("margin:0 0 5px;font-size:23px;font-weight:600;letter-spacing:-.2px;color:#1C1830;")}>ประวัติ &amp; Audit Trail</h1>
+          <p style={s("margin:0;font-size:13.5px;color:#7B7591;")}>เส้นเวลาการอนุมัติ + Calculation Snapshot ที่ล็อกค่า ณ เวลานั้น — อ่านจาก snapshot ไม่คำนวณใหม่</p>
         </div>
-      </Card>
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_430px]">
-        <Card>
-          <SectionHeader title="ตารางประวัติคำขอ" subtitle="เลือกคำขอเพื่อดูบันทึกตรวจสอบย้อนหลัง" />
-          <DataTable columns={["รหัสคำขอ", "รายการ", "ซัพพลายเออร์", "ระบบแนะนำ", "จำนวนที่ขอ", "จำนวนที่อนุมัติ", "สถานะ"]} empty={filtered.length === 0}>
-            {filtered.map((request) => {
-              const sku = getSku(request.skuId);
-              const supplier = getSupplier(request.supplierId);
-              return (
-                <tr key={request.id} onClick={() => onSelectRequest(request.id)} className={`cursor-pointer hover:bg-slate-50 ${selected?.id === request.id ? "bg-blue-50" : ""}`}>
-                  <td className="px-4 py-3 font-semibold text-slate-900">{request.id}</td>
-                  <td className="px-4 py-3">{sku.name}</td>
-                  <td className="px-4 py-3">{supplier.name}</td>
-                  <td className="px-4 py-3">{request.aiSuggestedQuantity} {request.unit}</td>
-                  <td className="px-4 py-3">{request.requestedQuantity} {request.unit}</td>
-                  <td className="px-4 py-3">{request.approvedQuantity ?? "-"} {request.approvedQuantity ? request.unit : ""}</td>
-                  <td className="px-4 py-3"><StatusBadge status={request.status} /></td>
-                </tr>
-              );
-            })}
-          </DataTable>
-        </Card>
+        <div style={s("display:flex;align-items:center;gap:9px;")}>
+          <button style={s("display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 13px;border:1px solid #E5E1F0;border-radius:10px;background:#fff;color:#3B3654;font-family:inherit;font-size:12px;font-weight:500;cursor:pointer;")}><FileDown style={s("width:15px;height:15px;color:#7C3AED;")} /> Export PDF</button>
+          {selected && <div className="mono" style={s("display:flex;align-items:center;gap:7px;font-size:11.5px;color:#6D28D9;background:#F4EEFE;border:1px solid #E4D7FB;padding:6px 11px;border-radius:10px;")}><Lock style={s("width:13px;height:13px;")} /> {selected.id}</div>}
+        </div>
+      </div>
+
+      <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:14px;padding:11px 14px;margin-bottom:16px;")}>
+        <div style={s("display:grid;grid-template-columns:1fr auto auto;gap:9px;")}>
+          <div style={s("position:relative;")}>
+            <Search style={s("position:absolute;left:10px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:#9B95B0;")} />
+            <input style={s("width:100%;height:36px;border:1px solid #E5E1F0;border-radius:10px;background:#FAF9FD;padding:0 12px 0 33px;font-family:inherit;font-size:13px;color:#1C1830;outline:none;box-sizing:border-box;")} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="ค้นหารหัสคำขอ / รายการ / ซัพพลายเออร์" />
+          </div>
+          <select style={s("height:36px;border:1px solid #E5E1F0;border-radius:10px;background:#FAF9FD;padding:0 28px 0 11px;font-family:inherit;font-size:12.5px;color:#3B3654;outline:none;")}><option>ทุกสถานะ</option><option>อนุมัติแล้ว</option><option>รออนุมัติ</option><option>ไม่อนุมัติ</option></select>
+          <select style={s("height:36px;border:1px solid #E5E1F0;border-radius:10px;background:#FAF9FD;padding:0 28px 0 11px;font-family:inherit;font-size:12.5px;color:#3B3654;outline:none;")}><option>สูตร v1.0</option></select>
+        </div>
+      </div>
+
+      <div style={s("display:grid;grid-template-columns:1.55fr 1fr;gap:18px;align-items:start;")}>
+        <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 16px 32px -26px rgba(28,24,48,.3);overflow:hidden;")}>
+          <div style={s("padding:15px 18px 12px;border-bottom:1px solid #F1EEF8;")}>
+            <h2 style={s("margin:0;font-size:15px;font-weight:600;color:#1C1830;")}>ตารางประวัติคำขอ</h2>
+          </div>
+          <table style={s("width:100%;border-collapse:collapse;font-size:12.5px;")}>
+            <thead><tr style={s("background:#FAF9FD;")}>
+              {["รหัสคำขอ","รายการ","สถานะ","AI แนะนำ","ขอ","อนุมัติ"].map(h => (
+                <th key={h} style={s("text-align:left;font-size:10px;font-weight:600;color:#9B95B0;text-transform:uppercase;padding:8px 14px;")}>{h}</th>
+              ))}
+            </tr></thead>
+            <tbody>
+              {filtered.map(req => {
+                const sku = getSku(req.skuId);
+                const isActive = selected?.id === req.id;
+                return (
+                  <tr key={req.id} className="dash-row" onClick={() => onSelectRequest(req.id)}
+                    style={s("border-top:1px solid #F4F2FA;cursor:pointer;" + (isActive ? "background:#F6F0FF;" : ""))}>
+                    <td style={s("padding:10px 14px;")}><span className="mono" style={s("font-size:11px;font-weight:600;color:#6D28D9;background:#F4EEFE;padding:2px 7px;border-radius:6px;")}>{req.id}</span></td>
+                    <td style={s("padding:10px 14px;font-size:12.5px;font-weight:500;color:#1C1830;")}>{sku.name}</td>
+                    <td style={s("padding:10px 14px;")}><DashPill status={req.status} /></td>
+                    <td style={s("padding:10px 14px;text-align:right;")}><span className="mono" style={s("font-size:12px;color:#6D28D9;")}>{req.aiSuggestedQuantity}</span></td>
+                    <td style={s("padding:10px 14px;text-align:right;")}><span className="mono" style={s("font-size:12px;color:#1C1830;")}>{req.requestedQuantity}</span></td>
+                    <td style={s("padding:10px 14px;text-align:right;")}><span className="mono" style={s("font-size:12px;color:#059669;")}>{req.approvedQuantity ?? "—"}</span></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
         {selected ? <HistoryDetail request={selected} logs={logs} aiFeedbackLogs={selectedFeedbackLogs} onSaveFeedback={onSaveFeedback} /> : null}
       </div>
-    </>
+    </div>
   );
 }
 
@@ -6419,134 +7360,168 @@ function HistoryDetail({
   const previewError = calculateAiSuggestionError(request.aiSuggestedQuantity, actualQuantity);
 
   return (
-    <Card>
-      <SectionHeader title={`รายละเอียดการตรวจสอบย้อนหลัง · ${request.id}`} subtitle={`${sku.id} ${sku.name}`} action={<StatusBadge status={request.status} />} />
-      <div className="space-y-4 p-5">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <ReviewMetric label="จำนวนที่ระบบแนะนำ" value={`${request.aiSuggestedQuantity} ${request.unit}`} />
-          <ReviewMetric label="จำนวนที่ขอ" value={`${request.requestedQuantity} ${request.unit}`} />
-          <ReviewMetric label="จำนวนที่อนุมัติ" value={`${request.approvedQuantity ?? "-"} ${request.approvedQuantity ? request.unit : ""}`} />
-          <ReviewMetric label="ส่วนต่างจากค่าที่ระบบแนะนำ" value={`${request.variancePercent > 0 ? "+" : ""}${formatNumber(request.variancePercent)}%`} />
-          <ReviewMetric label="เวอร์ชันสูตร" value={request.formulaVersion} />
-          <ReviewMetric label="ระยะเวลารอพัสดุของ Supplier (Lead Time)" value={`${request.leadTimeDays} วัน`} />
-          <ReviewMetric label="ราคาต่อหน่วย ณ วันที่ขอ" value={`${formatTHB(request.unitPrice)}/${request.unit}`} />
-          <ReviewMetric label="ซัพพลายเออร์" value={supplier.name} />
+    <div style={s("display:flex;flex-direction:column;gap:16px;")}>
+      <div style={s("display:flex;align-items:center;gap:16px;background:#fff;border:1px solid #EBE7F5;border-radius:14px;padding:14px 18px;box-shadow:0 12px 28px -24px rgba(28,24,48,.4);")}>
+        <span style={s("width:44px;height:44px;border-radius:11px;background:#F4EEFE;color:#7C3AED;display:flex;align-items:center;justify-content:center;flex:none;")}><Cable style={s("width:21px;height:21px;")} /></span>
+        <div style={s("flex:1;min-width:0;")}>
+          <div style={s("font-size:14px;font-weight:600;color:#1C1830;")}>{sku.name} · {request.requestedQuantity} {request.unit}</div>
+          <div className="mono" style={s("font-size:11px;color:#A29DB5;margin-top:2px;")}>{sku.id} · {supplier.name}</div>
         </div>
-        <Card className="p-4">
-          <h3 className="font-semibold text-slate-950">เหตุผลการขอแตกต่างจากค่าที่ระบบแนะนำ</h3>
-          <p className="mt-2 text-sm text-slate-600">{request.overrideReasonCategory ?? "ไม่มีการขอแตกต่างจากค่าที่ระบบแนะนำ"}</p>
-          <p className="mt-1 text-sm text-slate-500">{request.overrideReasonText ?? "-"}</p>
-        </Card>
-        <Card className="p-4">
-          <h3 className="font-semibold text-slate-950">ภาพบันทึกการคำนวณ</h3>
-          <p className="mt-2 text-sm text-slate-600">ระดับพัสดุสำรองปลอดภัย (Safety Stock): {request.calculationSnapshot.safetyStock}</p>
-          <p className="mt-1 text-sm text-slate-600">จุดสั่งซื้อใหม่ (Reorder Point): {request.calculationSnapshot.reorderPoint}</p>
-          <p className="mt-1 text-sm text-slate-600">จำนวนที่ระบบแนะนำ: {request.calculationSnapshot.suggestedQuantity}</p>
-          <p className="mt-2 text-xs text-slate-400">ภาพบันทึกนี้ถูกเก็บ ณ วันที่ส่งคำขอ และไม่คำนวณย้อนหลังใหม่</p>
-        </Card>
-        <CalculationSnapshotView snapshot={request.calculationSnapshot} unit={request.unit} />
-        <Card className="p-4">
-          <h3 className="font-semibold text-slate-950">AI Feedback: เทียบค่าที่ระบบแนะนำกับค่าจริง</h3>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            หาก AI Suggest ไม่ตรงกับการใช้งานจริง ให้บันทึกจำนวนจริงตรงนี้ ระบบจะเก็บ error เทียบกับ snapshot เดิม และถ้า error เกินเกณฑ์ใน Settings จะ auto-tune policy แบบก้าวเล็กพร้อมสร้างสูตรเวอร์ชันใหม่
-          </p>
-          <p className="mt-1 text-xs leading-5 text-slate-500">
-            การ auto-tune มีผลกับการคำนวณครั้งถัดไปเท่านั้น ไม่แก้ Request History หรือ Calculation Snapshot เดิมย้อนหลัง
-          </p>
-          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label={`จำนวนจริง (${request.unit})`} hint="อาจเป็นจำนวนที่ใช้จริงหลังรอบแผน หรือจำนวนที่ควรเติมจริงหลังตรวจสอบหน้างาน">
-              <EditableNumberInput min="0" value={actualQuantity} onValueChange={setActualQuantity} />
-            </Field>
-            <Field label="หมายเหตุผลจริง">
-              <input className={inputClass} value={feedbackNote} onChange={(event) => setFeedbackNote(event.target.value)} />
-            </Field>
-          </div>
-          <div className="mt-3 rounded-md bg-slate-50 p-3 text-sm leading-6 text-slate-600">
-            <p>AI Suggested Quantity = {formatNumber(request.aiSuggestedQuantity)} {request.unit}</p>
-            <p>Actual Quantity = {formatNumber(actualQuantity)} {request.unit}</p>
-            <p>ส่วนต่าง = {previewError.errorQuantity > 0 ? "+" : ""}{formatNumber(previewError.errorQuantity)} {request.unit} ({formatPercent(previewError.errorPercent)})</p>
-          </div>
-          <Button className="mt-4 w-full" onClick={() => onSaveFeedback(request, actualQuantity, feedbackNote)}>บันทึก AI Feedback</Button>
-          <div className="mt-4">
-            <DataTable columns={["วันที่", "ค่าจริง", "ส่วนต่าง", "% Error", "หมายเหตุ"]} empty={aiFeedbackLogs.length === 0}>
-              {aiFeedbackLogs.map((feedback) => (
-                <tr key={feedback.id}>
-                  <td className="px-4 py-3">{feedback.createdAt}</td>
-                  <td className="px-4 py-3">{formatNumber(feedback.actualQuantity)} {request.unit}</td>
-                  <td className="px-4 py-3">{feedback.errorQuantity > 0 ? "+" : ""}{formatNumber(feedback.errorQuantity)} {request.unit}</td>
-                  <td className="px-4 py-3">{formatPercent(feedback.errorPercent)}</td>
-                  <td className="px-4 py-3">{feedback.note}</td>
-                </tr>
-              ))}
-            </DataTable>
-          </div>
-        </Card>
-        <Card className="p-4">
-          <h3 className="mb-3 font-semibold text-slate-950">ไทม์ไลน์การอนุมัติ</h3>
-          <ApprovalTimeline items={request.timeline} />
-        </Card>
-        <Card className="p-4">
-          <h3 className="font-semibold text-slate-950">ประวัติการติดต่อซัพพลายเออร์</h3>
-          <div className="mt-3 space-y-2">
-            {logs.map((log) => (
-              <p key={log.id} className="rounded-md bg-slate-50 p-2 text-sm text-slate-600">{log.createdAt} · {getContactChannelLabel(log.channel)} · {log.note}</p>
-            ))}
-          </div>
-        </Card>
+        <DashPill status={request.status} />
       </div>
-    </Card>
+
+      <div style={s("display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;")}>
+        <div style={s("display:flex;flex-direction:column;gap:16px;")}>
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:18px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 16px 32px -26px rgba(28,24,48,.3);")}>
+            <h2 style={s("margin:0 0 16px;font-size:15px;font-weight:600;color:#1C1830;")}>เส้นเวลาการอนุมัติ</h2>
+            <div style={s("position:relative;padding-left:28px;")}>
+              <div style={s("position:absolute;left:10px;top:6px;bottom:14px;width:2px;background:#EDE6FA;")}></div>
+              {request.timeline.map((item, i) => (
+                <div key={i} style={s("position:relative;margin-bottom:15px;")}>
+                  <span style={s("position:absolute;left:-28px;top:0;width:22px;height:22px;border-radius:50%;background:#F4EEFE;display:flex;align-items:center;justify-content:center;")}><History style={s("width:13px;height:13px;color:#7C3AED;")} /></span>
+                  <div style={s("font-size:13px;font-weight:600;color:#1C1830;")}>{item.action}</div>
+                  <div style={s("font-size:11px;color:#9B95B0;margin-top:2px;")}>{item.actor} · {item.date}</div>
+                  {item.note && <div style={s("font-size:11.5px;color:#3F6B57;background:#F0FDF9;border:1px solid #B6EBD7;border-radius:8px;padding:6px 9px;margin-top:6px;")}>{item.note}</div>}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 16px 32px -26px rgba(28,24,48,.3);overflow:hidden;")}>
+            <div style={s("display:flex;align-items:center;gap:11px;padding:15px 18px;background:linear-gradient(100deg,#FBF8FF,#F5EEFE);border-bottom:1px solid #EFE6FB;")}>
+              <Lock style={s("width:16px;height:16px;color:#6D28D9;")} />
+              <div style={s("flex:1;")}><div style={s("font-size:14px;font-weight:600;color:#5B21B6;")}>Calculation Snapshot</div><div style={s("font-size:11px;color:#8A7AA8;")}>ล็อกค่า ณ เวลาส่งคำขอ · {request.formulaVersion} · ไม่ถูกแก้ย้อนหลัง</div></div>
+              <span className="mono" style={s("font-size:10px;color:#7C3AED;background:#F4EEFE;padding:3px 8px;border-radius:6px;")}>{request.id}</span>
+            </div>
+            <div style={s("padding:16px 18px;display:grid;grid-template-columns:repeat(3,1fr);gap:9px;")}>
+              {[
+                {label:"Avg Daily Demand",value:`${formatNumber(request.calculationSnapshot.averageDailyDemand)} ${request.unit}/วัน`},
+                {label:"Demand SD",value:formatNumber(request.calculationSnapshot.demandVariabilityPerDay)},
+                {label:"Adjusted LT",value:`${request.calculationSnapshot.adjustedLeadTimeDays} วัน`},
+                {label:"Safety Stock",value:`${formatNumber(request.calculationSnapshot.safetyStock)} ${request.unit}`},
+                {label:"Reorder Point",value:`${formatNumber(request.calculationSnapshot.reorderPoint)} ${request.unit}`},
+                {label:"Target Stock",value:`${formatNumber(request.calculationSnapshot.targetStockLevel)} ${request.unit}`},
+                {label:"AI Suggested",value:`${formatNumber(request.calculationSnapshot.suggestedQuantity)} ${request.unit}`,violet:true},
+                {label:"Requested",value:`${formatNumber(request.requestedQuantity)} ${request.unit}`,amber:true},
+                {label:"Estimated Cost",value:formatTHB(request.estimatedCost)},
+              ].map(({label,value,violet,amber}: {label:string;value:string;violet?:boolean;amber?:boolean}) => (
+                <div key={label} style={s("border-radius:9px;padding:9px 11px;" + (violet ? "background:#F6F0FF;border:1px solid #DCC9FB;" : amber ? "background:#FFFBEB;border:1px solid #FBE3A2;" : "background:#FAF9FD;border:1px solid #F0EDF7;"))}>
+                  <div style={s("font-size:10px;" + (violet ? "color:#7A5BA8;" : amber ? "color:#9A7B3F;" : "color:#9B95B0;"))}>{label}</div>
+                  <div className="mono" style={s("font-size:12px;font-weight:600;margin-top:2px;" + (violet ? "color:#6D28D9;" : amber ? "color:#B45309;" : "color:#1C1830;"))}>{value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div style={s("display:flex;flex-direction:column;gap:16px;")}>
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:18px;box-shadow:0 14px 30px -24px rgba(28,24,48,.3);")}>
+            <div style={s("display:flex;align-items:center;gap:8px;margin-bottom:5px;")}><Repeat2 style={s("width:16px;height:16px;color:#6D28D9;")} /><h2 style={s("margin:0;font-size:14px;font-weight:600;color:#1C1830;")}>AI Feedback (Closed loop)</h2></div>
+            <p style={s("margin:0 0 14px;font-size:11px;color:#9B95B0;")}>เทียบค่าจริงกับที่ AI แนะนำ เพื่อปรับสูตรรอบถัดไป</p>
+            <div style={s("display:flex;gap:10px;margin-bottom:13px;")}>
+              <div style={s("flex:1;text-align:center;background:#F6F0FF;border:1px solid #DCC9FB;border-radius:11px;padding:11px 8px;")}><div style={s("font-size:10.5px;color:#7A5BA8;")}>AI แนะนำ</div><div className="mono" style={s("font-size:19px;font-weight:700;color:#6D28D9;")}>{formatNumber(request.aiSuggestedQuantity)}</div></div>
+              <div style={s("flex:1;text-align:center;background:#FAF9FD;border:1px solid #EBE7F5;border-radius:11px;padding:11px 8px;")}><div style={s("font-size:10.5px;color:#9B95B0;")}>ใส่จริง</div>
+                <input style={s("width:100%;background:transparent;border:0;font-size:19px;font-weight:700;color:#1C1830;text-align:center;font-family:'IBM Plex Mono',monospace;outline:none;")} type="number" value={actualQuantity} onChange={(e) => setActualQuantity(Number(e.target.value))} />
+              </div>
+              <div style={s("flex:1;text-align:center;background:#FFFBEB;border:1px solid #FBE3A2;border-radius:11px;padding:11px 8px;")}><div style={s("font-size:10.5px;color:#9A7B3F;")}>Error</div><div className="mono" style={s("font-size:19px;font-weight:700;color:#B45309;")}>{formatPercent(previewError.errorPercent)}</div></div>
+            </div>
+            <div style={s("background:#F0FDF9;border:1px solid #B6EBD7;border-radius:11px;padding:11px 13px;margin-bottom:10px;")}>
+              <div style={s("display:flex;align-items:flex-start;gap:8px;")}><GitBranch style={s("width:15px;height:15px;color:#059669;margin-top:1px;")} /><div style={s("font-size:11.5px;color:#3F6B57;line-height:1.55;")}>หมายเหตุ: <input style={s("background:transparent;border:0;outline:none;font-family:inherit;font-size:11.5px;color:#3F6B57;width:calc(100% - 20px);")} value={feedbackNote} onChange={e => setFeedbackNote(e.target.value)} /></div></div>
+            </div>
+            <button onClick={() => onSaveFeedback(request, actualQuantity, feedbackNote)} style={s("width:100%;height:40px;border:0;border-radius:11px;background:linear-gradient(135deg,#6D28D9,#C0249B);color:#fff;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;")}><Sparkles style={s("width:15px;height:15px;")} /> บันทึก AI Feedback</button>
+            {aiFeedbackLogs.length > 0 && (
+              <div style={s("margin-top:12px;display:flex;flex-direction:column;")}>
+                {aiFeedbackLogs.map(fb => (
+                  <div key={fb.id} style={s("display:flex;align-items:center;justify-content:space-between;font-size:11.5px;padding:7px 0;border-top:1px solid #F4F2FA;")}>
+                    <span style={s("color:#7B7591;")}>{fb.createdAt}</span>
+                    <span className="mono" style={s("color:#1C1830;")}>{formatNumber(fb.actualQuantity)} {request.unit}</span>
+                    <span className="mono" style={s("font-weight:600;" + (fb.errorPercent > 0 ? "color:#B91C1C;" : "color:#059669;"))}>{formatPercent(fb.errorPercent)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:16px 18px;box-shadow:0 14px 30px -24px rgba(28,24,48,.3);")}>
+            <h2 style={s("margin:0 0 12px;font-size:14px;font-weight:600;color:#1C1830;")}>ความสมบูรณ์ของหลักฐาน</h2>
+            <div style={s("display:flex;flex-direction:column;gap:9px;")}>
+              {["Snapshot อ่านจากค่าที่ล็อกไว้","Audit trail ครบทุก action",request.overrideReasonText ? "เหตุผล override บันทึกถาวร" : null].filter(Boolean).map(label => (
+                <div key={label as string} style={s("display:flex;align-items:center;gap:9px;font-size:12px;color:#5A5470;")}><CheckCircle2 style={s("width:15px;height:15px;color:#059669;")} /> {label}</div>
+              ))}
+            </div>
+            <div style={s("margin-top:12px;font-size:10.5px;color:#9B95B0;line-height:1.55;border-top:1px solid #F1EEF8;padding-top:10px;")}>ตอบโจทย์ธรรมาภิบาล (Audit Committee) — ตรวจย้อนหลังได้แม้ราคา/สูตร/งบเปลี่ยน</div>
+          </div>
+
+          {logs.length > 0 && (
+            <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:16px 18px;box-shadow:0 14px 30px -24px rgba(28,24,48,.3);")}>
+              <h2 style={s("margin:0 0 12px;font-size:14px;font-weight:600;color:#1C1830;")}>ประวัติติดต่อซัพพลายเออร์</h2>
+              <div style={s("display:flex;flex-direction:column;gap:8px;")}>
+                {logs.map(log => (
+                  <div key={log.id} style={s("font-size:11.5px;color:#5A5470;background:#FAF9FD;border-radius:9px;padding:8px 11px;")}>{log.createdAt} · {getContactChannelLabel(log.channel)} · {log.note}</div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
 function VmiCandidatePage({ onSimulation, openSku }: { onSimulation: () => void; openSku: (skuId: string) => void }) {
   return (
-    <>
-      <PageTitle eyebrow="VMI" title="วิเคราะห์ SKU ที่เหมาะกับ VMI" subtitle="AI วิเคราะห์ SKU ที่เหมาะสมสำหรับการให้ซัพพลายเออร์ช่วยบริหารสินค้าคงคลัง" />
-      <div className="mb-5">
-        <InlineAlert tone="info">
-          <div className="space-y-1">
-            <p>ที่มาของคะแนน VMI: คะแนนรวม = Demand Stability + Supplier Reliability + Usage Frequency + Lead Time Stability + Inventory Value Impact - Procurement Complexity Penalty</p>
-            <p>ค่าจะเปลี่ยนเมื่อมีข้อมูล usage, lead time, supplier reliability, ราคา หรือมูลค่าสินค้าคงคลังใหม่ และ VMI ใน PoC นี้เป็นการจำลอง ไม่ใช่การเติมของจริงโดยซัพพลายเออร์</p>
+    <div>
+      <div style={s("display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:18px;")}>
+        <div>
+          <div style={s("display:flex;align-items:center;gap:10px;margin-bottom:5px;")}>
+            <h1 style={s("margin:0;font-size:23px;font-weight:600;letter-spacing:-.2px;color:#1C1830;")}>VMI — Vendor Managed Inventory</h1>
+            <span style={s("display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#7C3AED;background:#F4EEFE;border:1px solid #E4D7FB;padding:3px 9px;border-radius:99px;")}>Simulation</span>
           </div>
-        </InlineAlert>
+          <p style={s("margin:0;font-size:13.5px;color:#7B7591;")}>จำลองผลถ้าให้ซัพพลายเออร์ดูแลสต็อก — เทียบ Current Model กับ VMI (ยังไม่ใช่การเติมจริง)</p>
+        </div>
       </div>
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <Card>
-          <SectionHeader title="ตารางผู้สมัคร VMI" subtitle="จัดลำดับจากเสถียรภาพความต้องการ ความน่าเชื่อถือซัพพลายเออร์ และคะแนนรวม" />
-          <DataTable columns={["SKU", "รายการ", "เสถียรภาพความต้องการใช้", "ความน่าเชื่อถือซัพพลายเออร์", "คะแนน", "ดำเนินการ"]}>
-            {vmiCandidates.map((candidate) => {
+
+      <div style={s("display:grid;grid-template-columns:1.5fr 1fr;gap:18px;align-items:start;")}>
+        <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 16px 32px -26px rgba(28,24,48,.3);overflow:hidden;")}>
+          <div style={s("padding:15px 18px 12px;border-bottom:1px solid #F1EEF8;")}>
+            <h2 style={s("margin:0;font-size:15px;font-weight:600;color:#1C1830;")}>VMI Candidate Rankings</h2>
+          </div>
+          <div style={s("padding:6px 0;")}>
+            <div style={s("display:grid;grid-template-columns:1fr 1fr 1fr 80px 80px;padding:9px 18px;font-size:10px;font-weight:600;color:#9B95B0;text-transform:uppercase;border-bottom:1px solid #F4F2FA;")}>
+              <span>SKU</span><span>เสถียรภาพ</span><span>ความน่าเชื่อถือ</span><span style={s("text-align:right;")}>คะแนน</span><span></span>
+            </div>
+            {vmiCandidates.map(candidate => {
               const sku = getSku(candidate.skuId);
               return (
-                <tr key={candidate.skuId} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-semibold text-slate-900">{sku.id}</td>
-                  <td className="px-4 py-3">{sku.name}</td>
-                  <td className="px-4 py-3">{getDemandStabilityLabel(candidate.demandStability)}</td>
-                  <td className="px-4 py-3">{candidate.supplierReliability}%</td>
-                  <td className="px-4 py-3 font-semibold text-blue-700">{candidate.score}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-2">
-                      <Button variant="secondary" onClick={() => openSku(candidate.skuId)}>รายละเอียด SKU</Button>
-                      <Button onClick={onSimulation}>จำลอง</Button>
-                    </div>
-                  </td>
-                </tr>
+                <div key={candidate.skuId} style={s("display:grid;grid-template-columns:1fr 1fr 1fr 80px 80px;align-items:center;padding:12px 18px;border-top:1px solid #F4F2FA;font-size:12.5px;")}>
+                  <div><div style={s("font-weight:600;color:#1C1830;")}>{sku.name}</div><div className="mono" style={s("font-size:10px;color:#A29DB5;")}>{sku.id}</div></div>
+                  <span style={s("color:#5A5470;")}>{getDemandStabilityLabel(candidate.demandStability)}</span>
+                  <span style={s("color:#059669;font-weight:600;")}>{candidate.supplierReliability}%</span>
+                  <span className="mono" style={s("text-align:right;font-size:17px;font-weight:700;color:#6D28D9;")}>{candidate.score}</span>
+                  <div style={s("display:flex;gap:6px;justify-content:flex-end;")}>
+                    <button onClick={() => openSku(candidate.skuId)} style={s("height:30px;padding:0 10px;border:1px solid #E5E1F0;border-radius:8px;background:#fff;color:#3B3654;font-family:inherit;font-size:11px;font-weight:500;cursor:pointer;")}>SKU</button>
+                    <button onClick={onSimulation} style={s("height:30px;padding:0 10px;border:0;border-radius:8px;background:linear-gradient(135deg,#6D28D9,#C0249B);color:#fff;font-family:inherit;font-size:11px;font-weight:600;cursor:pointer;")}>จำลอง</button>
+                  </div>
+                </div>
               );
             })}
-          </DataTable>
-        </Card>
-        <Card className="p-5">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-violet-700" />
-            <h3 className="font-semibold text-slate-950">สรุปจากระบบ AI</h3>
           </div>
-          <p className="mt-4 text-sm leading-6 text-slate-600">
-            ระบบแนะนำ 1CC0CG0002 สายเคเบิลใต้ดิน XLPE 240 ตร.มม. เป็นรายการเหมาะกับ VMI อันดับหนึ่ง เพราะความต้องการใช้มีเสถียรภาพสูง ซัพพลายเออร์มีความน่าเชื่อถือ 96% และได้คะแนน 88
-          </p>
-          <StatusBadge status="VMI Candidate" />
-          <Button className="mt-5 w-full" onClick={onSimulation}><Workflow className="h-4 w-4" /> เปิดการจำลอง VMI</Button>
-        </Card>
+        </div>
+
+        <div style={s("display:flex;flex-direction:column;gap:16px;")}>
+          <div style={s("background:linear-gradient(140deg,#5B21B6,#A41CA8);border-radius:16px;padding:18px;box-shadow:0 16px 32px -18px rgba(109,40,217,.6);")}>
+            <div style={s("font-size:12px;color:rgba(255,255,255,.78);")}>VMI Suitability Score — อันดับ 1</div>
+            <div className="mono" style={s("font-size:30px;font-weight:700;color:#fff;margin-top:5px;line-height:1;")}>{vmiCandidates[0]?.score ?? "—"}<span style={s("font-size:15px;")}>/100</span></div>
+            <div style={s("font-size:11.5px;color:rgba(255,255,255,.72);margin-top:7px;")}>{vmiCandidates[0] ? `${getSku(vmiCandidates[0].skuId).name} · demand สม่ำเสมอ · ซัพพลายเออร์น่าเชื่อถือ` : "-"}</div>
+          </div>
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:16px 18px;box-shadow:0 14px 30px -24px rgba(28,24,48,.3);")}>
+            <div style={s("display:flex;align-items:center;gap:8px;margin-bottom:5px;")}><Sparkles style={s("width:16px;height:16px;color:#6D28D9;")} /><h2 style={s("margin:0;font-size:14px;font-weight:600;color:#1C1830;")}>สรุปจากระบบ AI</h2></div>
+            <p style={s("font-size:12px;color:#6B6483;line-height:1.6;margin:10px 0;")}>ระบบแนะนำ {vmiCandidates[0] ? getSku(vmiCandidates[0].skuId).name : "-"} เป็นรายการเหมาะกับ VMI อันดับหนึ่ง เพราะความต้องการใช้มีเสถียรภาพสูง ซัพพลายเออร์มีความน่าเชื่อถือ {vmiCandidates[0]?.supplierReliability ?? "-"}%</p>
+            <button onClick={onSimulation} style={s("width:100%;height:40px;border:0;border-radius:11px;background:linear-gradient(135deg,#6D28D9,#C0249B);color:#fff;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;")}><Workflow style={s("width:15px;height:15px;")} /> เปิดการจำลอง VMI</button>
+          </div>
+        </div>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -6583,48 +7558,55 @@ function VmiSimulationPage({
   ];
 
   return (
-    <>
-      <PageTitle
-        eyebrow="จำลอง VMI"
-        title="เปรียบเทียบโมเดลคลังปัจจุบันกับ VMI"
-        subtitle="จำลองผลกระทบด้านระดับพัสดุสำรองปลอดภัย จุดสั่งซื้อใหม่ ระยะเวลารอพัสดุ มูลค่าสินค้าคงคลัง และจำนวนคำสั่งซื้อที่ทำด้วยมือ"
-        action={<Button variant="secondary" onClick={onBack}><ArrowLeft className="h-4 w-4" /> ย้อนกลับ</Button>}
-      />
-      <div className="mb-5">
-        <InlineAlert tone="info">
-          <div className="space-y-1">
-            <p>VMI ใน PoC นี้เป็นการจำลองผลลัพธ์ ไม่ใช่การให้ Supplier เติมของจริง ใช้เพื่อเปรียบเทียบผลกระทบก่อนตัดสินใจทดลองในระดับเขต</p>
-            <p>สูตรหลัก: VMI Safety Stock = Z-score × Demand Variability × √VMI Lead Time, VMI Reorder Point = Average Demand × VMI Lead Time + VMI Safety Stock, Impact = ค่า VMI - ค่าปัจจุบัน</p>
-          </div>
-        </InlineAlert>
+    <div>
+      <div style={s("display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:18px;")}>
+        <div>
+          <h1 style={s("margin:0 0 5px;font-size:23px;font-weight:600;letter-spacing:-.2px;color:#1C1830;")}>จำลอง VMI — เปรียบเทียบโมเดลคลัง</h1>
+          <p style={s("margin:0;font-size:13.5px;color:#7B7591;")}>จำลองผลถ้าให้ซัพพลายเออร์ดูแลสต็อก — ยังไม่ใช่การเติมของจริง</p>
+        </div>
+        <button onClick={onBack} style={s("display:flex;align-items:center;gap:6px;height:36px;padding:0 14px;border:1px solid #E5E1F0;border-radius:10px;background:#fff;color:#3B3654;font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer;")}><ArrowLeft style={s("width:15px;height:15px;")} /> ย้อนกลับ</button>
       </div>
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <Card>
-          <SectionHeader title="ตารางเปรียบเทียบ" subtitle="C01 สายเคเบิลใต้ดิน XLPE 240 · I010" />
-          <DataTable columns={["ตัวชี้วัด", "ปัจจุบัน", "VMI", "ผลกระทบ"]}>
-            {rows.map((row) => (
-              <tr key={row.metric}>
-                <td className="px-4 py-3 font-semibold text-slate-900">{row.metric}</td>
-                <td className="px-4 py-3">{row.current}</td>
-                <td className="px-4 py-3 text-blue-700">{row.vmi}</td>
-                <td className="px-4 py-3 font-semibold text-emerald-700">{row.impact}</td>
-              </tr>
+
+      <div style={s("display:grid;grid-template-columns:1.5fr 1fr;gap:18px;align-items:start;")}>
+        <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 16px 32px -26px rgba(28,24,48,.3);overflow:hidden;")}>
+          <div style={s("display:flex;align-items:center;justify-content:space-between;padding:15px 18px;border-bottom:1px solid #F1EEF8;")}>
+            <h2 style={s("margin:0;font-size:14px;font-weight:600;color:#1C1830;")}>เปรียบเทียบ: หม้อแปลง 100kVA</h2>
+            <span className="mono" style={s("font-size:10.5px;color:#7C3AED;background:#F4EEFE;padding:3px 8px;border-radius:6px;")}>1DD0DC0000</span>
+          </div>
+          <div style={s("padding:6px 0;")}>
+            <div style={s("display:grid;grid-template-columns:1.4fr 1fr 1fr;padding:9px 18px;font-size:10px;font-weight:600;color:#9B95B0;text-transform:uppercase;")}>
+              <span>ตัวชี้วัด</span><span style={s("text-align:right;")}>Current</span><span style={s("text-align:right;color:#6D28D9;")}>VMI</span>
+            </div>
+            {rows.map(row => (
+              <div key={row.metric} style={s("display:grid;grid-template-columns:1.4fr 1fr 1fr;padding:11px 18px;border-top:1px solid #F4F2FA;font-size:12.5px;")}>
+                <span style={s("color:#5A5470;")}>{row.metric}</span>
+                <span style={s("text-align:right;color:#1C1830;")}>{row.current}</span>
+                <span style={s("text-align:right;color:#6D28D9;font-weight:600;")}>{row.vmi}</span>
+              </div>
             ))}
-          </DataTable>
-        </Card>
-        <Card className="p-5">
-          <h3 className="font-semibold text-slate-950">คำแนะนำจากระบบ AI</h3>
-          <p className="mt-4 rounded-lg bg-violet-50 p-4 text-sm font-medium leading-6 text-violet-800">
-            ควรทดลอง VMI กับ SKU นี้ในระดับเขต
-          </p>
-          <p className="mt-3 text-sm text-slate-600">{getVmiRecommendation(vmiCandidates[0].score)} · คะแนน {vmiCandidates[0].score}</p>
-          <div className="mt-5 grid gap-2">
-            <Button onClick={onCreateProposal}><Plus className="h-4 w-4" /> สร้างข้อเสนอ VMI</Button>
-            <Button variant="secondary"><FileText className="h-4 w-4" /> เปรียบเทียบกับการจัดซื้อปกติ</Button>
           </div>
-        </Card>
+          <div style={s("margin:0 18px 16px;background:#F0FDF9;border:1px solid #B6EBD7;border-radius:11px;padding:11px 13px;font-size:11.5px;color:#3F6B57;line-height:1.55;")}>
+            <b style={s("color:#0F7B53;")}>ผลจำลอง:</b> ลด Lead Time + ลดเงินจม + งานสั่งซื้อ manual ลดลง
+          </div>
+        </div>
+
+        <div style={s("display:flex;flex-direction:column;gap:16px;")}>
+          <div style={s("background:linear-gradient(140deg,#5B21B6,#A41CA8);border-radius:16px;padding:18px;box-shadow:0 16px 32px -18px rgba(109,40,217,.6);")}>
+            <div style={s("font-size:12px;color:rgba(255,255,255,.78);")}>VMI Suitability Score</div>
+            <div className="mono" style={s("font-size:30px;font-weight:700;color:#fff;margin-top:5px;line-height:1;")}>{vmiCandidates[0]?.score ?? "82"}<span style={s("font-size:15px;")}>/100</span></div>
+            <div style={s("font-size:11.5px;color:rgba(255,255,255,.72);margin-top:7px;")}>เหมาะกับ VMI — มูลค่าสูง · Lead Time ยาว · demand สม่ำเสมอ</div>
+          </div>
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:16px 18px;box-shadow:0 14px 30px -24px rgba(28,24,48,.3);")}>
+            <div style={s("display:flex;align-items:center;gap:8px;margin-bottom:10px;")}><Sparkles style={s("width:16px;height:16px;color:#6D28D9;")} /><h2 style={s("margin:0;font-size:14px;font-weight:600;color:#1C1830;")}>คำแนะนำ AI</h2></div>
+            <div style={s("background:#F4EEFE;border-radius:11px;padding:12px 14px;font-size:12px;font-weight:500;color:#5B21B6;line-height:1.55;margin-bottom:13px;")}>{getVmiRecommendation(vmiCandidates[0]?.score ?? 82)} · คะแนน {vmiCandidates[0]?.score ?? 82}</div>
+            <div style={s("display:flex;flex-direction:column;gap:9px;")}>
+              <button onClick={onCreateProposal} style={s("height:40px;border:0;border-radius:11px;background:linear-gradient(135deg,#6D28D9,#C0249B);color:#fff;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;")}><Plus style={s("width:15px;height:15px;")} /> สร้างข้อเสนอ VMI</button>
+              <button style={s("height:38px;border:1px solid #E5E1F0;border-radius:11px;background:#fff;color:#3B3654;font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;")}><FileText style={s("width:15px;height:15px;color:#7C3AED;")} /> เปรียบเทียบกับการจัดซื้อปกติ</button>
+            </div>
+          </div>
+        </div>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -6644,6 +7626,766 @@ const formulaSettingHelp = {
   versionNote:
     "ใช้เป็นคำอธิบายในประวัติเวอร์ชันสูตรและ change log เพื่อให้ผู้ตรวจสอบรู้ว่าเปลี่ยน policy เพราะอะไร ไม่กระทบสูตรโดยตรง",
 };
+
+// หน้านำเข้าข้อมูล (Data Import) — พอร์ตจากดีไซน์ HTML เป็นต้นแบบจำลอง (mock) ครบทั้ง dropzone · column mapping · data quality
+function DataImportPage({ onBack }: { onBack: () => void }) {
+  const [dataset, setDataset] = useState<"usage" | "stock" | "lead" | "supplier">("usage");
+  const datasets: { id: "usage" | "stock" | "lead" | "supplier"; label: string }[] = [
+    { id: "usage", label: "การใช้รายเดือน" },
+    { id: "stock", label: "สต็อก (BATCH)" },
+    { id: "lead", label: "Lead Time" },
+    { id: "supplier", label: "ซัพพลายเออร์" },
+  ];
+  const chip = (active: boolean) =>
+    s(
+      `height:34px;padding:0 14px;border-radius:99px;font-family:inherit;font-size:12px;font-weight:500;cursor:pointer;transition:all .15s;${
+        active
+          ? "border:0;background:linear-gradient(135deg,#6D28D9,#C0249B);color:#fff;"
+          : "border:1px solid #E5E1F0;background:#fff;color:#5A5470;"
+      }`,
+    );
+  const mappings: { from: string; to: string; warn?: boolean }[] = [
+    { from: "WH Id", to: "warehouseId" },
+    { from: "SKU Id", to: "skuId" },
+    { from: "Usage Qty (ม.ค.–ธ.ค.)", to: "monthlyUsage[]" },
+    { from: "Plant Id", to: "factoryId — ต้องยืนยัน", warn: true },
+  ];
+  const quality: { label: string; pct: number; warn?: boolean }[] = [
+    { label: "มี usage history", pct: 96 },
+    { label: "มี stock data", pct: 88 },
+    { label: "มี lead time", pct: 61, warn: true },
+    { label: "WH–Factory mapping", pct: 73, warn: true },
+  ];
+  const history: { label: string; meta: string; status: string; tone: "green" | "amber" }[] = [
+    { label: "Usage 8,420 แถว", meta: "12 มิ.ย. 2569 · สมหญิง", status: "สำเร็จ", tone: "green" },
+    { label: "Stock 24,740 แถว", meta: "10 มิ.ย. 2569 · ระบบ", status: "สำเร็จ", tone: "green" },
+    { label: "Lead Time 1,180 แถว", meta: "10 มิ.ย. 2569 · ระบบ", status: "มี warning", tone: "amber" },
+  ];
+
+  return (
+    <div>
+      <button onClick={onBack} style={s("display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;color:#7B7591;font-family:inherit;font-size:12.5px;cursor:pointer;padding:0;margin-bottom:14px;")}><ArrowLeft style={s("width:15px;height:15px;")} /> กลับแดชบอร์ด</button>
+
+      <div style={s("display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:18px;")}>
+        <div>
+          <h1 style={s("margin:0 0 5px;font-size:23px;font-weight:600;letter-spacing:-.2px;color:#1C1830;")}>นำเข้าข้อมูล & คุณภาพข้อมูล</h1>
+          <p style={s("margin:0;font-size:13.5px;color:#7B7591;")}>อัปโหลด Excel → จับคู่คอลัมน์ → ตรวจคุณภาพก่อนใช้คำนวณ — แยก WH · Factory · Supplier ให้ถูกต้อง</p>
+        </div>
+        <button style={s("display:flex;align-items:center;gap:7px;height:40px;padding:0 15px;border:1px solid #E5E1F0;border-radius:11px;background:#fff;color:#3B3654;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;")}><Download style={s("width:16px;height:16px;color:#7C3AED;")} /> ดาวน์โหลดเทมเพลต</button>
+      </div>
+
+      <div style={s("display:flex;align-items:center;gap:9px;margin-bottom:16px;flex-wrap:wrap;")}>
+        <span style={s("font-size:12px;color:#9B95B0;margin-right:2px;")}>ชุดข้อมูล:</span>
+        {datasets.map((d) => (
+          <button key={d.id} onClick={() => setDataset(d.id)} style={chip(dataset === d.id)}>{d.label}</button>
+        ))}
+      </div>
+
+      <div style={s("display:grid;grid-template-columns:1.6fr 1fr;gap:18px;align-items:start;")}>
+        <div style={s("display:flex;flex-direction:column;gap:16px;")}>
+          <div style={s("background:#fff;border:1.5px dashed #C9B0F2;border-radius:16px;padding:26px;text-align:center;")}>
+            <div style={s("width:54px;height:54px;border-radius:14px;background:#F4EEFE;color:#7C3AED;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;")}><UploadCloud style={s("width:26px;height:26px;")} /></div>
+            <div style={s("font-size:14px;font-weight:600;color:#1C1830;")}>ลากไฟล์ Excel มาวาง หรือเลือกไฟล์</div>
+            <div style={s("font-size:11.5px;color:#9B95B0;margin-top:3px;")}>รองรับ .xlsx · .csv — สูงสุด 10MB · ชีตตามรูปแบบ PEA Data Summary</div>
+            <button style={s("margin-top:14px;height:38px;padding:0 18px;border:0;border-radius:10px;background:linear-gradient(135deg,#6D28D9,#C0249B);color:#fff;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;")}>เลือกไฟล์</button>
+          </div>
+
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 16px 32px -26px rgba(28,24,48,.3);overflow:hidden;")}>
+            <div style={s("display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid #F1EEF8;")}>
+              <span style={s("width:38px;height:38px;border-radius:10px;background:#ECFDF5;color:#059669;display:flex;align-items:center;justify-content:center;flex:none;")}><FileSpreadsheet style={s("width:19px;height:19px;")} /></span>
+              <div style={s("flex:1;min-width:0;")}><div style={s("font-size:13px;font-weight:600;color:#1C1830;")}>PEA Data Summary.xlsx</div><div className="mono" style={s("font-size:10.5px;color:#A29DB5;")}>ชีต "WH Season Data Item" · 8,420 แถว · 1.2 MB</div></div>
+              <span style={s("font-size:10.5px;font-weight:600;color:#0F7B53;background:#ECFDF5;border:1px solid #A7F3D0;padding:3px 10px;border-radius:99px;flex:none;")}>อัปโหลดแล้ว</span>
+            </div>
+            <div style={s("padding:14px 18px;")}>
+              <div style={s("font-size:11px;font-weight:600;letter-spacing:.4px;color:#9B95B0;text-transform:uppercase;margin-bottom:9px;")}>จับคู่คอลัมน์ → ฟิลด์ระบบ</div>
+              <div style={s("display:flex;flex-direction:column;gap:7px;")}>
+                {mappings.map((m) => (
+                  <div key={m.from} style={s("display:flex;align-items:center;gap:10px;font-size:12px;")}>
+                    <span className="mono" style={s(`flex:1;padding:6px 10px;border-radius:8px;${m.warn ? "color:#5A5470;background:#FFFBEB;border:1px solid #FBE3A2;" : "color:#5A5470;background:#FAF9FD;border:1px solid #F0EDF7;"}`)}>{m.from}</span>
+                    <ArrowRight style={s("width:14px;height:14px;color:#C4BBD6;")} />
+                    <span style={s(`flex:1;font-weight:500;padding:6px 10px;border-radius:8px;${m.warn ? "color:#B45309;background:#FFFBEB;border:1px solid #FBE3A2;" : "color:#1C1830;background:#F4EEFE;border:1px solid #E4D7FB;"}`)}>{m.to}</span>
+                    {m.warn ? <AlertTriangle style={s("width:15px;height:15px;color:#D97706;")} /> : <CheckCircle2 style={s("width:15px;height:15px;color:#059669;")} />}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style={s("display:flex;flex-direction:column;gap:16px;")}>
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:16px 18px;box-shadow:0 14px 30px -24px rgba(28,24,48,.3);")}>
+            <h2 style={s("margin:0 0 3px;font-size:14px;font-weight:600;color:#1C1830;")}>คุณภาพข้อมูล (Data Quality)</h2>
+            <p style={s("margin:0 0 14px;font-size:11px;color:#9B95B0;")}>ความครอบคลุมหลังจับคู่ WH–Factory</p>
+            <div style={s("display:flex;flex-direction:column;gap:11px;")}>
+              {quality.map((q) => (
+                <div key={q.label}>
+                  <div style={s("display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:4px;")}><span style={s("color:#5A5470;")}>{q.label}</span><span style={s(`font-weight:600;color:${q.warn ? "#B45309" : "#059669"};`)}>{q.pct}%</span></div>
+                  <div style={s("height:7px;border-radius:99px;background:#F0EDF7;")}><div style={{ width: `${q.pct}%`, height: "100%", borderRadius: 99, background: q.warn ? "#D97706" : "#059669" }} /></div>
+                </div>
+              ))}
+            </div>
+            <div style={s("margin-top:13px;padding-top:12px;border-top:1px solid #F1EEF8;display:flex;flex-direction:column;gap:8px;")}>
+              <div style={s("display:flex;align-items:center;gap:8px;font-size:11.5px;color:#92400E;")}><AlertTriangle style={s("width:14px;height:14px;color:#D97706;")} /> 142 แถว ไม่มี WH–Factory mapping</div>
+              <div style={s("display:flex;align-items:center;gap:8px;font-size:11.5px;color:#92400E;")}><AlertTriangle style={s("width:14px;height:14px;color:#D97706;")} /> 38 SKU มีชื่อเป็น NULL (เติมชื่อ demo)</div>
+            </div>
+          </div>
+
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:16px 18px;box-shadow:0 14px 30px -24px rgba(28,24,48,.3);")}>
+            <h2 style={s("margin:0 0 12px;font-size:14px;font-weight:600;color:#1C1830;")}>ประวัติการนำเข้า</h2>
+            <div style={s("display:flex;flex-direction:column;gap:9px;")}>
+              {history.map((h) => (
+                <div key={h.label} style={s("display:flex;align-items:center;gap:10px;")}>
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: h.tone === "green" ? "#059669" : "#D97706", flex: "none" } as CSSProperties} />
+                  <div style={s("flex:1;")}><div style={s("font-size:12px;color:#1C1830;font-weight:500;")}>{h.label}</div><div style={s("font-size:10px;color:#9B95B0;")}>{h.meta}</div></div>
+                  <span style={s(`font-size:10px;font-weight:600;color:${h.tone === "green" ? "#0F7B53" : "#B45309"};`)}>{h.status}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={s("display:flex;align-items:center;gap:12px;background:linear-gradient(100deg,#FBF4FF,#FCE9F5);border:1px solid #E6D8FB;border-radius:14px;padding:13px 15px;")}>
+            <span style={s("width:36px;height:36px;border-radius:10px;background:#fff;border:1px solid #E6D8FB;color:#7C3AED;display:flex;align-items:center;justify-content:center;flex:none;")}><Plug style={s("width:18px;height:18px;")} /></span>
+            <div style={s("flex:1;min-width:0;")}><div style={s("font-size:12.5px;font-weight:600;color:#5B21B6;")}>เชื่อม SAP-MM / GFMIS</div><div style={s("font-size:10.5px;color:#8A7AA8;")}>ดึงสต็อก/เบิกจ่ายอัตโนมัติ (อนาคต)</div></div>
+            <span style={s("font-size:10px;font-weight:600;color:#7B7591;background:#fff;border:1px solid #E6D8FB;padding:3px 9px;border-radius:99px;flex:none;")}>เร็วๆ นี้</span>
+          </div>
+        </div>
+      </div>
+
+      <div style={s("display:flex;align-items:center;justify-content:space-between;gap:16px;background:#fff;border:1px solid #EBE7F5;border-radius:14px;padding:14px 18px;margin-top:16px;")}>
+        <div style={s("font-size:12px;color:#7B7591;")}>ตรวจพบ <b style={s("color:#1C1830;")}>8,420 แถว</b> · พร้อมนำเข้า <b style={s("color:#059669;")}>8,240</b> · ต้องยืนยัน <b style={s("color:#B45309;")}>180</b></div>
+        <div style={s("display:flex;gap:10px;")}>
+          <button style={s("height:40px;padding:0 15px;border:1px solid #E5E1F0;border-radius:11px;background:#fff;color:#3B3654;font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer;")}>บันทึกฉบับร่าง</button>
+          <button style={s("display:flex;align-items:center;gap:7px;height:40px;padding:0 18px;border:0;border-radius:11px;background:linear-gradient(135deg,#6D28D9,#C0249B);color:#fff;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 10px 22px -10px rgba(109,40,217,.7);")}><Check style={s("width:16px;height:16px;")} /> ตรวจสอบและนำเข้า</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// หน้าเฝ้าระวัง Diff (Diff Monitor) — พอร์ตจากดีไซน์ HTML เป็นต้นแบบจำลอง (mock): AI vs จริง · Import ใหม่ vs เดิม · Snapshot vs ปัจจุบัน
+function DiffMonitorPage({ onBack, onOpenHistory }: { onBack: () => void; onOpenHistory: () => void }) {
+  const stats = [
+    { icon: Activity, label: "SKU ผันผวนเกินเกณฑ์", value: "9", border: "#FBD5D5", color: "#DC2626", num: "#B91C1C" },
+    { icon: Camera, label: "Snapshot ที่ค่าเปลี่ยน", value: "14", border: "#FBE3A2", color: "#D97706", num: "#B45309" },
+    { icon: ImportIcon, label: "แถว import ที่เปลี่ยน", value: "312", border: "#EBE7F5", color: "#6D28D9", num: "#5B21B6" },
+  ];
+  const aiRows: { name: string; code: string; ai: string; real: string; diff: string; tone: "red" | "green" | "amber" }[] = [
+    { name: "สายเคเบิล XLPE 240", code: "1CC0CG0002 · I010", ai: "10", real: "14", diff: "+40%", tone: "red" },
+    { name: "หม้อแปลง 100kVA", code: "1DD0DC0000 · K010", ai: "2", real: "2", diff: "0%", tone: "green" },
+    { name: "เสาคอนกรีต 12m", code: "1CC0CP0012 · K030", ai: "6", real: "3", diff: "−50%", tone: "amber" },
+  ];
+  const diffTone = (t: "red" | "green" | "amber") =>
+    t === "red"
+      ? s("font-size:11px;font-weight:600;color:#B91C1C;background:#FEF2F2;padding:2px 8px;border-radius:99px;")
+      : t === "green"
+        ? s("font-size:11px;font-weight:600;color:#0F7B53;background:#ECFDF5;padding:2px 8px;border-radius:99px;")
+        : s("font-size:11px;font-weight:600;color:#B45309;background:#FFFAEB;padding:2px 8px;border-radius:99px;");
+  const importDiffs: { tag: string; tone: "green" | "amber" | "red"; node: ReactNode }[] = [
+    { tag: "เพิ่ม", tone: "green", node: <>usage เดือน มิ.ย. 2569 · <b>+842 แถว</b> · 38 คลัง</> },
+    { tag: "เปลี่ยน", tone: "amber", node: <>สายเคเบิล XLPE I010 · ใช้ 100 → <b style={s("color:#1C1830;")}>132 ม.</b> <span style={s("color:#B91C1C;")}>(+32%)</span></> },
+    { tag: "หาย", tone: "red", node: <>12 SKU ไม่มีข้อมูลในไฟล์ใหม่ · คงค่าเดิมไว้</> },
+  ];
+  const tagStyle = (t: "green" | "amber" | "red") =>
+    t === "green"
+      ? s("font-size:9.5px;font-weight:600;color:#0F7B53;background:#ECFDF5;padding:3px 8px;border-radius:6px;flex:none;")
+      : t === "amber"
+        ? s("font-size:9.5px;font-weight:600;color:#B45309;background:#FFFAEB;padding:3px 8px;border-radius:6px;flex:none;")
+        : s("font-size:9.5px;font-weight:600;color:#DC2626;background:#FEF2F2;padding:3px 8px;border-radius:6px;flex:none;");
+
+  return (
+    <div>
+      <button onClick={onBack} style={s("display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;color:#7B7591;font-family:inherit;font-size:12.5px;cursor:pointer;padding:0;margin-bottom:14px;")}><ArrowLeft style={s("width:15px;height:15px;")} /> กลับแดชบอร์ด</button>
+
+      <div style={s("display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:18px;")}>
+        <div>
+          <div style={s("display:flex;align-items:center;gap:10px;margin-bottom:5px;")}><h1 style={s("margin:0;font-size:23px;font-weight:600;letter-spacing:-.2px;color:#1C1830;")}>เฝ้าระวังความต่างข้อมูล</h1><span style={s("display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#7C3AED;background:#F4EEFE;border:1px solid #E4D7FB;padding:3px 9px;border-radius:99px;")}><GitCompare style={s("width:13px;height:13px;")} /> Data Diff</span></div>
+          <p style={s("margin:0;font-size:13.5px;color:#7B7591;")}>ตรวจความต่าง: AI vs ค่าจริง · Snapshot vs ปัจจุบัน · Import ใหม่ vs เดิม — ปักธงที่เกินเกณฑ์</p>
+        </div>
+      </div>
+
+      <div style={s("display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:18px;")}>
+        {stats.map((st) => {
+          const Icon = st.icon;
+          return (
+            <div key={st.label} style={s(`background:#fff;border:1px solid ${st.border};border-radius:14px;padding:15px 16px;`)}>
+              <div style={s("display:flex;align-items:center;gap:8px;")}><Icon style={s(`width:15px;height:15px;color:${st.color};`)} /><span style={s("font-size:12px;color:#7B7591;")}>{st.label}</span></div>
+              <div style={s(`margin-top:8px;font-size:26px;font-weight:600;color:${st.num};line-height:1;`)} className="mono">{st.value}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={s("display:grid;grid-template-columns:1.5fr 1fr;gap:18px;align-items:start;")}>
+        <div style={s("display:flex;flex-direction:column;gap:16px;")}>
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 16px 32px -26px rgba(28,24,48,.3);overflow:hidden;")}>
+            <div style={s("display:flex;align-items:center;gap:9px;padding:15px 18px 12px;border-bottom:1px solid #F1EEF8;")}><span style={s("width:28px;height:28px;border-radius:8px;background:#F4EEFE;color:#7C3AED;display:flex;align-items:center;justify-content:center;flex:none;")}><Sparkles style={s("width:15px;height:15px;")} /></span><h2 style={s("margin:0;font-size:14px;font-weight:600;color:#1C1830;")}>AI Suggest เทียบค่าจริง</h2></div>
+            <table style={s("width:100%;border-collapse:collapse;font-size:12.5px;")}>
+              <thead><tr style={s("background:#FAF9FD;")}><th style={s("text-align:left;font-size:10px;font-weight:600;color:#9B95B0;text-transform:uppercase;padding:8px 16px;")}>SKU</th><th style={s("text-align:right;font-size:10px;font-weight:600;color:#9B95B0;text-transform:uppercase;padding:8px 10px;")}>AI</th><th style={s("text-align:right;font-size:10px;font-weight:600;color:#9B95B0;text-transform:uppercase;padding:8px 10px;")}>จริง</th><th style={s("text-align:right;font-size:10px;font-weight:600;color:#9B95B0;text-transform:uppercase;padding:8px 16px;")}>Diff</th></tr></thead>
+              <tbody>
+                {aiRows.map((r) => (
+                  <tr key={r.code} style={s("border-top:1px solid #F4F2FA;")}>
+                    <td style={s("padding:10px 16px;")}><div style={s("font-weight:500;color:#1C1830;")}>{r.name}</div><div className="mono" style={s("font-size:10px;color:#A29DB5;")}>{r.code}</div></td>
+                    <td style={s("padding:10px 10px;text-align:right;color:#6D28D9;font-weight:600;")}>{r.ai}</td>
+                    <td style={s("padding:10px 10px;text-align:right;color:#1C1830;")}>{r.real}</td>
+                    <td style={s("padding:10px 16px;text-align:right;")}><span style={diffTone(r.tone)}>{r.diff}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 16px 32px -26px rgba(28,24,48,.3);overflow:hidden;")}>
+            <div style={s("display:flex;align-items:center;gap:9px;padding:15px 18px 12px;border-bottom:1px solid #F1EEF8;")}><span style={s("width:28px;height:28px;border-radius:8px;background:#EFF4FF;color:#2563EB;display:flex;align-items:center;justify-content:center;flex:none;")}><ImportIcon style={s("width:15px;height:15px;")} /></span><h2 style={s("margin:0;font-size:14px;font-weight:600;color:#1C1830;")}>Import ล่าสุด เทียบข้อมูลเดิม</h2></div>
+            <div style={s("padding:14px 18px;display:flex;flex-direction:column;gap:10px;")}>
+              {importDiffs.map((d, i) => (
+                <div key={i} style={s("display:flex;align-items:center;gap:12px;")}><span style={tagStyle(d.tone)}>{d.tag}</span><div style={s("flex:1;font-size:12px;color:#5A5470;")}>{d.node}</div></div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;box-shadow:0 14px 30px -24px rgba(28,24,48,.3);overflow:hidden;")}>
+          <div style={s("display:flex;align-items:center;gap:9px;padding:15px 18px 12px;border-bottom:1px solid #F1EEF8;")}><span style={s("width:28px;height:28px;border-radius:8px;background:#FFFAEB;color:#D97706;display:flex;align-items:center;justify-content:center;flex:none;")}><Camera style={s("width:15px;height:15px;")} /></span><h2 style={s("margin:0;font-size:14px;font-weight:600;color:#1C1830;")}>Snapshot เทียบปัจจุบัน</h2></div>
+          <div style={s("padding:14px 18px;")}>
+            <div className="mono" style={s("font-size:10.5px;color:#9B95B0;margin-bottom:10px;")}>PR-2569-0182 · SNAP-0182</div>
+            <div style={s("display:flex;flex-direction:column;gap:10px;")}>
+              <div style={s("display:flex;align-items:center;justify-content:space-between;font-size:12.5px;")}><span style={s("color:#7B7591;")}>ราคา/ม.</span><span><span style={s("color:#9B95B0;")}>฿2,000</span> <span style={s("color:#C4BBD6;")}>→</span> <b style={s("color:#B45309;")}>฿2,150</b> <span style={s("font-size:10px;color:#B91C1C;")}>+7.5%</span></span></div>
+              <div style={s("display:flex;align-items:center;justify-content:space-between;font-size:12.5px;")}><span style={s("color:#7B7591;")}>Lead Time</span><span><span style={s("color:#9B95B0;")}>18</span> <span style={s("color:#C4BBD6;")}>→</span> <b style={s("color:#B45309;")}>24</b> วัน</span></div>
+              <div style={s("display:flex;align-items:center;justify-content:space-between;font-size:12.5px;")}><span style={s("color:#7B7591;")}>Seasonal Factor</span><span><span style={s("color:#9B95B0;")}>1.20</span> <span style={s("color:#C4BBD6;")}>→</span> <b style={s("color:#1C1830;")}>1.20</b></span></div>
+              <div style={s("display:flex;align-items:center;justify-content:space-between;font-size:12.5px;")}><span style={s("color:#7B7591;")}>งบเขตคงเหลือ</span><span><span style={s("color:#9B95B0;")}>฿2.40M</span> <span style={s("color:#C4BBD6;")}>→</span> <b style={s("color:#1C1830;")}>฿2.10M</b></span></div>
+            </div>
+            <div style={s("margin-top:13px;background:#FFFBEB;border:1px solid #FBE3A2;border-radius:11px;padding:10px 12px;font-size:11px;color:#92400E;line-height:1.5;")}><b>หมายเหตุ:</b> snapshot คงค่าเดิมไว้เพื่อ audit — การคำนวณรอบใหม่ใช้ค่าปัจจุบัน</div>
+            <button onClick={onOpenHistory} style={s("width:100%;margin-top:12px;height:38px;border:1px solid #E5E1F0;border-radius:10px;background:#fff;color:#3B3654;font-family:inherit;font-size:12px;font-weight:500;cursor:pointer;")}>ดู snapshot เต็ม</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// หน้าสมองกลางพัสดุ (Decision Intelligence) — พอร์ตจากดีไซน์ (mock): KPI + before/after สูตรกลาง + learning curve + decision log
+function MaterialsBrainPage({ onBack, onOpenHistory }: { onBack: () => void; onOpenHistory: () => void }) {
+  const kpis = [
+    { icon: GitCompareArrows, color: "#6D28D9", label: "ความสอดคล้องการตัดสินใจ", value: "94%", delta: "▲ จาก 41%", deltaColor: "#059669", sub: "ทุกคลังใช้สูตรเดียวกัน", gradient: false },
+    { icon: Timer, color: "#2563EB", label: "เวลาต่อคำขอ", value: "3", unit: "นาที", delta: "▼ จาก 45", deltaColor: "#059669", sub: "เลิกไล่ Excel หลายไฟล์", gradient: false },
+    { icon: Sparkles, color: "#7C3AED", label: "รับคำแนะนำ AI", value: "82%", unit: "ของคำขอ", delta: "", deltaColor: "", sub: "ใช้ตามที่ AI แนะนำ", gradient: false },
+    { icon: Target, color: "#fff", label: "ความแม่นยำ AI", value: "87%", delta: "▲ ต่อเนื่อง", deltaColor: "rgba(255,255,255,.75)", sub: "ยิ่งใช้ ยิ่งแม่น", gradient: true },
+  ];
+  const beforeRows = [{ w: "I010", pct: 57, v: 68 }, { w: "K010", pct: 43, v: 52 }, { w: "K030", pct: 75, v: 90 }, { w: "C040", pct: 38, v: 45 }, { w: "I020", pct: 67, v: 80 }];
+  const curve = [{ v: "v0.9", pct: 100, err: "22%", color: "linear-gradient(180deg,#F4A6A6,#DC2626)", txt: "#B91C1C", active: false }, { v: "v1.0", pct: 59, err: "13%", color: "linear-gradient(180deg,#FBD08A,#D97706)", txt: "#B45309", active: true }, { v: "v1.1", pct: 41, err: "9%", color: "linear-gradient(180deg,#86E5BE,#059669)", txt: "#0F7B53", active: false }];
+  const log = [
+    { pr: "PR-2569-0182 · สายเคเบิล XLPE", who: "สมหญิง · I010", ai: "10", real: "20", dec: "override +100%", decTone: "amber", result: "ใช้จริง 14 · แนะมากไป", resultColor: "#B91C1C" },
+    { pr: "PR-2569-0180 · หม้อแปลง 100kVA", who: "ปกรณ์ · K010", ai: "2", real: "2", dec: "ตาม AI", decTone: "green", result: "ใช้จริง 2 · แม่นยำ", resultColor: "#0F7B53" },
+    { pr: "PR-2569-0179 · เบรกเกอร์ 50A", who: "ธนา · I010", ai: "16", real: "10", dec: "ยืมแทนซื้อ 6", decTone: "violet", result: "ประหยัด ฿10.8K", resultColor: "#0F7B53" },
+  ];
+  const decTone = (t: string) => t === "amber" ? "color:#B45309;background:#FFFAEB;" : t === "green" ? "color:#0F7B53;background:#ECFDF5;" : "color:#5B21B6;background:#F4EEFE;";
+
+  return (
+    <div>
+      <button onClick={onBack} style={s("display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;color:#7B7591;font-family:inherit;font-size:12.5px;cursor:pointer;padding:0;margin-bottom:14px;")}><ArrowLeft style={s("width:15px;height:15px;")} /> กลับแดชบอร์ด</button>
+      <div style={s("margin-bottom:18px;")}>
+        <div style={s("display:flex;align-items:center;gap:10px;margin-bottom:5px;")}><h1 style={s("margin:0;font-size:23px;font-weight:600;letter-spacing:-.2px;color:#1C1830;")}>สมองกลางพัสดุ</h1><span style={s("display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#6D28D9;background:#F1EBFE;border:1px solid #E4D7FB;padding:3px 9px;border-radius:99px;")}><BrainCircuit style={s("width:13px;height:13px;")} /> Decision Intelligence</span></div>
+        <p style={s("margin:0;font-size:13.5px;color:#7B7591;")}>จากคนคำนวณเองที่ต่างกันทุกคลัง → สูตรกลางเดียว + AI ช่วยตัดสินใจ + เรียนรู้จาก Error ต่อเนื่อง</p>
+      </div>
+
+      {/* แบนเนอร์อธิบาย "นี่คืออะไร" แบบเข้าใจง่าย + flow ก่อน→หลัง→เรียนรู้ */}
+      <div style={s("background:linear-gradient(110deg,#FBF4FF,#F1EBFE 55%,#FCE9F5);border:1px solid #E6D8FB;border-radius:16px;padding:18px 20px;margin-bottom:18px;")}>
+        <div style={s("display:flex;align-items:flex-start;gap:13px;margin-bottom:16px;")}>
+          <span style={s("width:42px;height:42px;border-radius:12px;background:linear-gradient(140deg,#7C2DE0,#C0249B);color:#fff;display:flex;align-items:center;justify-content:center;flex:none;box-shadow:0 10px 22px -10px rgba(124,45,224,.7);")}><BrainCircuit style={s("width:22px;height:22px;")} /></span>
+          <div style={s("flex:1;min-width:0;")}>
+            <div style={s("font-size:15px;font-weight:700;color:#3B1170;margin-bottom:3px;")}>หน้านี้คืออะไร? — สมองกลางที่ตัดสินใจพัสดุแทน "ต่างคนต่างคิด"</div>
+            <div style={s("font-size:13px;color:#6B5B86;line-height:1.6;")}>เมื่อก่อนเจ้าหน้าที่แต่ละคลัง <b style={s("color:#B91C1C;")}>คำนวณเองในหัว/Excel ของใครของมัน</b> — SKU เดียวกันได้เลขไม่ตรงกัน บางคลังสั่งเยอะ บางคลังสั่งน้อย เกิดทั้งของขาดและของจม · ตอนนี้ทุกคลังใช้ <b style={s("color:#0F7B53;")}>"สมองกลาง" เดียวกัน (สูตรกลาง + AI)</b> → ได้เลขเดียวกัน อธิบายที่มาได้ และ AI ยิ่งใช้ยิ่งแม่นจากผลจริง</div>
+          </div>
+        </div>
+        <div style={s("display:flex;align-items:center;gap:10px;flex-wrap:wrap;")}>
+          {[
+            { icon: GitCompareArrows, color: "#DC2626", bg: "#FEF2F2", bd: "#FBD5D5", step: "ปัญหา", text: "ต่างคนต่างคิด เลขไม่ตรง" },
+            { icon: BrainCircuit, color: "#6D28D9", bg: "#F4EEFE", bd: "#E4D7FB", step: "วิธีแก้", text: "สูตรกลาง + AI เดียวกัน" },
+            { icon: Repeat2, color: "#059669", bg: "#ECFDF5", bd: "#B6EBD7", step: "ผลลัพธ์", text: "ยิ่งใช้ยิ่งแม่น เรียนรู้เอง" },
+          ].map((s2, i) => {
+            const Icon = s2.icon;
+            return (
+              <Fragment key={s2.step}>
+                <div style={s(`display:flex;align-items:center;gap:9px;background:${s2.bg};border:1px solid ${s2.bd};border-radius:11px;padding:9px 13px;flex:1;min-width:170px;`)}>
+                  <span style={s(`width:30px;height:30px;border-radius:8px;background:#fff;color:${s2.color};display:flex;align-items:center;justify-content:center;flex:none;`)}><Icon style={s("width:16px;height:16px;")} /></span>
+                  <div style={s("min-width:0;")}><div style={s(`font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:${s2.color};`)}>{i + 1}. {s2.step}</div><div style={s("font-size:12px;font-weight:500;color:#3B3654;")}>{s2.text}</div></div>
+                </div>
+                {i < 2 ? <ArrowRight style={s("width:18px;height:18px;color:#C4BBD6;flex:none;")} /> : null}
+              </Fragment>
+            );
+          })}
+        </div>
+      </div>
+
+      <div style={s("display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:18px;")}>
+        {kpis.map((k) => {
+          const Icon = k.icon;
+          return (
+            <div key={k.label} style={k.gradient ? s("background:linear-gradient(135deg,#5B21B6,#A41CA8);border:1px solid #6D28D9;border-radius:16px;padding:17px;box-shadow:0 14px 30px -18px rgba(109,40,217,.6);") : s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:17px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 14px 30px -22px rgba(28,24,48,.28);")}>
+              <div style={s(`display:flex;align-items:center;gap:7px;font-size:12px;color:${k.gradient ? "rgba(255,255,255,.8)" : "#7B7591"};`)}><Icon style={s(`width:15px;height:15px;color:${k.color};`)} /> {k.label}</div>
+              <div style={s("margin-top:9px;display:flex;align-items:baseline;gap:6px;")}><span style={s(`font-size:28px;font-weight:700;line-height:1;color:${k.gradient ? "#fff" : k.color};`)}>{k.value}</span>{k.unit ? <span style={s(`font-size:12px;color:${k.gradient ? "rgba(255,255,255,.75)" : "#7B7591"};`)}>{k.unit}</span> : null}{k.delta ? <span style={s(`font-size:12px;font-weight:600;color:${k.deltaColor};`)}>{k.delta}</span> : null}</div>
+              <div style={s(`font-size:11px;margin-top:5px;color:${k.gradient ? "rgba(255,255,255,.72)" : "#9B95B0"};`)}>{k.sub}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={s("display:grid;grid-template-columns:1.45fr 1fr;gap:16px;align-items:start;")}>
+        <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 16px 32px -26px rgba(28,24,48,.3);overflow:hidden;")}>
+          <div style={s("padding:16px 18px 13px;border-bottom:1px solid #F1EEF8;")}><h2 style={s("margin:0;font-size:15px;font-weight:600;color:#1C1830;")}>ปัญหาแฝง: คนคำนวณต่างกัน</h2><p style={s("margin:2px 0 0;font-size:11.5px;color:#9B95B0;")}>SKU เดียวกัน · สายเคเบิล XLPE 240 · 5 คลัง — Reorder Point ที่แต่ละคลังคำนวณ</p></div>
+          <div style={s("padding:16px 18px;display:grid;grid-template-columns:1fr 1fr;gap:16px;")}>
+            <div>
+              <div style={s("display:flex;align-items:center;gap:7px;margin-bottom:11px;")}><span style={s("width:8px;height:8px;border-radius:50%;background:#DC2626;")} /><span style={s("font-size:12px;font-weight:600;color:#B91C1C;")}>เดิม — คนคำนวณเอง</span></div>
+              <div style={s("display:flex;flex-direction:column;gap:8px;")}>
+                {beforeRows.map((r) => (
+                  <div key={r.w} style={s("display:flex;align-items:center;gap:9px;")}><span className="mono" style={s("font-size:10.5px;color:#A29DB5;width:38px;flex:none;")}>{r.w}</span><div style={s("flex:1;height:18px;border-radius:5px;background:#F0EDF7;overflow:hidden;")}><div style={{ height: "100%", width: `${r.pct}%`, background: "#DC2626", borderRadius: 5 } as CSSProperties} /></div><span className="mono" style={s("font-size:11px;color:#5A5470;width:30px;text-align:right;")}>{r.v}</span></div>
+                ))}
+              </div>
+              <div style={s("margin-top:11px;background:#FEF2F2;border:1px solid #FBD5D5;border-radius:9px;padding:8px 10px;font-size:11px;color:#8A4B4B;line-height:1.5;")}>ต่างกันถึง <b style={s("color:#B91C1C;")}>2 เท่า</b> · ตัดสินใจไม่เหมือนกัน เกิด error</div>
+            </div>
+            <div>
+              <div style={s("display:flex;align-items:center;gap:7px;margin-bottom:11px;")}><span style={s("width:8px;height:8px;border-radius:50%;background:#059669;")} /><span style={s("font-size:12px;font-weight:600;color:#0F7B53;")}>ตอนนี้ — สูตรกลาง + AI</span></div>
+              <div style={s("display:flex;flex-direction:column;gap:8px;")}>
+                {beforeRows.map((r) => (
+                  <div key={r.w} style={s("display:flex;align-items:center;gap:9px;")}><span className="mono" style={s("font-size:10.5px;color:#A29DB5;width:38px;flex:none;")}>{r.w}</span><div style={s("flex:1;height:18px;border-radius:5px;background:#F0EDF7;overflow:hidden;")}><div style={{ height: "100%", width: "57%", background: "#059669", borderRadius: 5 } as CSSProperties} /></div><span className="mono" style={s("font-size:11px;color:#5A5470;width:30px;text-align:right;")}>68</span></div>
+                ))}
+              </div>
+              <div style={s("margin-top:11px;background:#F0FDF9;border:1px solid #B6EBD7;border-radius:9px;padding:8px 10px;font-size:11px;color:#3F6B57;line-height:1.5;")}>เท่ากันทุกคลัง <b style={s("color:#0F7B53;")}>68</b> · อธิบายที่มาได้ทุกตัวเลข</div>
+            </div>
+          </div>
+        </div>
+
+        <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:16px 18px;box-shadow:0 14px 30px -24px rgba(28,24,48,.3);")}>
+          <h2 style={s("margin:0 0 3px;font-size:15px;font-weight:600;color:#1C1830;")}>เรียนรู้จาก Error ต่อเนื่อง</h2>
+          <p style={s("margin:0 0 16px;font-size:11.5px;color:#9B95B0;")}>Forecast Error ลดลงทุกเวอร์ชันสูตร</p>
+          <div style={s("display:flex;align-items:flex-end;gap:14px;height:120px;")}>
+            {curve.map((c) => (
+              <div key={c.v} style={s("flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:7px;height:100%;")}><span style={s(`font-size:11px;font-weight:600;color:${c.txt};`)}>{c.err}</span><div style={{ width: "100%", height: Math.round((c.pct / 100) * 86), background: c.color, borderRadius: "6px 6px 0 0" } as CSSProperties} /><span className="mono" style={s(`font-size:10px;color:${c.active ? "#7C3AED" : "#A29DB5"};${c.active ? "font-weight:600;" : ""}`)}>{c.v}</span></div>
+            ))}
+          </div>
+          <div style={s("margin-top:14px;display:flex;align-items:flex-start;gap:9px;background:linear-gradient(100deg,#FBF4FF,#FCE9F5);border:1px solid #E6D8FB;border-radius:11px;padding:11px 13px;")}><Repeat2 style={s("width:15px;height:15px;color:#7C3AED;margin-top:1px;")} /><div style={s("font-size:11.5px;color:#5B21B6;line-height:1.55;")}>ทุกการซื้อ/ไม่ซื้อ/ยืม/โอน → ป้อนกลับเข้าสูตร · auto-tune <b>v1.1</b> ลด Error เหลือ <b>9%</b></div></div>
+        </div>
+      </div>
+
+      <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 16px 32px -26px rgba(28,24,48,.3);overflow:hidden;margin-top:16px;")}>
+        <div style={s("display:flex;align-items:center;justify-content:space-between;padding:15px 18px 12px;border-bottom:1px solid #F1EEF8;")}><div><h2 style={s("margin:0;font-size:14px;font-weight:600;color:#1C1830;")}>บันทึกการตัดสินใจล่าสุด</h2><p style={s("margin:2px 0 0;font-size:11px;color:#9B95B0;")}>เทียบ AI แนะนำ กับที่ผู้ใช้เลือก — ทุกครั้งเก็บเป็นข้อมูลเรียนรู้</p></div><span onClick={onOpenHistory} style={s("font-size:11.5px;font-weight:500;color:#6D28D9;cursor:pointer;")}>ดู Snapshot</span></div>
+        <div style={s("overflow-x:auto;")}>
+          <table style={s("width:100%;border-collapse:collapse;font-size:12.5px;min-width:600px;")}>
+            <thead><tr style={s("background:#FAF9FD;")}><th style={s("text-align:left;font-size:10px;font-weight:600;color:#9B95B0;text-transform:uppercase;padding:9px 16px;")}>คำขอ / ผู้ใช้</th><th style={s("text-align:right;font-size:10px;font-weight:600;color:#9B95B0;text-transform:uppercase;padding:9px 10px;")}>AI แนะนำ</th><th style={s("text-align:right;font-size:10px;font-weight:600;color:#9B95B0;text-transform:uppercase;padding:9px 10px;")}>เลือกจริง</th><th style={s("text-align:left;font-size:10px;font-weight:600;color:#9B95B0;text-transform:uppercase;padding:9px 12px;")}>การตัดสินใจ</th><th style={s("text-align:left;font-size:10px;font-weight:600;color:#9B95B0;text-transform:uppercase;padding:9px 16px;")}>ผลลัพธ์ใช้จริง</th></tr></thead>
+            <tbody>
+              {log.map((r) => (
+                <tr key={r.pr} style={s("border-top:1px solid #F4F2FA;")}>
+                  <td style={s("padding:11px 16px;")}><div style={s("font-weight:500;color:#1C1830;")}>{r.pr}</div><div className="mono" style={s("font-size:10px;color:#A29DB5;")}>{r.who}</div></td>
+                  <td style={s("padding:11px 10px;text-align:right;color:#6D28D9;font-weight:600;")}>{r.ai}</td>
+                  <td style={s("padding:11px 10px;text-align:right;color:#1C1830;")}>{r.real}</td>
+                  <td style={s("padding:11px 12px;")}><span style={s(`font-size:10px;font-weight:600;padding:2px 8px;border-radius:99px;${decTone(r.decTone)}`)}>{r.dec}</span></td>
+                  <td style={s("padding:11px 16px;")}><span style={s(`font-size:11px;color:${r.resultColor};`)}>{r.result}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// หน้าคำขอระดมที่ได้รับ (Mobilize Inbox) — มุมมองสาขาผู้ให้ ตอบรับคำขอ + ติดตามการขนส่ง (พอร์ตจากดีไซน์ mock)
+function MobilizeInboxPage({ onBack }: { onBack: () => void }) {
+  const initial = [
+    { id: "EMR-001", urgent: "วิกฤต", uTone: "red", from: "เขตภาคเหนือ · อ.แม่อาย", sku: "หม้อแปลง 30kVA", qty: "5 เครื่อง", incident: "น้ำท่วม", km: 142, eta: "3.5 ชม." },
+    { id: "EMR-002", urgent: "เร่งด่วน", uTone: "amber", from: "เขตภาคใต้ · อ.เมืองนคร", sku: "สายเคเบิล XLPE 240", qty: "800 ม.", incident: "พายุ", km: 410, eta: "9 ชม." },
+    { id: "EMR-003", urgent: "ปกติ", uTone: "gray", from: "เขตตะวันออก · อ.บ้านโพธิ์", sku: "เบรกเกอร์ 50A", qty: "20 ตัว", incident: "ไฟตก", km: 88, eta: "2 ชม." },
+  ];
+  const [accepted, setAccepted] = useState<Record<string, string>>({});
+  const [method, setMethod] = useState<Record<string, "borrow" | "swap" | "pr">>({});
+  const uStyle = (t: string) => t === "red" ? "color:#B91C1C;background:#FEF2F2;" : t === "amber" ? "color:#B45309;background:#FFFAEB;" : "color:#5A5470;background:#F0EDF7;";
+  const mBtn = (on: boolean) => s(`flex:1;height:34px;border-radius:9px;font-family:inherit;font-size:11px;font-weight:500;cursor:pointer;transition:all .15s;${on ? "border:1.5px solid #C9B0F2;background:#F4EEFE;color:#6D28D9;" : "border:1px solid #E5E1F0;background:#fff;color:#5A5470;"}`);
+  const methodLabel: Record<string, string> = { borrow: "ยืม-คืนของเดิม", swap: "แลกพัสดุ", pr: "เปิด PR ซื้อคืน" };
+  const track = Object.keys(accepted).map((id) => { const r = initial.find((x) => x.id === id)!; return { ...r, method: methodLabel[accepted[id]] }; });
+
+  return (
+    <div>
+      <button onClick={onBack} style={s("display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;color:#7B7591;font-family:inherit;font-size:12.5px;cursor:pointer;padding:0;margin-bottom:14px;")}><ArrowLeft style={s("width:15px;height:15px;")} /> กลับแดชบอร์ด</button>
+      <div style={s("margin-bottom:18px;")}>
+        <div style={s("display:flex;align-items:center;gap:10px;margin-bottom:5px;")}><h1 style={s("margin:0;font-size:23px;font-weight:600;letter-spacing:-.2px;color:#1C1830;")}>คำขอระดมที่ได้รับ</h1><span style={s("display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#B91C1C;background:#FEF2F2;border:1px solid #FBD5D5;padding:3px 9px;border-radius:99px;")}><span style={{ width: 6, height: 6, borderRadius: "50%", background: "#DC2626", animation: "pdot 1.6s infinite" } as CSSProperties} /> {initial.length - Object.keys(accepted).length} คำขอใหม่</span></div>
+        <p style={s("margin:0;font-size:13.5px;color:#7B7591;")}>มุมมองสาขาผู้ให้ (คลัง/เขต/ส่วนกลาง) — ตอบรับคำขอ เลือกวิธีคืน และติดตามการขนส่ง · คลัง I010</p>
+      </div>
+
+      <div style={s("display:grid;grid-template-columns:1.5fr 1fr;gap:18px;align-items:start;")}>
+        <div style={s("display:flex;flex-direction:column;gap:14px;")}>
+          {initial.map((r) => {
+            const isAcc = !!accepted[r.id];
+            const m = method[r.id] ?? "borrow";
+            return (
+              <div key={r.id} style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 14px 30px -24px rgba(28,24,48,.28);overflow:hidden;")}>
+                <div style={s("display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid #F1EEF8;")}>
+                  <span style={s("width:40px;height:40px;border-radius:11px;background:#FEF2F2;color:#DC2626;display:flex;align-items:center;justify-content:center;flex:none;")}><Siren style={s("width:19px;height:19px;")} /></span>
+                  <div style={s("flex:1;min-width:0;")}>
+                    <div style={s("display:flex;align-items:center;gap:8px;flex-wrap:wrap;")}><span className="mono" style={s("font-size:11px;color:#6D28D9;background:#F4EEFE;padding:2px 7px;border-radius:6px;")}>{r.id}</span><span style={s(`font-size:10px;font-weight:600;padding:2px 8px;border-radius:99px;${uStyle(r.uTone)}`)}>{r.urgent}</span></div>
+                    <div style={s("font-size:13px;font-weight:600;color:#1C1830;margin-top:4px;")}>{r.from}</div>
+                  </div>
+                </div>
+                <div style={s("padding:13px 16px;")}>
+                  <div style={s("display:flex;gap:18px;flex-wrap:wrap;font-size:12px;color:#5A5470;margin-bottom:12px;")}>
+                    <span><Package style={s("width:13px;height:13px;color:#7C3AED;")} /> <b style={s("color:#1C1830;")}>{r.sku}</b> · {r.qty}</span>
+                    <span><CloudLightning style={s("width:13px;height:13px;color:#9B95B0;")} /> {r.incident}</span>
+                    <span><Navigation style={s("width:13px;height:13px;color:#9B95B0;")} /> {r.km} กม. · ETA {r.eta}</span>
+                  </div>
+                  {isAcc ? (
+                    <div style={s("display:flex;align-items:center;gap:9px;background:#ECFDF5;border:1px solid #B6EBD7;border-radius:10px;padding:10px 13px;font-size:12px;color:#0F7B53;font-weight:500;")}><CheckCircle2 style={s("width:16px;height:16px;")} /> ตอบรับแล้ว ({methodLabel[accepted[r.id]]}) — กำลังจัดของ · ดูสถานะที่แผงติดตาม</div>
+                  ) : (
+                    <>
+                      <div style={s("font-size:11px;font-weight:600;color:#9B95B0;margin-bottom:7px;")}>เลือกวิธีคืนเมื่อตอบรับ</div>
+                      <div style={s("display:flex;gap:8px;margin-bottom:12px;")}>
+                        <button onClick={() => setMethod((p) => ({ ...p, [r.id]: "borrow" }))} style={mBtn(m === "borrow")}>ยืม-คืนของเดิม</button>
+                        <button onClick={() => setMethod((p) => ({ ...p, [r.id]: "swap" }))} style={mBtn(m === "swap")}>แลกพัสดุ</button>
+                        <button onClick={() => setMethod((p) => ({ ...p, [r.id]: "pr" }))} style={mBtn(m === "pr")}>เปิด PR ซื้อคืน</button>
+                      </div>
+                      <div style={s("display:flex;gap:9px;")}>
+                        <button style={s("flex:1;height:40px;border:1px solid #FBD5D5;border-radius:10px;background:#fff;color:#DC2626;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;")}>ปฏิเสธ (ไม่มีของ)</button>
+                        <button onClick={() => setAccepted((p) => ({ ...p, [r.id]: m }))} style={s("flex:2;display:flex;align-items:center;justify-content:center;gap:7px;height:40px;border:0;border-radius:10px;background:#059669;color:#fff;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;box-shadow:0 8px 18px -8px rgba(5,150,105,.6);")}><Check style={s("width:15px;height:15px;")} /> ตอบรับ & ส่งช่วย</button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={s("display:flex;flex-direction:column;gap:16px;")}>
+          <div style={s("display:flex;align-items:flex-start;gap:10px;background:#FFFBEB;border:1px solid #FBE3A2;border-radius:14px;padding:13px 15px;")}><ShieldAlert style={s("width:16px;height:16px;color:#D97706;margin-top:1px;")} /><div style={s("font-size:11.5px;color:#7B6A45;line-height:1.55;")}>ระบบล็อกให้ส่งช่วยได้ <b style={s("color:#92400E;")}>ไม่เกิน 90% ของ Safety Stock</b> — คลังผู้ให้ยังปลอดภัย ไม่เสี่ยงขาดเอง</div></div>
+
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:16px 18px;box-shadow:0 14px 30px -24px rgba(28,24,48,.3);")}>
+            <h2 style={s("margin:0 0 4px;font-size:14px;font-weight:600;color:#1C1830;")}>ติดตามการระดม</h2>
+            <p style={s("margin:0 0 14px;font-size:11px;color:#9B95B0;")}>รายการที่ตอบรับแล้ว + วิธีคืน</p>
+            {track.length === 0 ? <p style={s("font-size:12px;color:#9B95B0;")}>ยังไม่มีรายการที่ตอบรับ — กด "ตอบรับ & ส่งช่วย" ที่คำขอ</p> : (
+              <div style={s("display:flex;flex-direction:column;gap:16px;")}>
+                {track.map((t) => (
+                  <div key={t.id}>
+                    <div style={s("display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px;")}><div style={s("min-width:0;")}><div style={s("font-size:12.5px;font-weight:600;color:#1C1830;")}>{t.sku}</div><div className="mono" style={s("font-size:10px;color:#A29DB5;")}>{t.id} → {t.from}</div></div><span style={s("font-size:10px;font-weight:600;padding:2px 9px;border-radius:99px;color:#5B21B6;background:#F4EEFE;")}>{t.method}</span></div>
+                    <div style={s("display:flex;align-items:center;gap:9px;")}><div style={s("flex:1;height:7px;border-radius:99px;background:#F0EDF7;overflow:hidden;")}><div style={{ height: "100%", borderRadius: 99, width: "35%", background: "linear-gradient(90deg,#7C3AED,#6D28D9)" } as CSSProperties} /></div><span style={s("font-size:10.5px;font-weight:600;color:#6D28D9;width:64px;text-align:right;flex:none;")}>กำลังจัดของ</span></div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:16px 18px;box-shadow:0 14px 30px -24px rgba(28,24,48,.3);")}>
+            <h2 style={s("margin:0 0 11px;font-size:14px;font-weight:600;color:#1C1830;")}>วิธีคืนของ</h2>
+            <div style={s("display:flex;flex-direction:column;gap:10px;")}>
+              <div style={s("display:flex;align-items:flex-start;gap:10px;")}><span style={s("width:30px;height:30px;border-radius:8px;background:#F4EEFE;color:#7C3AED;display:flex;align-items:center;justify-content:center;flex:none;")}><Repeat style={s("width:15px;height:15px;")} /></span><div style={s("font-size:11.5px;color:#5A5470;line-height:1.5;")}><b style={s("color:#1C1830;")}>ยืม-คืนของเดิม</b> — ส่งคืนพัสดุชิ้นเดิม/รุ่นเดียวกันเมื่อสถานการณ์คลี่คลาย</div></div>
+              <div style={s("display:flex;align-items:flex-start;gap:10px;")}><span style={s("width:30px;height:30px;border-radius:8px;background:#ECFDF5;color:#059669;display:flex;align-items:center;justify-content:center;flex:none;")}><ArrowRightLeft style={s("width:15px;height:15px;")} /></span><div style={s("font-size:11.5px;color:#5A5470;line-height:1.5;")}><b style={s("color:#1C1830;")}>แลกพัสดุ</b> — แลกกับพัสดุที่ผู้ขอมีเกิน/ของจม มูลค่าใกล้เคียง</div></div>
+              <div style={s("display:flex;align-items:flex-start;gap:10px;")}><span style={s("width:30px;height:30px;border-radius:8px;background:#FFFAEB;color:#D97706;display:flex;align-items:center;justify-content:center;flex:none;")}><FileText style={s("width:15px;height:15px;")} /></span><div style={s("font-size:11.5px;color:#5A5470;line-height:1.5;")}><b style={s("color:#1C1830;")}>เปิด PR ซื้อคืน</b> — ผู้ขอเปิดคำขอซื้อชดเชยให้ภายหลัง (เข้า flow งบ 3 ชั้น)</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// หน้าศูนย์ระดมพัสดุฉุกเฉิน (Disaster Map) — แผนที่ไทย + หมุดเลือกภาค + รายการขอระดม + สาขาผู้ส่ง (พอร์ตจากดีไซน์ mock)
+function DisasterCenterPage({ onBack, onOpenMobilize }: { onBack: () => void; onOpenMobilize: () => void }) {
+  type Zone = { id: string; name: string; x: number; y: number; sev: "red" | "amber" | "green"; incident: null | { title: string; typeLabel: string; sevLbl: string; sevCol: string; since: string; area: string; pt: string; icon: typeof CloudLightning } };
+  const zones: Zone[] = [
+    { id: "N", name: "ภาคเหนือ", x: 29, y: 12, sev: "red", incident: { title: "น้ำท่วมฉับพลัน อ.แม่อาย", typeLabel: "อุทกภัย", sevLbl: "วิกฤต", sevCol: "#B91C1C", since: "16 มิ.ย. 06:40", area: "อ.แม่อาย จ.เชียงใหม่ — น้ำป่าไหลหลาก 4 ตำบล ไฟฟ้าดับเป็นวงกว้าง", pt: "อบต.แม่อาย", icon: CloudLightning } },
+    { id: "NE", name: "อีสาน", x: 70, y: 25, sev: "amber", incident: { title: "เฝ้าระวังพายุฤดูร้อน", typeLabel: "เฝ้าระวัง", sevLbl: "เฝ้าระวัง", sevCol: "#B45309", since: "16 มิ.ย. 08:10", area: "จ.อุบลราชธานี — พายุฤดูร้อน ลมกระโชกแรง เสาไฟเสี่ยงล้ม", pt: "กฟภ.เขต อุบลฯ", icon: CloudLightning } },
+    { id: "W", name: "ตะวันตก", x: 25, y: 40, sev: "green", incident: null },
+    { id: "C", name: "ภาคกลาง", x: 45, y: 33, sev: "green", incident: null },
+    { id: "E", name: "ตะวันออก", x: 56, y: 50, sev: "red", incident: { title: "ไฟฟ้าดับวงกว้างจากพายุ", typeLabel: "วาตภัย", sevLbl: "วิกฤต", sevCol: "#B91C1C", since: "16 มิ.ย. 05:20", area: "อ.บ้านโพธิ์ จ.ฉะเชิงเทรา — เสาไฟล้ม 18 ต้น หม้อแปลงเสียหาย", pt: "กฟภ.บ้านโพธิ์", icon: Siren } },
+    { id: "S", name: "ภาคใต้", x: 28, y: 78, sev: "red", incident: { title: "น้ำท่วม-ดินสไลด์ภาคใต้", typeLabel: "อุทกภัย", sevLbl: "วิกฤต", sevCol: "#B91C1C", since: "15 มิ.ย. 22:00", area: "อ.เมือง จ.นครศรีธรรมราช — น้ำท่วมขัง ดินสไลด์ปิดเส้นทาง", pt: "ศาลากลาง นครฯ", icon: CloudLightning } },
+  ];
+  const needed = [
+    { name: "หม้อแปลงจำหน่าย 30kVA", got: 3, need: 5, unit: "เครื่อง", tag: "ขาด", tagTone: "amber" },
+    { name: "สายเคเบิล XLPE 240", got: 1200, need: 1200, unit: "ม.", tag: "ครบ", tagTone: "green" },
+    { name: "เสาคอนกรีต 12m", got: 8, need: 20, unit: "ต้น", tag: "เร่งด่วน", tagTone: "red" },
+    { name: "เบรกเกอร์ 50A", got: 14, need: 30, unit: "ตัว", tag: "ขาด", tagTone: "amber" },
+  ];
+  const supply = [
+    { branch: "คลัง I010", region: "ภาคเหนือ", km: 38, eta: "1 ชม.", has: "หม้อแปลง 30kVA · เสาคอนกรีต", st: "accepted" },
+    { branch: "คลัง I020", region: "ภาคเหนือ", km: 92, eta: "2.5 ชม.", has: "สายเคเบิล XLPE 240 · เบรกเกอร์", st: "accepted" },
+    { branch: "คลัง C040", region: "ภาคกลาง", km: 210, eta: "5 ชม.", has: "เสาคอนกรีต 12m · หม้อแปลง", st: "pending" },
+    { branch: "คลัง K010", region: "อีสาน", km: 330, eta: "8 ชม.", has: "เบรกเกอร์ 50A", st: "pending" },
+    { branch: "คลัง K020", region: "ตะวันออก", km: 420, eta: "9.5 ชม.", has: "สายเคเบิล · เสาคอนกรีต", st: "rejected" },
+  ];
+  const [selId, setSelId] = useState("N");
+  // modal ขอระดม (req) / สั่งระดม (dispatch)
+  const [emModal, setEmModal] = useState<null | "req" | "dispatch">(null);
+  const emCatalog: { name: string; unit: string }[] = [
+    { name: "หม้อแปลงจำหน่าย 100kVA", unit: "เครื่อง" },
+    { name: "สายเคเบิลอากาศ SAC 185", unit: "ม." },
+    { name: "เครื่องกำเนิดไฟฟ้าเคลื่อนที่", unit: "ชุด" },
+    { name: "เสาคอนกรีต 12m", unit: "ต้น" },
+    { name: "เบรกเกอร์ 50A", unit: "ตัว" },
+  ];
+  const [emSearch, setEmSearch] = useState("");
+  const [emChosen, setEmChosen] = useState<{ name: string; unit: string; qty: number }[]>([
+    { name: "หม้อแปลงจำหน่าย 100kVA", unit: "เครื่อง", qty: 6 },
+    { name: "สายเคเบิลอากาศ SAC 185", unit: "ม.", qty: 2000 },
+    { name: "เครื่องกำเนิดไฟฟ้าเคลื่อนที่", unit: "ชุด", qty: 3 },
+  ]);
+  const [emReturn, setEmReturn] = useState<"borrow" | "swap" | "pr">("borrow");
+  const [emType, setEmType] = useState("น้ำท่วม");
+  const [supplyDetail, setSupplyDetail] = useState<null | { branch: string; region: string; km: number; eta: string; has: string; st: string }>(null);
+  const emFiltered = emCatalog.filter((c) => c.name.includes(emSearch) && !emChosen.some((x) => x.name === c.name));
+  const rmBtn = (on: boolean) => s(`flex:1;height:36px;border-radius:9px;font-family:inherit;font-size:11.5px;font-weight:500;cursor:pointer;transition:all .15s;${on ? "border:1.5px solid #C9B0F2;background:#F4EEFE;color:#6D28D9;" : "border:1px solid #E5E1F0;background:#fff;color:#5A5470;"}`);
+  const sel = zones.find((z) => z.id === selId)!;
+  const pinColor = (sev: string) => sev === "red" ? "#DC2626" : sev === "amber" ? "#D97706" : "#059669";
+  const tagStyle = (t: string) => t === "red" ? "color:#B91C1C;background:#FEF2F2;" : t === "amber" ? "color:#B45309;background:#FFFAEB;" : "color:#0F7B53;background:#ECFDF5;";
+  const barCol = (t: string) => t === "red" ? "#DC2626" : t === "amber" ? "#D97706" : "#059669";
+  const stInfo = (st: string) => st === "accepted" ? { col: "#0F7B53", bg: "#ECFDF5", icon: CheckCircle2, label: "ตอบรับแล้ว" } : st === "rejected" ? { col: "#B91C1C", bg: "#FEF2F2", icon: X, label: "ไม่มีของ" } : { col: "#B45309", bg: "#FFFAEB", icon: Clock, label: "รอตอบรับ" };
+  const respCount = supply.filter((s2) => s2.st === "accepted").length;
+  const pendCount = supply.filter((s2) => s2.st === "pending").length;
+  const needFull = needed.filter((n) => n.got >= n.need).length;
+
+  return (
+    <div>
+      <button onClick={onBack} style={s("display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;color:#7B7591;font-family:inherit;font-size:12.5px;cursor:pointer;padding:0;margin-bottom:14px;")}><ArrowLeft style={s("width:15px;height:15px;")} /> กลับแดชบอร์ด</button>
+      <div style={s("display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:18px;")}>
+        <div>
+          <div style={s("display:flex;align-items:center;gap:10px;margin-bottom:5px;")}><h1 style={s("margin:0;font-size:23px;font-weight:600;letter-spacing:-.2px;color:#1C1830;")}>ศูนย์ระดมพัสดุฉุกเฉิน</h1><span style={s("display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#DC2626;background:#FEF2F2;border:1px solid #FBD5D5;padding:3px 9px;border-radius:99px;")}><span style={{ width: 6, height: 6, borderRadius: "50%", background: "#DC2626", animation: "pdot 1.6s infinite" } as CSSProperties} /> Emergency Response</span></div>
+          <p style={s("margin:0;font-size:13.5px;color:#7B7591;")}>เลือกพื้นที่ประสบภัย → ขอระดมของ · ดูว่าสาขาไหนมีของ ไกลแค่ไหน และตอบรับหรือยัง</p>
+        </div>
+        <div style={s("display:flex;align-items:center;gap:9px;")}><span style={s("font-size:11.5px;color:#9B95B0;")}>อัปเดตสด · 16 มิ.ย. 2569 10:24</span><button style={s("display:flex;align-items:center;gap:7px;height:38px;padding:0 14px;border:1px solid #E5E1F0;border-radius:10px;background:#fff;color:#3B3654;font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer;")}><Download style={s("width:15px;height:15px;color:#7C3AED;")} /> Export</button></div>
+      </div>
+
+      {sel.incident ? (
+        <div style={s("display:flex;align-items:center;gap:16px;background:linear-gradient(100deg,#7A0E1E,#B91C1C 60%,#DC2626);border-radius:14px;padding:15px 20px;margin-bottom:18px;box-shadow:0 16px 34px -20px rgba(185,28,28,.8);")}>
+          <span style={s("width:46px;height:46px;border-radius:12px;background:rgba(255,255,255,.16);color:#fff;display:flex;align-items:center;justify-content:center;flex:none;")}><Siren style={s("width:23px;height:23px;")} /></span>
+          <div style={s("flex:1;min-width:0;")}><div style={s("display:flex;align-items:center;gap:9px;flex-wrap:wrap;")}><span style={s("font-size:15px;font-weight:600;color:#fff;")}>{sel.incident.title}</span><span style={s("font-size:10px;font-weight:600;color:#fff;background:rgba(255,255,255,.2);padding:2px 9px;border-radius:99px;")}>{sel.incident.sevLbl}</span></div><div style={s("font-size:12.5px;color:rgba(255,255,255,.85);margin-top:3px;")}>{sel.incident.area} · เริ่ม {sel.incident.since} · ศูนย์รับของ: {sel.incident.pt}</div></div>
+          <button onClick={() => setEmModal("req")} style={s("display:flex;align-items:center;gap:7px;height:42px;padding:0 18px;border:0;border-radius:11px;background:#fff;color:#B91C1C;font-family:inherit;font-size:13.5px;font-weight:700;cursor:pointer;flex:none;")}><Megaphone style={s("width:17px;height:17px;")} /> ขอระดมของด่วน</button>
+        </div>
+      ) : (
+        <div style={s("display:flex;align-items:center;gap:14px;background:#F0FDF9;border:1px solid #B6EBD7;border-radius:14px;padding:14px 18px;margin-bottom:18px;")}><span style={s("width:40px;height:40px;border-radius:11px;background:#fff;border:1px solid #B6EBD7;color:#059669;display:flex;align-items:center;justify-content:center;flex:none;")}><ShieldCheck style={s("width:20px;height:20px;")} /></span><div style={s("font-size:13px;color:#3F6B57;")}><b style={s("color:#0F7B53;")}>{sel.name}: ไม่มีเหตุฉุกเฉินขณะนี้</b> · พื้นที่ปกติ พร้อมเป็นสาขาผู้ส่งช่วยภาคอื่น</div></div>
+      )}
+
+      <div style={s("display:grid;grid-template-columns:500px 1fr;gap:18px;align-items:start;")}>
+        <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 16px 32px -26px rgba(28,24,48,.3);overflow:hidden;")}>
+          <div style={s("padding:14px 18px 12px;border-bottom:1px solid #F1EEF8;display:flex;align-items:center;justify-content:space-between;")}><h2 style={s("margin:0;font-size:14px;font-weight:600;color:#1C1830;")}>แผนที่ประเทศไทย — จุดเกิดเหตุ & ศูนย์รับของ</h2><div style={s("display:flex;align-items:center;gap:10px;")}><div style={s("display:flex;align-items:center;gap:5px;font-size:10.5px;color:#9B95B0;")}><span style={s("width:9px;height:9px;border-radius:50%;background:#DC2626;")} />มีเหตุ</div><div style={s("display:flex;align-items:center;gap:5px;font-size:10.5px;color:#9B95B0;")}><span style={s("width:9px;height:9px;border-radius:50%;background:#D97706;")} />เฝ้าระวัง</div><div style={s("display:flex;align-items:center;gap:5px;font-size:10.5px;color:#9B95B0;")}><span style={s("width:9px;height:9px;border-radius:50%;background:#059669;")} />ปกติ</div></div></div>
+          <div style={s("padding:14px;position:relative;")}>
+            <div style={s("position:relative;border-radius:14px;overflow:hidden;border:1px solid #E3E8EF;background:linear-gradient(180deg,#EAF1F7,#E2ECF4);")}>
+              <img src="/thailand-map.png" alt="แผนที่ประเทศไทย" style={{ display: "block", width: "100%", height: "auto" } as CSSProperties} />
+              <div style={{ position: "absolute", left: `${sel.x}%`, top: `${sel.y}%`, transform: "translate(-50%,-100%)", width: 46, height: 46, borderRadius: "50%", border: "2.5px dashed #6D28D9", marginTop: -13, zIndex: 2, pointerEvents: "none" } as CSSProperties} />
+              {zones.map((z) => (
+                <div key={z.id} onClick={() => setSelId(z.id)} style={{ position: "absolute", left: `${z.x}%`, top: `${z.y}%`, transform: "translate(-50%,-100%)", cursor: "pointer", zIndex: 3 } as CSSProperties}>
+                  {z.sev === "red" ? <div style={{ position: "absolute", left: "50%", bottom: -4, transform: "translate(-50%,50%)", width: 30, height: 30, borderRadius: "50%", background: "#DC2626", opacity: 0.3, animation: "pdot 1.8s infinite" } as CSSProperties} /> : null}
+                  <div style={{ position: "relative", width: 26, height: 26, borderRadius: "50% 50% 50% 0", transform: "rotate(-45deg)", background: pinColor(z.sev), border: "2.5px solid #fff", boxShadow: "0 5px 10px -2px rgba(0,0,0,.4)", display: "flex", alignItems: "center", justifyContent: "center" } as CSSProperties}><div style={{ width: 8, height: 8, borderRadius: "50%", background: "#fff", transform: "rotate(45deg)" } as CSSProperties} /></div>
+                  <div style={{ textAlign: "center", fontSize: 10.5, fontWeight: 600, color: "#3B3654", marginTop: 4, whiteSpace: "nowrap", textShadow: "0 1px 2px #fff,0 0 3px #fff" } as CSSProperties}>{z.name}</div>
+                </div>
+              ))}
+            </div>
+            <div style={s("display:flex;align-items:center;justify-content:space-between;margin-top:10px;gap:8px;flex-wrap:wrap;")}><p style={s("margin:0;font-size:11px;color:#9B95B0;")}>กดหมุดบนแผนที่เพื่อเลือกพื้นที่ประสบภัย</p><a href="https://disaster.gistda.or.th" target="_blank" rel="noreferrer" style={s("text-decoration:none;display:inline-flex;align-items:center;gap:5px;font-size:10.5px;color:#7C3AED;background:#F4EEFE;border:1px solid #E4D7FB;padding:4px 9px;border-radius:7px;")}><Satellite style={s("width:12px;height:12px;")} /> ข้อมูลภัยพิบัติ: GISTDA Open API</a></div>
+          </div>
+        </div>
+
+        <div style={s("display:flex;flex-direction:column;gap:16px;")}>
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:16px 18px;box-shadow:0 14px 30px -24px rgba(28,24,48,.3);")}>
+            {sel.incident ? (
+              <>
+                <div style={s("display:flex;align-items:center;gap:11px;margin-bottom:13px;")}><span style={s(`width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex:none;background:${sel.sev === "amber" ? "#FFFAEB" : "#FEF2F2"};border:1px solid ${sel.sev === "amber" ? "#FBE3A2" : "#FBD5D5"};`)}><sel.incident.icon style={s(`width:21px;height:21px;color:${sel.incident.sevCol};`)} /></span><div style={s("flex:1;min-width:0;")}><div style={s("font-size:14.5px;font-weight:600;color:#1C1830;line-height:1.25;")}>{sel.incident.title}</div><div style={s("font-size:11.5px;color:#9B95B0;margin-top:2px;")}>{sel.incident.typeLabel} · {sel.name}</div></div></div>
+                <div style={s("display:grid;grid-template-columns:1fr 1fr;gap:9px;")}><div style={s("background:#FAF9FD;border:1px solid #F0EDF7;border-radius:10px;padding:9px 11px;")}><div style={s("font-size:10px;color:#9B95B0;")}>ระดับความรุนแรง</div><div style={s(`font-size:13px;font-weight:600;margin-top:2px;color:${sel.incident.sevCol};`)}>{sel.incident.sevLbl}</div></div><div style={s("background:#FAF9FD;border:1px solid #F0EDF7;border-radius:10px;padding:9px 11px;")}><div style={s("font-size:10px;color:#9B95B0;")}>เริ่มเหตุ</div><div style={s("font-size:13px;font-weight:600;margin-top:2px;color:#1C1830;")}>{sel.incident.since}</div></div></div>
+                <div style={s("margin-top:9px;background:#FEF2F2;border:1px solid #FBD5D5;border-radius:10px;padding:9px 11px;font-size:11.5px;color:#8A4B4B;line-height:1.5;")}>{sel.incident.area}</div>
+                <div style={s("margin-top:9px;display:flex;align-items:center;gap:7px;font-size:11.5px;color:#5A5470;")}><MapPin style={s("width:14px;height:14px;color:#7C3AED;")} /> ศูนย์รับของ: <b style={s("color:#1C1830;")}>{sel.incident.pt}</b></div>
+              </>
+            ) : (
+              <div style={s("display:flex;align-items:center;gap:11px;")}><span style={s("width:42px;height:42px;border-radius:12px;background:#ECFDF5;border:1px solid #B6EBD7;color:#059669;display:flex;align-items:center;justify-content:center;flex:none;")}><ShieldCheck style={s("width:21px;height:21px;")} /></span><div><div style={s("font-size:14.5px;font-weight:600;color:#1C1830;")}>{sel.name}</div><div style={s("font-size:11.5px;color:#0F7B53;margin-top:2px;")}>ไม่มีเหตุฉุกเฉิน · พร้อมเป็นผู้ส่งช่วย</div></div></div>
+            )}
+          </div>
+
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:14px;padding:12px 16px;box-shadow:0 10px 24px -20px rgba(28,24,48,.4);")}>
+            <div style={s("font-size:11px;font-weight:600;color:#9B95B0;letter-spacing:.4px;text-transform:uppercase;margin-bottom:8px;")}>เลือกภาค</div>
+            <div style={s("display:flex;gap:7px;flex-wrap:wrap;")}>
+              {zones.map((z) => (
+                <button key={z.id} onClick={() => setSelId(z.id)} style={s(`height:34px;padding:0 13px;border-radius:9px;font-family:inherit;font-size:12px;font-weight:500;cursor:pointer;transition:all .15s;${selId === z.id ? "background:linear-gradient(135deg,#6D28D9,#C0249B);color:#fff;border:0;box-shadow:0 8px 18px -8px rgba(109,40,217,.65);" : "background:#FAF9FD;color:#5A5470;border:1px solid #E5E1F0;"}`)}>{z.name}</button>
+              ))}
+            </div>
+          </div>
+
+          <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 16px 32px -26px rgba(28,24,48,.3);overflow:hidden;")}>
+            <div style={s("display:flex;align-items:center;justify-content:space-between;padding:14px 18px 12px;border-bottom:1px solid #F1EEF8;")}><div><h2 style={s("margin:0;font-size:14px;font-weight:600;color:#1C1830;")}>รายการขอระดมของ</h2><p style={s("margin:2px 0 0;font-size:11px;color:#9B95B0;")}>ได้รับแล้ว {needFull}/{needed.length} รายการ · เลือกพื้นที่ {sel.name}</p></div><span style={s("display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:600;color:#B45309;background:#FFFAEB;border:1px solid #FBE3A2;padding:4px 10px;border-radius:99px;")}><Package style={s("width:13px;height:13px;")} /> {needed.length} รายการ</span></div>
+            <div style={s("padding:14px 18px;display:flex;flex-direction:column;gap:13px;")}>
+              {needed.map((it) => (
+                <div key={it.name}>
+                  <div style={s("display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px;")}><span style={s("font-size:12.5px;font-weight:500;color:#1C1830;")}>{it.name}</span><span style={s(`font-size:10px;font-weight:600;padding:2px 9px;border-radius:99px;${tagStyle(it.tagTone)}`)}>{it.tag}</span></div>
+                  <div style={s("display:flex;align-items:center;gap:10px;")}><div style={s("flex:1;height:8px;border-radius:99px;background:#F0EDF7;overflow:hidden;")}><div style={{ height: "100%", borderRadius: 99, width: `${Math.round((it.got / it.need) * 100)}%`, background: barCol(it.tagTone) } as CSSProperties} /></div><span className="mono" style={s("font-size:11px;color:#5A5470;width:104px;text-align:right;flex:none;")}>{it.got} / {it.need} {it.unit}</span></div>
+                </div>
+              ))}
+            </div>
+            <div style={s("display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:12px 18px;border-top:1px solid #F1EEF8;")}><button onClick={() => setEmModal("req")} style={s("display:flex;align-items:center;gap:7px;height:38px;padding:0 16px;border:0;border-radius:10px;background:linear-gradient(135deg,#6D28D9,#C0249B);color:#fff;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;box-shadow:0 10px 22px -10px rgba(109,40,217,.65);")}><Megaphone style={s("width:15px;height:15px;")} /> ส่งคำขอระดมของเพิ่ม</button></div>
+          </div>
+        </div>
+      </div>
+
+      <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 16px 32px -26px rgba(28,24,48,.3);overflow:hidden;margin-top:16px;")}>
+        <div style={s("display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:15px 18px 13px;border-bottom:1px solid #F1EEF8;flex-wrap:wrap;")}>
+          <div><div style={s("display:flex;align-items:center;gap:8px;")}><h2 style={s("margin:0;font-size:14px;font-weight:600;color:#1C1830;")}>สาขาที่มีของ & สถานะตอบรับ</h2><span style={s("font-size:10px;font-weight:600;color:#5B21B6;background:#F4EEFE;border:1px solid #E4D7FB;padding:2px 8px;border-radius:99px;")}>เรียงตามระยะทางจากจุดเกิดเหตุ</span></div><p style={s("margin:3px 0 0;font-size:11.5px;color:#9B95B0;")}>ระดมจากสาขาใกล้ที่สุดก่อน · ส่งช่วยแล้วคืน หรือเปิด PR แลกภายหลัง</p></div>
+          <div style={s("display:flex;gap:8px;")}><span style={s("display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#0F7B53;background:#ECFDF5;border:1px solid #B6EBD7;padding:5px 11px;border-radius:99px;")}><CheckCircle2 style={s("width:13px;height:13px;")} /> ตอบรับ {respCount}/{supply.length}</span><span style={s("display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#B45309;background:#FFFAEB;border:1px solid #FBE3A2;padding:5px 11px;border-radius:99px;")}><Clock style={s("width:13px;height:13px;")} /> รอ {pendCount}</span></div>
+        </div>
+        <div style={s("overflow-x:auto;")}>
+          <table style={s("width:100%;border-collapse:collapse;font-size:12.5px;min-width:680px;")}>
+            <thead><tr style={s("background:#FAF9FD;")}><th style={s("text-align:left;font-size:10px;font-weight:600;color:#9B95B0;text-transform:uppercase;padding:9px 18px;")}>สาขาผู้ส่ง</th><th style={s("text-align:right;font-size:10px;font-weight:600;color:#9B95B0;text-transform:uppercase;padding:9px 10px;")}>ระยะทาง</th><th style={s("text-align:right;font-size:10px;font-weight:600;color:#9B95B0;text-transform:uppercase;padding:9px 10px;")}>ETA</th><th style={s("text-align:left;font-size:10px;font-weight:600;color:#9B95B0;text-transform:uppercase;padding:9px 14px;")}>ของที่ส่งได้</th><th style={s("text-align:left;font-size:10px;font-weight:600;color:#9B95B0;text-transform:uppercase;padding:9px 14px;")}>สถานะตอบรับ</th><th style={s("padding:9px 18px;")} /></tr></thead>
+            <tbody>
+              {supply.map((s2) => {
+                const info = stInfo(s2.st);
+                const Icon = info.icon;
+                return (
+                  <tr key={s2.branch} className="dash-row" onClick={() => setSupplyDetail(s2)} style={s("border-top:1px solid #F4F2FA;cursor:pointer;")}>
+                    <td style={s("padding:12px 18px;")}><div style={s("font-weight:600;color:#1C1830;")}>{s2.branch}</div><div style={s("font-size:10.5px;color:#9B95B0;margin-top:1px;")}>{s2.region}</div></td>
+                    <td style={s("padding:12px 10px;text-align:right;")}><span className="mono" style={s("font-size:13px;font-weight:600;color:#1C1830;")}>{s2.km}</span> <span style={s("font-size:10px;color:#9B95B0;")}>กม.</span></td>
+                    <td style={s("padding:12px 10px;text-align:right;color:#5A5470;")}>{s2.eta}</td>
+                    <td style={s("padding:12px 14px;color:#5A5470;")}>{s2.has}</td>
+                    <td style={s("padding:12px 14px;")}><span style={s(`display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;padding:4px 10px;border-radius:99px;color:${info.col};background:${info.bg};`)}><Icon style={s("width:13px;height:13px;")} /> {info.label}</span></td>
+                    <td style={s("padding:12px 18px;text-align:right;")}><ChevronRight style={s("width:16px;height:16px;color:#C4BBD6;")} /></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div style={s("display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 18px;border-top:1px solid #F1EEF8;flex-wrap:wrap;")}><div style={s("display:flex;align-items:flex-start;gap:8px;font-size:11px;color:#7B6A45;background:#FFFBEB;border:1px solid #FBE3A2;border-radius:9px;padding:8px 11px;")}><ShieldAlert style={s("width:14px;height:14px;color:#D97706;margin-top:1px;")} /> เพดานการส่งช่วย: ไม่เกิน 90% ของ Safety Stock แต่ละสาขา — กันผู้ส่งไม่ให้ขาดเอง</div><button onClick={() => setEmModal("dispatch")} style={s("display:flex;align-items:center;gap:7px;height:40px;padding:0 18px;border:0;border-radius:11px;background:linear-gradient(135deg,#6D28D9,#C0249B);color:#fff;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 10px 22px -10px rgba(109,40,217,.65);")}><Truck style={s("width:16px;height:16px;")} /> สั่งระดม & นัดขนส่ง</button></div>
+      </div>
+
+      {/* ===== EMERGENCY MODAL ===== */}
+      {emModal ? (
+        <div onClick={() => setEmModal(null)} style={s("position:fixed;inset:0;z-index:200;background:rgba(28,24,48,.55);backdrop-filter:blur(3px);display:flex;align-items:flex-start;justify-content:center;padding:48px 20px;overflow-y:auto;")}>
+          <div onClick={(e) => e.stopPropagation()} style={s("width:560px;max-width:100%;background:#fff;border-radius:18px;box-shadow:0 30px 70px -20px rgba(28,24,48,.6);overflow:hidden;")}>
+            {emModal === "req" ? (
+              <>
+                <div style={s("padding:18px 22px;background:linear-gradient(100deg,#7A0E1E,#B91C1C 60%,#DC2626);display:flex;align-items:center;gap:13px;")}>
+                  <span style={s("width:42px;height:42px;border-radius:12px;background:rgba(255,255,255,.16);color:#fff;display:flex;align-items:center;justify-content:center;flex:none;")}><Megaphone style={s("width:21px;height:21px;")} /></span>
+                  <div style={s("flex:1;")}><div style={s("font-size:16px;font-weight:600;color:#fff;")}>ขอระดมพัสดุฉุกเฉิน</div><div style={s("font-size:11.5px;color:rgba(255,255,255,.8);")}>{sel.name} · ส่งคำขอไปยังสาขาในเครือข่าย</div></div>
+                  <button onClick={() => setEmModal(null)} style={s("border:0;background:transparent;cursor:pointer;padding:0;")}><X style={s("width:20px;height:20px;color:rgba(255,255,255,.8);")} /></button>
+                </div>
+                <div style={s("padding:20px 22px;")}>
+                  <div style={s("display:flex;align-items:flex-start;gap:10px;background:#FFFBEB;border:1px solid #FBE3A2;border-radius:12px;padding:11px 13px;margin-bottom:16px;")}><Satellite style={s("width:16px;height:16px;color:#D97706;margin-top:1px;")} /><div style={s("font-size:11.5px;color:#7B6A45;line-height:1.55;")}>ขอของล่วงหน้าได้ <b style={s("color:#92400E;")}>ก่อน GISTDA ยืนยันพื้นที่ภัย</b> — ข้อมูลคำขอนี้จะถูกเก็บไว้เพื่อ <b style={s("color:#92400E;")}>ฝึกโมเดลคาดการณ์ภัยพิบัติในอนาคต</b></div></div>
+                  <div style={s("display:flex;flex-direction:column;gap:13px;")}>
+                    <div>
+                      <label style={s("font-size:12px;font-weight:600;color:#3B3654;display:block;margin-bottom:6px;")}>ประเภทภัย</label>
+                      <div style={s("display:flex;gap:7px;flex-wrap:wrap;")}>
+                        {["น้ำท่วม", "พายุ", "ดินสไลด์", "ไฟป่า"].map((t) => (
+                          <button key={t} onClick={() => setEmType(t)} style={s(`font-size:12px;padding:7px 13px;border-radius:9px;font-family:inherit;cursor:pointer;font-weight:${emType === t ? "600" : "400"};${emType === t ? "color:#B91C1C;background:#FEF2F2;border:1.5px solid #FBD5D5;" : "color:#7B7591;background:#FAF9FD;border:1px solid #E5E1F0;"}`)}>{t}</button>
+                        ))}
+                      </div>
+                    </div>
+                    <div style={s("display:grid;grid-template-columns:1fr 1fr;gap:11px;")}>
+                      <div><label style={s("font-size:12px;font-weight:600;color:#3B3654;display:block;margin-bottom:6px;")}>พื้นที่ / อำเภอ</label><input defaultValue={sel.incident?.area.split(" — ")[0] ?? "อ.แม่อาย จ.เชียงใหม่"} style={s("width:100%;height:40px;border:1px solid #E5E1F0;border-radius:10px;background:#FAF9FD;padding:0 12px;font-family:inherit;font-size:13px;color:#1C1830;outline:none;")} /></div>
+                      <div><label style={s("font-size:12px;font-weight:600;color:#3B3654;display:block;margin-bottom:6px;")}>ระดับความเร่งด่วน</label><input defaultValue="วิกฤต — ภายใน 6 ชม." style={s("width:100%;height:40px;border:1px solid #E5E1F0;border-radius:10px;background:#FAF9FD;padding:0 12px;font-family:inherit;font-size:13px;color:#1C1830;outline:none;")} /></div>
+                    </div>
+                    <div>
+                      <label style={s("font-size:12px;font-weight:600;color:#3B3654;display:block;margin-bottom:6px;")}>รายการพัสดุที่ต้องการ</label>
+                      <div style={s("position:relative;margin-bottom:8px;")}><Search style={s("position:absolute;left:11px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:#9B95B0;")} /><input value={emSearch} onChange={(e) => setEmSearch(e.target.value)} placeholder="ค้นหาพัสดุ เช่น หม้อแปลง, เคเบิล, เสา…" style={s("width:100%;height:40px;border:1px solid #E5E1F0;border-radius:10px;background:#FAF9FD;padding:0 12px 0 34px;font-family:inherit;font-size:13px;color:#1C1830;outline:none;")} /></div>
+                      {emFiltered.length > 0 ? (
+                        <div style={s("border:1px solid #EBE7F5;border-radius:10px;overflow:hidden;margin-bottom:10px;max-height:148px;overflow-y:auto;")}>
+                          {emFiltered.map((opt) => (
+                            <div key={opt.name} className="dash-row" onClick={() => { setEmChosen((p) => [...p, { ...opt, qty: 1 }]); setEmSearch(""); }} style={s("display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 12px;cursor:pointer;border-bottom:1px solid #F4F2FA;")}>
+                              <span style={s("font-size:12.5px;color:#1C1830;")}>{opt.name} <span style={s("font-size:10.5px;color:#9B95B0;")}>/ {opt.unit}</span></span>
+                              <span style={s("width:22px;height:22px;border-radius:7px;background:#F4EEFE;color:#6D28D9;display:flex;align-items:center;justify-content:center;flex:none;")}><Plus style={s("width:14px;height:14px;")} /></span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                      <div style={s("display:flex;flex-direction:column;gap:7px;")}>
+                        {emChosen.map((it, idx) => (
+                          <div key={it.name} style={s("display:flex;align-items:center;gap:9px;background:#F4EEFE;border:1px solid #E4D7FB;border-radius:10px;padding:7px 9px 7px 12px;")}>
+                            <span style={s("flex:1;min-width:0;font-size:12.5px;font-weight:500;color:#3B1170;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;")}>{it.name}</span>
+                            <input value={it.qty} onChange={(e) => setEmChosen((p) => p.map((x, i) => i === idx ? { ...x, qty: Number(e.target.value) || 0 } : x))} type="number" style={s("width:74px;height:32px;border:1px solid #D5C5EC;border-radius:8px;background:#fff;padding:0 9px;font-family:inherit;font-size:12.5px;font-weight:600;color:#1C1830;text-align:right;outline:none;")} />
+                            <span style={s("font-size:11px;color:#7A5BA8;width:42px;flex:none;")}>{it.unit}</span>
+                            <button onClick={() => setEmChosen((p) => p.filter((_, i) => i !== idx))} style={s("width:26px;height:26px;border-radius:7px;background:#fff;border:1px solid #E4D7FB;color:#9B6FCF;display:flex;align-items:center;justify-content:center;flex:none;cursor:pointer;")}><X style={s("width:14px;height:14px;")} /></button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div style={s("display:flex;align-items:center;gap:9px;font-size:11.5px;color:#5A5470;")}><span style={s("width:18px;height:18px;border-radius:5px;background:#6D28D9;display:flex;align-items:center;justify-content:center;flex:none;")}><Check style={s("width:12px;height:12px;color:#fff;")} /></span> บันทึกคำขอนี้เป็นข้อมูลฝึกโมเดลคาดการณ์ (GISTDA + PEA)</div>
+                    <div>
+                      <label style={s("font-size:12px;font-weight:600;color:#3B3654;display:block;margin-bottom:6px;")}>วิธีคืนของ (เมื่อสาขาผู้ให้ส่งช่วย)</label>
+                      <div style={s("display:flex;gap:8px;")}>
+                        <button onClick={() => setEmReturn("borrow")} style={rmBtn(emReturn === "borrow")}>ยืม-คืนของเดิม</button>
+                        <button onClick={() => setEmReturn("swap")} style={rmBtn(emReturn === "swap")}>แลกพัสดุ</button>
+                        <button onClick={() => setEmReturn("pr")} style={rmBtn(emReturn === "pr")}>เปิด PR ซื้อคืน</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div style={s("display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:14px 22px;border-top:1px solid #F1EEF8;")}><button onClick={() => setEmModal(null)} style={s("height:40px;padding:0 16px;border:1px solid #E5E1F0;border-radius:10px;background:#fff;color:#3B3654;font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer;")}>ยกเลิก</button><button onClick={() => setEmModal(null)} style={s("display:flex;align-items:center;gap:7px;height:40px;padding:0 18px;border:0;border-radius:10px;background:#DC2626;color:#fff;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 10px 22px -10px rgba(220,38,38,.7);")}><Send style={s("width:16px;height:16px;")} /> ส่งคำขอระดม</button></div>
+              </>
+            ) : (
+              <>
+                <div style={s("padding:18px 22px;background:linear-gradient(135deg,#6D28D9,#C0249B);display:flex;align-items:center;gap:13px;")}>
+                  <span style={s("width:42px;height:42px;border-radius:12px;background:rgba(255,255,255,.16);color:#fff;display:flex;align-items:center;justify-content:center;flex:none;")}><Truck style={s("width:21px;height:21px;")} /></span>
+                  <div style={s("flex:1;")}><div style={s("font-size:16px;font-weight:600;color:#fff;")}>สั่งระดม & นัดขนส่ง</div><div style={s("font-size:11.5px;color:rgba(255,255,255,.8);")}>ยืนยันสาขาผู้ส่ง → ออกใบยืม + แผนขนส่ง</div></div>
+                  <button onClick={() => setEmModal(null)} style={s("border:0;background:transparent;cursor:pointer;padding:0;")}><X style={s("width:20px;height:20px;color:rgba(255,255,255,.8);")} /></button>
+                </div>
+                <div style={s("padding:20px 22px;")}>
+                  <div style={s("font-size:11px;font-weight:600;letter-spacing:.4px;color:#9B95B0;text-transform:uppercase;margin-bottom:9px;")}>ขั้นตอนการระดม</div>
+                  <div style={s("position:relative;padding-left:26px;")}>
+                    <div style={s("position:absolute;left:9px;top:6px;bottom:14px;width:2px;background:#EDE6FA;")} />
+                    <div style={s("position:relative;margin-bottom:13px;")}><span style={s("position:absolute;left:-26px;top:0;width:20px;height:20px;border-radius:50%;background:#059669;color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;")}>✓</span><div style={s("font-size:13px;font-weight:600;color:#1C1830;")}>ยืนยันสาขาผู้ส่ง {respCount} แห่ง</div><div style={s("font-size:11.5px;color:#7B7591;margin-top:2px;")}>I010 (1 ชม.) · I020 (2.5 ชม.) — รวมของครบตามคำขอ</div></div>
+                    <div style={s("position:relative;margin-bottom:13px;")}><span style={s("position:absolute;left:-26px;top:0;width:20px;height:20px;border-radius:50%;background:#6D28D9;color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;")}>2</span><div style={s("font-size:13px;font-weight:600;color:#1C1830;")}>ออกใบยืม + ล็อก 90% Safety Stock</div><div style={s("font-size:11.5px;color:#7B7591;margin-top:2px;")}>ระบบกันสต็อกผู้ส่งอัตโนมัติ · กำหนดเงื่อนไขคืน/PR แลก</div></div>
+                    <div style={s("position:relative;")}><span style={s("position:absolute;left:-26px;top:0;width:20px;height:20px;border-radius:50%;background:#6D28D9;color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;")}>3</span><div style={s("font-size:13px;font-weight:600;color:#1C1830;")}>นัดขนส่ง + แจ้งศูนย์รับของ</div><div style={s("font-size:11.5px;color:#7B7591;margin-top:2px;")}>{sel.incident?.pt ?? "ศูนย์รับของ"} · ติดตามสถานะแบบเรียลไทม์</div></div>
+                  </div>
+                  <div style={s("margin-top:16px;display:flex;align-items:center;gap:11px;background:#F0FDF9;border:1px solid #B6EBD7;border-radius:12px;padding:12px 14px;")}><Clock style={s("width:17px;height:17px;color:#059669;")} /><div style={s("font-size:12px;color:#3F6B57;line-height:1.5;")}>ETA เร็วสุด <b style={s("color:#0F7B53;")}>1 ชม.</b> (I010) · ครบทุกรายการภายใน <b style={s("color:#0F7B53;")}>2.5 ชม.</b></div></div>
+                </div>
+                <div style={s("display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:14px 22px;border-top:1px solid #F1EEF8;")}><button onClick={() => setEmModal(null)} style={s("height:40px;padding:0 16px;border:1px solid #E5E1F0;border-radius:10px;background:#fff;color:#3B3654;font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer;")}>ยกเลิก</button><button onClick={() => setEmModal(null)} style={s("display:flex;align-items:center;gap:7px;height:40px;padding:0 18px;border:0;border-radius:10px;background:linear-gradient(135deg,#6D28D9,#C0249B);color:#fff;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 10px 22px -10px rgba(109,40,217,.65);")}><Check style={s("width:16px;height:16px;")} /> ยืนยันสั่งระดม</button></div>
+              </>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {/* ===== SUPPLY SOURCE DETAIL MODAL ===== */}
+      {supplyDetail ? (() => {
+        const info = stInfo(supplyDetail.st);
+        const Icon = info.icon;
+        const sendable = supplyDetail.has.split(" · ");
+        return (
+          <div onClick={() => setSupplyDetail(null)} style={s("position:fixed;inset:0;z-index:200;background:rgba(28,24,48,.55);backdrop-filter:blur(3px);display:flex;align-items:flex-start;justify-content:center;padding:48px 20px;overflow-y:auto;")}>
+            <div onClick={(e) => e.stopPropagation()} style={s("width:480px;max-width:100%;background:#fff;border-radius:18px;box-shadow:0 30px 70px -20px rgba(28,24,48,.6);overflow:hidden;")}>
+              <div style={s("padding:18px 22px;border-bottom:1px solid #F1EEF8;display:flex;align-items:center;gap:13px;")}>
+                <span style={s("width:44px;height:44px;border-radius:12px;background:#F4EEFE;color:#6D28D9;display:flex;align-items:center;justify-content:center;flex:none;")}><WarehouseIcon style={s("width:22px;height:22px;")} /></span>
+                <div style={s("flex:1;min-width:0;")}><div style={s("font-size:16px;font-weight:600;color:#1C1830;")}>{supplyDetail.branch}</div><div style={s("font-size:11.5px;color:#9B95B0;margin-top:2px;")}>{supplyDetail.region} · ห่างจุดเกิดเหตุ {supplyDetail.km} กม.</div></div>
+                <span style={s(`display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:4px 10px;border-radius:99px;color:${info.col};background:${info.bg};flex:none;`)}><Icon style={s("width:13px;height:13px;")} /> {info.label}</span>
+              </div>
+              <div style={s("padding:18px 22px;")}>
+                <div style={s("display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;")}>
+                  <div style={s("background:#FAF9FD;border:1px solid #F0EDF7;border-radius:11px;padding:11px 13px;")}><div style={s("display:flex;align-items:center;gap:6px;font-size:10.5px;color:#9B95B0;")}><Navigation style={s("width:13px;height:13px;color:#7C3AED;")} /> ระยะทาง</div><div style={s("font-size:17px;font-weight:700;color:#1C1830;margin-top:4px;")}>{supplyDetail.km} <span style={s("font-size:11px;font-weight:400;color:#9B95B0;")}>กม.</span></div></div>
+                  <div style={s("background:#FAF9FD;border:1px solid #F0EDF7;border-radius:11px;padding:11px 13px;")}><div style={s("display:flex;align-items:center;gap:6px;font-size:10.5px;color:#9B95B0;")}><Clock style={s("width:13px;height:13px;color:#2563EB;")} /> ETA</div><div style={s("font-size:17px;font-weight:700;color:#1C1830;margin-top:4px;")}>{supplyDetail.eta}</div></div>
+                </div>
+                <div style={s("font-size:11px;font-weight:600;letter-spacing:.4px;color:#9B95B0;text-transform:uppercase;margin-bottom:9px;")}>ของที่ส่งช่วยได้</div>
+                <div style={s("display:flex;flex-direction:column;gap:8px;margin-bottom:14px;")}>
+                  {sendable.map((it, i) => (
+                    <div key={i} style={s("display:flex;align-items:center;gap:10px;background:#FAF9FD;border:1px solid #F0EDF7;border-radius:10px;padding:9px 12px;")}>
+                      <span style={s("width:30px;height:30px;border-radius:8px;background:#F4EEFE;color:#7C3AED;display:flex;align-items:center;justify-content:center;flex:none;")}><Package style={s("width:15px;height:15px;")} /></span>
+                      <span style={s("flex:1;min-width:0;font-size:12.5px;font-weight:500;color:#1C1830;")}>{it}</span>
+                      <span style={s("font-size:10px;font-weight:600;color:#0F7B53;background:#ECFDF5;padding:3px 9px;border-radius:99px;flex:none;")}>พร้อมส่ง</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={s("display:flex;align-items:flex-start;gap:8px;background:#FFFBEB;border:1px solid #FBE3A2;border-radius:10px;padding:9px 12px;font-size:11px;color:#7B6A45;line-height:1.5;")}><ShieldAlert style={s("width:14px;height:14px;color:#D97706;margin-top:1px;")} /> ส่งได้ไม่เกิน <b style={s("color:#92400E;")}>90% ของ Safety Stock</b> ของ {supplyDetail.branch} — ระบบกันสต็อกให้คลังผู้ส่งไม่ขาดเอง</div>
+                {supplyDetail.st === "accepted" ? (
+                  <div style={s("margin-top:12px;display:flex;align-items:center;gap:9px;background:#ECFDF5;border:1px solid #B6EBD7;border-radius:11px;padding:11px 13px;font-size:12px;color:#0F7B53;")}><CheckCircle2 style={s("width:16px;height:16px;")} /> สาขานี้ตอบรับแล้ว · กำลังจัดของและออกใบยืม</div>
+                ) : supplyDetail.st === "rejected" ? (
+                  <div style={s("margin-top:12px;display:flex;align-items:center;gap:9px;background:#FEF2F2;border:1px solid #FBD5D5;border-radius:11px;padding:11px 13px;font-size:12px;color:#B91C1C;")}><X style={s("width:16px;height:16px;")} /> สาขานี้แจ้งไม่มีของ · ระบบจะข้ามไปสาขาถัดไปอัตโนมัติ</div>
+                ) : (
+                  <div style={s("margin-top:12px;display:flex;align-items:center;gap:9px;background:#FFFAEB;border:1px solid #FBE3A2;border-radius:11px;padding:11px 13px;font-size:12px;color:#B45309;")}><Clock style={s("width:16px;height:16px;")} /> รอสาขาตอบรับ · ส่งคำขอแล้ว กำลังรอยืนยัน</div>
+                )}
+              </div>
+              <div style={s("display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:14px 22px;border-top:1px solid #F1EEF8;")}>
+                <button onClick={() => setSupplyDetail(null)} style={s("height:40px;padding:0 16px;border:1px solid #E5E1F0;border-radius:10px;background:#fff;color:#3B3654;font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer;")}>ปิด</button>
+                {supplyDetail.st === "accepted" ? (
+                  <button onClick={() => { setSupplyDetail(null); setEmModal("dispatch"); }} style={s("display:flex;align-items:center;gap:7px;height:40px;padding:0 18px;border:0;border-radius:10px;background:linear-gradient(135deg,#6D28D9,#C0249B);color:#fff;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 10px 22px -10px rgba(109,40,217,.65);")}><Truck style={s("width:16px;height:16px;")} /> ดูแผนขนส่ง</button>
+                ) : supplyDetail.st === "pending" ? (
+                  <button onClick={() => setSupplyDetail(null)} style={s("display:flex;align-items:center;gap:7px;height:40px;padding:0 18px;border:0;border-radius:10px;background:#D97706;color:#fff;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 10px 22px -10px rgba(217,119,6,.6);")}><Bell style={s("width:16px;height:16px;")} /> ส่งแจ้งเตือนติดตาม</button>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        );
+      })() : null}
+    </div>
+  );
+}
 
 function BudgetSettingsPage({
   budgetSettings,
@@ -6686,161 +8428,74 @@ function BudgetSettingsPage({
   };
 
   return (
-    <>
-      <PageTitle
-        eyebrow="ตั้งค่างบประมาณ"
-        title="งบประมาณคลัง เขต และส่วนกลาง"
-        subtitle="แก้ไขงบคงเหลือที่ใช้ตรวจ Budget Check และกำหนดเส้นทางอนุมัติของคำขอซื้อ"
-      />
-
-      <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-3">
-        <MetricCard
-          label="งบคลังพื้นที่รวม"
-          value={formatTHB(localTotal)}
-          helper={`${warehouses.length} คลัง`}
-          formula={`ผลรวม Local Budget ของทุกคลัง demo = ${formatTHB(localTotal)}`}
-          changes="แก้งบคลังพื้นที่ในหน้านี้"
-        />
-        <MetricCard
-          label="งบระดับเขตรวม"
-          value={formatTHB(regionalTotal)}
-          helper={`${regionalBudgets.length} เขต`}
-          tone="blue"
-          formula={`ผลรวม Regional Budget ทุกเขต = ${formatTHB(regionalTotal)}`}
-          changes="แก้งบระดับเขตในหน้านี้"
-        />
-        <MetricCard
-          label="งบส่วนกลาง"
-          value={formatTHB(draftBudgetSettings.centralBudgetRemaining)}
-          helper="Central National"
-          tone="green"
-          formula={`อ่านจาก Central Budget Remaining = ${formatTHB(draftBudgetSettings.centralBudgetRemaining)}`}
-          changes="แก้งบส่วนกลางในหน้านี้"
-        />
+    <div>
+      <div style={s("margin-bottom:18px;")}>
+        <h1 style={s("margin:0 0 5px;font-size:23px;font-weight:600;letter-spacing:-.2px;color:#1C1830;")}>ตั้งค่างบประมาณ 3 ชั้น</h1>
+        <p style={s("margin:0;font-size:13.5px;color:#7B7591;")}>กำหนดวงเงิน คลัง / เขต / ส่วนกลาง — มีผลกับการตรวจงบและเส้นทางอนุมัติของคำขอใหม่ทันที</p>
       </div>
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
-        <div className="space-y-5">
-          <Card>
-            <SectionHeader
-              title="งบคลังพื้นที่ (Local Budget)"
-              subtitle="ใช้เทียบขั้นแรกของ Approval Routing: ถ้า Estimated Cost ไม่เกินงบคลัง ระบบจะแนะนำอนุมัติระดับคลัง"
-            />
-            <DataTable columns={["WH Id", "คลัง", "ภูมิภาค", "งบคงเหลือ", "คำอธิบาย"]}>
-              {warehouses.map((warehouse) => (
-                <tr key={warehouse.id}>
-                  <td className="px-4 py-3 font-semibold text-slate-900">{warehouse.id}</td>
-                  <td className="px-4 py-3">{warehouse.name}</td>
-                  <td className="px-4 py-3">{regionLabels[warehouse.region]}</td>
-                  <td className="min-w-52 px-4 py-3">
-                    <input
-                      className={inputClass}
-                      type="number"
-                      min={0}
-                      value={draftBudget.localBudgets[warehouse.id] ?? ""}
-                      onChange={(event) => updateLocalBudget(warehouse.id, event.target.value)}
-                    />
-                  </td>
-                  <td className="min-w-72 px-4 py-3 text-sm leading-6 text-slate-500">
-                    ค่านี้ใช้ใน Budget Check ระดับคลังของ {warehouse.id}; หลังบันทึกจะกระทบ Create Request / SKU Detail / Dashboard ทันที แต่ไม่แก้ snapshot เก่า
-                  </td>
-                </tr>
-              ))}
-            </DataTable>
-          </Card>
+      <div style={s("display:flex;align-items:center;gap:14px;background:linear-gradient(100deg,#FBF4FF,#FCE9F5);border:1px solid #E6D8FB;border-radius:14px;padding:14px 18px;margin-bottom:18px;")}>
+        <span style={s("width:40px;height:40px;border-radius:11px;background:#fff;border:1px solid #E6D8FB;color:#7C3AED;display:flex;align-items:center;justify-content:center;flex:none;")}><Sparkles style={s("width:19px;height:19px;")} /></span>
+        <div style={s("flex:1;min-width:0;")}>
+          <div style={s("font-size:13.5px;font-weight:600;color:#5B21B6;")}>AI แนะนำงบประมาณ</div>
+          <div style={s("font-size:12px;color:#6B6483;margin-top:2px;")}>งบเขต A จะหมดใน <b style={s("color:#B45309;")}>~18 วัน</b> ตามอัตราใช้เฉลี่ย ฿38K/วัน — แนะนำกันงบ Critical SKU ไว้ <b style={s("color:#3B1170;")}>{formatTHB(180000)}</b></div>
+        </div>
+        <button style={s("height:38px;padding:0 15px;border:1px solid #C9B0F2;border-radius:10px;background:#fff;color:#6D28D9;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;flex:none;")}>กันงบอัตโนมัติ</button>
+      </div>
 
-          <Card>
-            <SectionHeader
-              title="งบระดับเขต (Regional Budget)"
-              subtitle="ใช้เมื่อคำขอมีมูลค่าเกินงบคลังพื้นที่ หากยังไม่เกินงบเขต ระบบจะแนะนำส่งอนุมัติระดับเขต"
-            />
-            <DataTable columns={["ภูมิภาค", "งบคงเหลือ", "คำอธิบาย"]}>
-              {regionalBudgets.map((budget) => (
-                <tr key={budget.region}>
-                  <td className="px-4 py-3 font-semibold text-slate-900">{regionLabels[budget.region]}</td>
-                  <td className="min-w-52 px-4 py-3">
-                    <input
-                      className={inputClass}
-                      type="number"
-                      min={0}
-                      value={draftBudget.regionalBudgets[budget.region] ?? ""}
-                      onChange={(event) => updateRegionalBudget(budget.region, event.target.value)}
-                    />
-                  </td>
-                  <td className="min-w-72 px-4 py-3 text-sm leading-6 text-slate-500">
-                    ใช้เทียบกับ Estimated Cost หลังงบคลังไม่พอ ถ้างบเขตไม่พอ ระบบจะส่งต่อส่วนกลาง
-                  </td>
-                </tr>
-              ))}
-            </DataTable>
-          </Card>
-
-          <Card className="p-5">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <Field
-                label="งบส่วนกลาง (Central National)"
-                hint="ใช้เมื่อ Estimated Cost เกินงบคลังและงบเขต ลบค่าว่างได้ระหว่างพิมพ์ และระบบจะแปลงค่าว่างเป็น 0 ตอนบันทึก"
-              >
-                <input
-                  className={inputClass}
-                  type="number"
-                  min={0}
-                  value={draftBudget.centralBudgetRemaining}
-                  onChange={(event) => setDraftBudget((current) => ({ ...current, centralBudgetRemaining: event.target.value }))}
-                />
-              </Field>
-              <Field label="อัปเดตล่าสุด" hint="ระบบบันทึกเวลาปัจจุบันเมื่อกดบันทึก">
-                <input className={`${inputClass} bg-slate-50 text-slate-600`} value={budgetSettings.updatedAt} readOnly />
-              </Field>
-              <div className="md:col-span-2">
-                <Field label="หมายเหตุการแก้งบ" hint="ใช้ใน Budget Change Log เพื่อบอกเหตุผลการปรับงบ">
-                  <textarea className={textareaClass} value={budgetNote} onChange={(event) => setBudgetNote(event.target.value)} />
-                </Field>
+      <div style={s("display:grid;grid-template-columns:1.5fr 1fr;gap:18px;align-items:start;")}>
+        <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 16px 32px -26px rgba(28,24,48,.3);overflow:hidden;")}>
+          <div style={s("padding:16px 18px 13px;border-bottom:1px solid #F1EEF8;")}><h2 style={s("margin:0;font-size:15px;font-weight:600;color:#1C1830;")}>วงเงินงบ ปีงบ 2569</h2></div>
+          <div style={s("padding:16px 18px;display:flex;flex-direction:column;gap:14px;")}>
+            <div style={s("display:flex;align-items:center;gap:14px;")}>
+              <span style={s("width:40px;height:40px;border-radius:11px;background:#F4EEFE;color:#7C3AED;display:flex;align-items:center;justify-content:center;flex:none;")}><WarehouseIcon style={s("width:19px;height:19px;")} /></span>
+              <div style={s("flex:1;min-width:0;")}>
+                <div style={s("font-size:13px;font-weight:600;color:#1C1830;")}>งบคลัง {warehouses[0]?.id ?? "I010"}</div>
+                <div style={s("font-size:11px;color:#9B95B0;")}>งบคงเหลือ</div>
+                <div style={s("height:6px;border-radius:99px;background:#F0EDF7;margin-top:6px;max-width:280px;")}><div style={s("width:47%;height:100%;border-radius:99px;background:#7C3AED;")}></div></div>
               </div>
+              <div style={s("position:relative;flex:none;")}><span style={s("position:absolute;left:11px;top:50%;transform:translateY(-50%);color:#9B95B0;font-size:13px;")}>฿</span><input type="number" min={0} value={draftBudget.localBudgets[warehouses[0]?.id ?? ""] ?? ""} onChange={e => updateLocalBudget(warehouses[0]?.id ?? "", e.target.value)} style={s("width:120px;height:40px;border:1px solid #E5E1F0;border-radius:10px;background:#fff;padding:0 11px 0 24px;font-family:inherit;font-size:13px;font-weight:600;color:#1C1830;text-align:right;outline:none;")} /></div>
             </div>
-            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <Button type="button" variant="secondary" onClick={() => setDraftBudget(budgetSettingsToInputDraft(defaultBudgetSettings))}>
-                รีเซ็ตเป็นค่า seed
-              </Button>
-              <Button type="button" onClick={() => onSave(budgetInputDraftToSettings(draftBudget, budgetSettings), budgetNote)}>
-                บันทึกงบประมาณ
-              </Button>
+            <div style={s("display:flex;align-items:center;gap:14px;")}>
+              <span style={s("width:40px;height:40px;border-radius:11px;background:#EFF4FF;color:#2563EB;display:flex;align-items:center;justify-content:center;flex:none;")}><Building2 style={s("width:19px;height:19px;")} /></span>
+              <div style={s("flex:1;min-width:0;")}>
+                <div style={s("font-size:13px;font-weight:600;color:#1C1830;")}>งบเขต A · {regionLabels["North"] ?? "ภาคเหนือ"}</div>
+                <div style={s("font-size:11px;color:#9B95B0;")}>{formatTHB(regionalTotal)} คงเหลือ</div>
+                <div style={s("height:6px;border-radius:99px;background:#F0EDF7;margin-top:6px;max-width:280px;")}><div style={s("width:53%;height:100%;border-radius:99px;background:#2563EB;")}></div></div>
+              </div>
+              <div style={s("position:relative;flex:none;")}><span style={s("position:absolute;left:11px;top:50%;transform:translateY(-50%);color:#9B95B0;font-size:13px;")}>฿</span><input type="number" min={0} value={draftBudget.regionalBudgets["North"] ?? ""} onChange={e => updateRegionalBudget("North" as BudgetRegion, e.target.value)} style={s("width:120px;height:40px;border:1px solid #E5E1F0;border-radius:10px;background:#fff;padding:0 11px 0 24px;font-family:inherit;font-size:13px;font-weight:600;color:#1C1830;text-align:right;outline:none;")} /></div>
             </div>
-          </Card>
+            <div style={s("display:flex;align-items:center;gap:14px;")}>
+              <span style={s("width:40px;height:40px;border-radius:11px;background:#ECFDF5;color:#059669;display:flex;align-items:center;justify-content:center;flex:none;")}><Landmark style={s("width:19px;height:19px;")} /></span>
+              <div style={s("flex:1;min-width:0;")}>
+                <div style={s("font-size:13px;font-weight:600;color:#1C1830;")}>งบส่วนกลาง</div>
+                <div style={s("font-size:11px;color:#9B95B0;")}>{formatTHB(draftBudgetSettings.centralBudgetRemaining)} คงเหลือ</div>
+                <div style={s("height:6px;border-radius:99px;background:#F0EDF7;margin-top:6px;max-width:280px;")}><div style={s("width:76%;height:100%;border-radius:99px;background:#059669;")}></div></div>
+              </div>
+              <div style={s("position:relative;flex:none;")}><span style={s("position:absolute;left:11px;top:50%;transform:translateY(-50%);color:#9B95B0;font-size:13px;")}>฿</span><input type="number" min={0} value={draftBudget.centralBudgetRemaining} onChange={e => setDraftBudget(c => ({...c, centralBudgetRemaining: e.target.value}))} style={s("width:120px;height:40px;border:1px solid #E5E1F0;border-radius:10px;background:#fff;padding:0 11px 0 24px;font-family:inherit;font-size:13px;font-weight:600;color:#1C1830;text-align:right;outline:none;")} /></div>
+            </div>
+            <div style={s("display:flex;flex-direction:column;gap:9px;")}>
+              <div style={s("display:flex;flex-direction:column;gap:4px;")}><label style={s("font-size:12px;font-weight:500;color:#5A5470;")}>หมายเหตุการแก้งบ</label><textarea value={budgetNote} onChange={e => setBudgetNote(e.target.value)} style={s("resize:vertical;border:1px solid #E5E1F0;border-radius:10px;padding:9px 12px;font-family:inherit;font-size:12.5px;color:#1C1830;outline:none;min-height:60px;")} /></div>
+            </div>
+            <div style={s("display:flex;justify-content:flex-end;gap:10px;border-top:1px solid #F1EEF8;padding-top:14px;")}>
+              <button type="button" onClick={() => setDraftBudget(budgetSettingsToInputDraft(defaultBudgetSettings))} style={s("height:40px;padding:0 16px;border:1px solid #E5E1F0;border-radius:11px;background:#fff;color:#3B3654;font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer;")}>รีเซ็ต</button>
+              <button type="button" onClick={() => onSave(budgetInputDraftToSettings(draftBudget, budgetSettings), budgetNote)} style={s("display:flex;align-items:center;gap:7px;height:40px;padding:0 18px;border:0;border-radius:11px;background:linear-gradient(135deg,#6D28D9,#C0249B);color:#fff;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 10px 22px -10px rgba(109,40,217,.7);")}><Save style={s("width:16px;height:16px;")} /> บันทึกงบ</button>
+            </div>
+          </div>
         </div>
 
-        <div className="space-y-5">
-          <Card className="p-5">
-            <h3 className="font-semibold text-slate-950">ผลกระทบของการแก้งบ</h3>
-            <div className="mt-4 space-y-3 text-sm leading-6 text-slate-600">
-              <InlineAlert tone="info">
-                งบที่บันทึกจะถูกใช้ทันทีในการคำนวณ Budget Check และ Recommended Approval Layer ของคำขอใหม่หรือ preview ใหม่
-              </InlineAlert>
-              <p><span className="font-semibold text-slate-800">Local:</span> ถ้า Estimated Cost ≤ งบคลัง → อนุมัติระดับคลัง</p>
-              <p><span className="font-semibold text-slate-800">Regional:</span> ถ้างบคลังไม่พอ แต่ Estimated Cost ≤ งบเขต → ส่งอนุมัติระดับเขต</p>
-              <p><span className="font-semibold text-slate-800">Central:</span> ถ้างบเขตไม่พอ → ส่งต่อส่วนกลาง</p>
-              <p className="text-xs text-slate-500">Request History และ Calculation Snapshot เดิมจะไม่เปลี่ยนย้อนหลัง เพราะ snapshot ต้องเก็บงบ ณ วันที่สร้างคำขอ</p>
-            </div>
-          </Card>
-
-          <Card>
-            <SectionHeader title="ประวัติการแก้งบประมาณ" subtitle="แสดง log ของ Local, Regional และ Central Budget" />
-            <DataTable columns={["วันที่", "เป้าหมาย", "ฟิลด์", "ค่าเดิม", "ค่าใหม่", "หมายเหตุ"]} empty={budgetLogs.length === 0}>
-              {budgetLogs.map((log) => (
-                <tr key={log.id}>
-                  <td className="px-4 py-3">{log.createdAt}</td>
-                  <td className="px-4 py-3 font-semibold text-slate-900">{log.target}</td>
-                  <td className="px-4 py-3">{getChangeLogFieldLabel(log.field)}</td>
-                  <td className="px-4 py-3">{log.oldValue}</td>
-                  <td className="px-4 py-3">{log.newValue}</td>
-                  <td className="px-4 py-3">{log.note}</td>
-                </tr>
-              ))}
-            </DataTable>
-          </Card>
+        <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:16px 18px;box-shadow:0 14px 30px -24px rgba(28,24,48,.3);")}>
+          <h2 style={s("margin:0 0 12px;font-size:14px;font-weight:600;color:#1C1830;")}>ประวัติการแก้งบ</h2>
+          <div style={s("display:flex;flex-direction:column;gap:11px;")}>
+            {budgetLogs.length === 0 ? (
+              <div style={s("text-align:center;padding:20px;color:#9B95B0;font-size:12px;")}>ยังไม่มีประวัติ</div>
+            ) : budgetLogs.slice(0, 5).map(log => (
+              <div key={log.id} style={s("display:flex;gap:10px;")}><span style={s("width:7px;height:7px;border-radius:50%;background:#7C3AED;margin-top:5px;flex:none;")}></span><div><div style={s("font-size:12px;color:#1C1830;")}><b>{log.target}</b> {log.oldValue} → {log.newValue}</div><div style={s("font-size:10.5px;color:#9B95B0;")}>{log.createdAt} · {log.note}</div></div></div>
+            ))}
+          </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -6850,12 +8505,14 @@ function SettingsPage({
   changeLogs,
   onSaveFormulaPolicy,
   onClearDemoHistory,
+  onFactoryReset,
 }: {
   formulaPolicy: FormulaPolicyState;
   formulaVersions: FormulaVersionRecord[];
   changeLogs: ChangeLogEntry[];
   onSaveFormulaPolicy: (policy: FormulaPolicyState, note: string) => void;
   onClearDemoHistory: () => void;
+  onFactoryReset: () => void;
 }) {
   const [draftPolicy, setDraftPolicy] = useState(formulaPolicy);
   const [versionNote, setVersionNote] = useState("ปรับค่านโยบายสำหรับการวางแผนพัสดุคงคลัง");
@@ -6882,141 +8539,104 @@ function SettingsPage({
     setDraftPolicy(formulaPolicy);
   }, [formulaPolicy]);
 
+  const slButtons = [
+    { label: "90%", value: 0.90 },
+    { label: "95%", value: 0.95 },
+    { label: "97%", value: 0.97 },
+    { label: "99%", value: 0.99 },
+  ];
+
   return (
-    <>
-      <PageTitle eyebrow="ตั้งค่า" title="สูตรคำนวณและนโยบาย" subtitle="ตั้งค่าเวอร์ชันสูตร นโยบายอนุมัติ และนโยบายการขอแตกต่างจากค่าที่ระบบแนะนำสำหรับต้นแบบ" />
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
-        <Card>
-          <SectionHeader title={`เวอร์ชันสูตร ${draftPolicy.formulaVersion}`} subtitle="แก้ไขค่านโยบายแล้วบันทึกเป็นเวอร์ชันใหม่เพื่อใช้ตรวจสอบย้อนหลัง" />
-          <div className="border-b border-slate-200 p-5">
-            <InlineAlert tone="info">
-              <p>
-                การแก้ไขในหน้านี้จะมีผลหลังจากกดบันทึกเป็นเวอร์ชันสูตรใหม่ ค่าที่คำนวณใหม่ใน Dashboard, SKU Detail, Create Request และ VMI
-                จะใช้ policy ล่าสุด ส่วน Request History และ Calculation Snapshot เดิมจะไม่เปลี่ยนย้อนหลัง
-              </p>
-              <p>
-                ถ้าผู้ใช้บันทึก AI Feedback แล้ว error สูงกว่าเกณฑ์ส่วนต่างสูง ระบบจะปรับ Service Level และ Seasonal Factor ทีละน้อย พร้อมสร้างสูตรเวอร์ชันใหม่อัตโนมัติเพื่อใช้กับการคำนวณครั้งถัดไป
-              </p>
-            </InlineAlert>
+    <div>
+      <div style={s("margin-bottom:18px;")}>
+        <h1 style={s("margin:0 0 5px;font-size:23px;font-weight:600;letter-spacing:-.2px;color:#1C1830;")}>ตั้งค่าสูตรคำนวณ</h1>
+        <p style={s("margin:0;font-size:13.5px;color:#7B7591;")}>ปรับ Service Level, Factor และนโยบายสูตร — บันทึกแล้วสร้าง formula version ใหม่ (snapshot เก่าไม่ถูกแก้)</p>
+      </div>
+
+      <div style={s("display:flex;align-items:center;gap:14px;background:linear-gradient(100deg,#FBF4FF,#FCE9F5);border:1px solid #E6D8FB;border-radius:14px;padding:14px 18px;margin-bottom:18px;")}>
+        <span style={s("width:40px;height:40px;border-radius:11px;background:#fff;border:1px solid #E6D8FB;color:#7C3AED;display:flex;align-items:center;justify-content:center;flex:none;")}><GitBranch style={s("width:19px;height:19px;")} /></span>
+        <div style={s("flex:1;min-width:0;")}>
+          <div style={s("font-size:13.5px;font-weight:600;color:#5B21B6;")}>AI auto-tune แนะนำ</div>
+          <div style={s("font-size:12px;color:#6B6483;margin-top:2px;")}>จาก feedback error เฉลี่ย +40% ในฤดูฝน — แนะนำปรับ <b style={s("color:#3B1170;")}>Seasonal Factor 1.20 → 1.28</b> สร้างสูตร v1.1</div>
+        </div>
+        <button onClick={() => updateDraftNumber("seasonalFactor", 1.28)} style={s("height:38px;padding:0 15px;border:0;border-radius:10px;background:linear-gradient(135deg,#6D28D9,#C0249B);color:#fff;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;flex:none;")}>ใช้คำแนะนำ</button>
+      </div>
+
+      <div style={s("display:grid;grid-template-columns:1.5fr 1fr;gap:18px;align-items:start;")}>
+        <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:18px;box-shadow:0 1px 2px rgba(28,24,48,.04),0 16px 32px -26px rgba(28,24,48,.3);")}>
+          <h2 style={s("margin:0 0 4px;font-size:15px;font-weight:600;color:#1C1830;")}>Formula Policy</h2>
+          <p style={s("margin:0 0 16px;font-size:11.5px;color:#9B95B0;")}>สูตรปัจจุบัน {draftPolicy.formulaVersion}</p>
+
+          <div style={s("margin-bottom:18px;")}>
+            <div style={s("display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;")}><span style={s("font-size:13px;font-weight:500;color:#3B3654;")}>Service Level</span><span className="mono" style={s("font-size:11.5px;color:#6D28D9;background:#F4EEFE;padding:3px 9px;border-radius:6px;")}>Z-score = {draftPolicy.zScore}</span></div>
+            <div style={s("display:flex;gap:8px;flex-wrap:wrap;")}>
+              {slButtons.map(btn => (
+                <button key={btn.label} onClick={() => updateDraftServiceLevel(btn.value)} style={s(`height:36px;padding:0 16px;border-radius:9px;font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer;${Math.abs(draftPolicy.serviceLevel - btn.value) < 0.001 ? "background:#6D28D9;color:#fff;border:0;" : "background:#FAF9FD;color:#5A5470;border:1px solid #E5E1F0;"}`)}>{btn.label}</button>
+              ))}
+            </div>
+            <p style={s("margin:8px 0 0;font-size:10.5px;color:#9B95B0;")}>Z-score คำนวณจาก Service Level อัตโนมัติ · Safety Stock = Z × σ × √LT</p>
           </div>
-          <div className="grid grid-cols-1 gap-4 p-5 md:grid-cols-2">
-            <Field label="เวอร์ชันสูตร" hint={formulaSettingHelp.formulaVersion}>
-              <input className={`${inputClass} cursor-not-allowed bg-slate-50 text-slate-600`} value={draftPolicy.formulaVersion} readOnly />
-            </Field>
-            <Field label="ระดับความมั่นใจ" hint={formulaSettingHelp.serviceLevel}>
-              <EditableNumberInput step="0.005" min="0.8" max="0.995" value={draftPolicy.serviceLevel} onValueChange={updateDraftServiceLevel} />
-            </Field>
-            <Field label="Z-score ที่ระบบคำนวณ" hint={formulaSettingHelp.zScore}>
-              <input className={inputClass} type="number" value={draftPolicy.zScore} readOnly />
-            </Field>
-            <Field label="ค่าตั้งต้นตัวคูณฤดูกาล" hint={formulaSettingHelp.seasonalFactor}>
-              <EditableNumberInput step="0.01" value={draftPolicy.seasonalFactor} onValueChange={(value) => updateDraftNumber("seasonalFactor", value)} />
-            </Field>
-            <Field label="ค่าตั้งต้นตัวคูณงบประมาณ" hint={formulaSettingHelp.budgetFactor}>
-              <EditableNumberInput step="0.01" value={draftPolicy.budgetFactor} onValueChange={(value) => updateDraftNumber("budgetFactor", value)} />
-            </Field>
-            <Field label="เกณฑ์ส่วนต่างสูง (%)" hint={formulaSettingHelp.highVarianceThreshold}>
-              <EditableNumberInput step="1" value={draftPolicy.highVarianceThreshold} onValueChange={(value) => updateDraftNumber("highVarianceThreshold", value)} />
-            </Field>
-            <div className="md:col-span-2">
-              <Field label="หมายเหตุเวอร์ชัน" hint={formulaSettingHelp.versionNote}>
-                <textarea className={textareaClass} value={versionNote} onChange={(event) => setVersionNote(event.target.value)} />
-              </Field>
+
+          <div style={s("display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px;")}>
+            <div>
+              <div style={s("font-size:13px;font-weight:500;color:#3B3654;margin-bottom:7px;")}>Seasonal Factor</div>
+              <input type="number" step="0.01" value={draftPolicy.seasonalFactor} onChange={e => updateDraftNumber("seasonalFactor", parseFloat(e.target.value))} style={s("width:100%;height:42px;border:1px solid #E5E1F0;border-radius:10px;background:#fff;padding:0 12px;font-family:inherit;font-size:14px;font-weight:600;color:#1C1830;outline:none;box-sizing:border-box;")} />
+              <div style={s("font-size:10.5px;color:#9B95B0;margin-top:5px;")}>เผื่อความเสี่ยงฤดูกาล/demand สูง</div>
+            </div>
+            <div>
+              <div style={s("font-size:13px;font-weight:500;color:#3B3654;margin-bottom:7px;")}>Budget Factor</div>
+              <input type="number" step="0.01" value={draftPolicy.budgetFactor} onChange={e => updateDraftNumber("budgetFactor", parseFloat(e.target.value))} style={s("width:100%;height:42px;border:1px solid #E5E1F0;border-radius:10px;background:#fff;padding:0 12px;font-family:inherit;font-size:14px;font-weight:600;color:#1C1830;outline:none;box-sizing:border-box;")} />
+              <div style={s("font-size:10.5px;color:#9B95B0;margin-top:5px;")}>ปรับตามข้อจำกัดงบ</div>
             </div>
           </div>
-          <div className="flex justify-end border-t border-slate-200 px-5 py-4">
-            <Button onClick={() => onSaveFormulaPolicy(draftPolicy, versionNote)}>บันทึกเป็นเวอร์ชันสูตรใหม่</Button>
+
+          <div style={s("display:flex;flex-direction:column;gap:9px;margin-bottom:14px;")}>
+            <div style={s("display:flex;flex-direction:column;gap:4px;")}><label style={s("font-size:12px;font-weight:500;color:#5A5470;")}>หมายเหตุเวอร์ชัน</label><textarea value={versionNote} onChange={e => setVersionNote(e.target.value)} style={s("resize:vertical;border:1px solid #E5E1F0;border-radius:10px;padding:9px 12px;font-family:inherit;font-size:12.5px;color:#1C1830;outline:none;min-height:60px;")} /></div>
           </div>
-          <div className="border-t border-slate-200 p-5">
-            <h3 className="font-semibold text-slate-950">สูตรการคำนวณ</h3>
-            <div className="mt-3 grid gap-2">
+
+          <div style={s("display:flex;justify-content:flex-end;gap:10px;border-top:1px solid #F1EEF8;padding-top:14px;margin-bottom:16px;")}>
+            <button onClick={() => setDraftPolicy(formulaPolicy)} style={s("height:40px;padding:0 16px;border:1px solid #E5E1F0;border-radius:11px;background:#fff;color:#3B3654;font-family:inherit;font-size:12.5px;font-weight:500;cursor:pointer;")}>รีเซ็ต</button>
+            <button onClick={() => onSaveFormulaPolicy(draftPolicy, versionNote)} style={s("display:flex;align-items:center;gap:7px;height:40px;padding:0 18px;border:0;border-radius:11px;background:linear-gradient(135deg,#6D28D9,#C0249B);color:#fff;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 10px 22px -10px rgba(109,40,217,.7);")}><GitCommit style={s("width:16px;height:16px;")} /> บันทึก &amp; สร้าง {draftPolicy.formulaVersion}</button>
+          </div>
+
+          <div style={s("border-top:1px solid #F1EEF8;padding-top:14px;")}>
+            <h3 style={s("margin:0 0 10px;font-size:13px;font-weight:600;color:#1C1830;")}>สูตรการคำนวณ</h3>
+            <div style={s("display:flex;flex-direction:column;gap:7px;")}>
               {formulaList.map((formula, index) => (
-                <p key={formula} className="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-700">{index + 1}. {formula}</p>
+                <p key={formula} style={s("margin:0;background:#F9F8FC;border-radius:8px;padding:8px 12px;font-size:11.5px;color:#5A5470;")}>{index + 1}. {formula}</p>
               ))}
             </div>
           </div>
-          <div className="border-t border-slate-200 p-5">
-            <h3 className="font-semibold text-slate-950">ประวัติเวอร์ชันสูตร</h3>
-            <DataTable columns={["วันที่", "เวอร์ชัน", "ระดับความมั่นใจ", "Z", "ฤดูกาล", "งบประมาณ", "หมายเหตุ"]} empty={formulaVersions.length === 0}>
-              {formulaVersions.map((version, index) => (
-                <tr key={`${version.formulaVersion}-${version.createdAt}-${index}`}>
-                  <td className="px-4 py-3">{version.createdAt}</td>
-                  <td className="px-4 py-3 font-semibold">{version.formulaVersion}</td>
-                  <td className="px-4 py-3">{formatPercent(version.serviceLevel * 100).replace("+", "")}</td>
-                  <td className="px-4 py-3">{version.zScore}</td>
-                  <td className="px-4 py-3">{version.seasonalFactor}</td>
-                  <td className="px-4 py-3">{version.budgetFactor}</td>
-                  <td className="px-4 py-3">{version.note}</td>
-                </tr>
-              ))}
-            </DataTable>
+
+          <div style={s("border-top:1px solid #F1EEF8;padding-top:14px;margin-top:16px;")}>
+            <h3 style={s("margin:0 0 10px;font-size:13px;font-weight:600;color:#1C1830;")}>ล้างประวัติทดสอบ</h3>
+            <p style={s("margin:0 0 10px;font-size:12px;color:#9B95B0;")}>ลด log ทดสอบซ้ำ ๆ — ไม่ลบ Supplier, SKU หรือ policy ปัจจุบัน</p>
+            <button onClick={onClearDemoHistory} style={s("height:38px;width:100%;border:1px solid #FCA5A5;border-radius:10px;background:#FEF2F2;color:#DC2626;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;")}>ล้างประวัติทดสอบ</button>
           </div>
-        </Card>
-        <div className="space-y-5">
-          <Card className="p-5">
-            <h3 className="font-semibold text-slate-950">กฎนโยบายอนุมัติ</h3>
-            <div className="mt-4 space-y-3 text-sm leading-6 text-slate-600">
-              <p>มูลค่าประมาณการ ≤ งบคงเหลือคลังพื้นที่ → อนุมัติระดับคลัง</p>
-              <p>มูลค่าประมาณการ &gt; งบคลังพื้นที่ และ ≤ งบเขต → อนุมัติระดับเขต</p>
-              <p>มูลค่าประมาณการ &gt; งบเขต → เขตอนุมัติส่งต่อส่วนกลาง</p>
-              <p>ส่วนกลางสามารถอนุมัติ ไม่อนุมัติ หรือขอข้อมูลเพิ่มเติมได้</p>
-              <p className="text-xs leading-5 text-slate-500">
-                เส้นทางอนุมัติจะถูกคำนวณใหม่ทุกครั้งที่สร้างคำขอหรือเปลี่ยน Requested Quantity / Supplier Price โดยดูจาก Estimated Cost และงบคงเหลือ ณ เวลานั้น
-              </p>
-            </div>
-          </Card>
-          <Card className="p-5">
-            <h3 className="font-semibold text-slate-950">นโยบายการขอแตกต่างจากค่าที่ระบบแนะนำ</h3>
-            <div className="mt-4 space-y-3 text-sm leading-6 text-slate-600">
-              <p>ต้องระบุเหตุผลเมื่อจำนวนที่ขอต่างจากจำนวนที่ระบบแนะนำ</p>
-              <p>เกณฑ์ส่วนต่างสูง = {draftPolicy.highVarianceThreshold}%</p>
-              <p>แสดงคำเตือนเมื่อขอมากกว่าหรือน้อยกว่าคำแนะนำของระบบ</p>
-              <p className="text-xs leading-5 text-slate-500">
-                เมื่อบันทึก policy ใหม่ เกณฑ์นี้จะมีผลกับการสร้างหรือแก้ไขคำขอครั้งถัดไปทันที แต่ไม่แก้เหตุผลหรือสถานะของคำขอที่ส่งไปแล้ว
-              </p>
-            </div>
-          </Card>
-          <Card className="p-5">
-            <h3 className="font-semibold text-slate-950">กฎการเก็บข้อมูล</h3>
-            <div className="mt-4 space-y-3 text-sm leading-6 text-slate-600">
-              <p>ข้อมูล seed ใช้เฉพาะตอนเริ่มต้น หลังจากผู้ใช้แก้ไข ระบบจะเก็บเป็น JSON state ใน browser storage</p>
-              <p>Request, Approval, Supplier, SKU, Settings และ Calculation Snapshot ต้องถูกเก็บไว้หลัง refresh</p>
-              <p>ค่าคำนวณต้องคำนวณจากข้อมูลปัจจุบัน และ snapshot ต้องเก็บค่าตามเวลาที่สร้างคำขอ</p>
-            </div>
-          </Card>
-          <Card className="p-5">
-            <h3 className="font-semibold text-slate-950">ล้างประวัติทดสอบ</h3>
-            <div className="mt-4 space-y-3 text-sm leading-6 text-slate-600">
-              <p>ใช้เมื่อต้องการลด log ที่เกิดจากการทดสอบซ้ำ ๆ ระบบจะรีเซ็ต Request History, Approval Timeline, Contact History, Settings Change Log และ Formula Version History</p>
-              <p className="text-xs leading-5 text-slate-500">ไม่ลบ Supplier, SKU, Supported Items, ราคา, Lead Time, MOQ หรือค่าตั้งค่า policy ปัจจุบัน</p>
-              <Button variant="danger" className="w-full" onClick={onClearDemoHistory}>ล้างประวัติทดสอบ</Button>
-            </div>
-          </Card>
-          <Card className="p-5">
-            <h3 className="font-semibold text-slate-950">Google Sheet PO Feedback</h3>
-            <div className="mt-4 space-y-3 text-sm leading-6 text-slate-600">
-              <p>สถานะ endpoint: <span className="font-semibold text-slate-950">{isGooglePoFeedbackEnabled() ? "เปิดใช้งาน" : "ยังไม่ได้ตั้งค่า"}</span></p>
-              <p>ระบบจะส่งสำเนา event ตอนบันทึก/ส่งคำขอซื้อและตอนอนุมัติไปยัง Google endpoint ถ้าตั้งค่า `VITE_GOOGLE_PO_FEEDBACK_ENDPOINT`</p>
-              <p>endpoint นี้เป็นช่องทาง feedback เพิ่มเติม ระบบยังเก็บข้อมูลหลักไว้ใน JSON state เหมือนเดิม</p>
-            </div>
-          </Card>
-          <Card>
-            <SectionHeader title="ประวัติการแก้ไขการตั้งค่า" subtitle="ประวัติการแก้ไขนโยบายสูตรคำนวณ" />
-            <DataTable columns={["วันที่", "ฟิลด์", "ค่าเดิม", "ค่าใหม่", "หมายเหตุ"]} empty={settingsLogs.length === 0}>
-              {settingsLogs.map((log) => (
-                <tr key={log.id}>
-                  <td className="px-4 py-3">{log.createdAt}</td>
-                  <td className="px-4 py-3">{getChangeLogFieldLabel(log.field)}</td>
-                  <td className="px-4 py-3">{log.oldValue}</td>
-                  <td className="px-4 py-3">{log.newValue}</td>
-                  <td className="px-4 py-3">{log.note}</td>
-                </tr>
-              ))}
-            </DataTable>
-          </Card>
+
+          <div style={s("border-top:1px solid #F1EEF8;padding-top:14px;margin-top:16px;")}>
+            <h3 style={s("margin:0 0 10px;font-size:13px;font-weight:600;color:#B91C1C;")}>รีเซ็ตข้อมูลทั้งหมด (Factory Reset)</h3>
+            <p style={s("margin:0 0 10px;font-size:12px;color:#9B95B0;")}>ล้างทุกอย่างกลับค่าเริ่มต้น รวม Supplier, SKU, งบประมาณ, สูตร และบัญชีที่สมัคร แล้วโหลดข้อมูลตั้งต้นใหม่ — ใช้เมื่อต้องการเริ่มเดโมใหม่ทั้งหมด</p>
+            <button onClick={onFactoryReset} style={s("display:flex;align-items:center;justify-content:center;gap:7px;height:38px;width:100%;border:0;border-radius:10px;background:#DC2626;color:#fff;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;box-shadow:0 8px 18px -8px rgba(220,38,38,.6);")}><RefreshCcw style={s("width:15px;height:15px;")} /> รีเซ็ตข้อมูลทั้งหมด</button>
+          </div>
+        </div>
+
+        <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:16px 18px;box-shadow:0 14px 30px -24px rgba(28,24,48,.3);")}>
+          <h2 style={s("margin:0 0 12px;font-size:14px;font-weight:600;color:#1C1830;")}>ประวัติเวอร์ชันสูตร</h2>
+          <div style={s("display:flex;flex-direction:column;gap:12px;")}>
+            {formulaVersions.length === 0 ? (
+              <div style={s("text-align:center;padding:20px;color:#9B95B0;font-size:12px;")}>ยังไม่มีเวอร์ชัน</div>
+            ) : formulaVersions.map((ver, i) => (
+              <div key={`${ver.formulaVersion}-${i}`} style={s(`border-radius:12px;padding:11px 13px;${i === 0 ? "border:1.5px solid #C9B0F2;background:#FBF8FF;" : "border:1px solid #EBE7F5;"}`)}>
+                <div style={s("display:flex;align-items:center;justify-content:space-between;")}><span className="mono" style={s(`font-size:12.5px;font-weight:600;${i === 0 ? "color:#6D28D9;" : "color:#5A5470;"}`)}>{ver.formulaVersion}</span>{i === 0 && <span style={s("font-size:9.5px;font-weight:600;color:#fff;background:#6D28D9;padding:2px 8px;border-radius:99px;")}>ใช้งาน</span>}</div>
+                <div style={s("font-size:11px;color:#7B7591;margin-top:5px;")}>SL {formatPercent(ver.serviceLevel * 100).replace("+","")} · Seasonal {ver.seasonalFactor} · Budget {ver.budgetFactor}</div>
+                <div style={s("font-size:10px;color:#9B95B0;margin-top:2px;")}>{ver.createdAt} · {ver.note}</div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }
 

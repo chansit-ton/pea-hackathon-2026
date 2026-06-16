@@ -1,0 +1,16 @@
+Reference provided by user:
+- Judge slide: four judges and their likely focus
+- Pitch guideline slide: proven impact validation, technical feasibility, model accuracy and feedback, differentiation; recheck problem/solution/PoC/impact/team; caution about timing and wording
+- Track slide: Inventory & Safety Stock Optimization, assumptions about Excel/manual process and expected algorithmic calculation
+- Problem statement slide: persona, pain points, DVF expectation
+
+Visual target:
+- Dark purple event background with orange highlight
+- High-contrast headings
+- Structured panels and clear judge-facing claims
+
+Anti-patterns to avoid:
+- Generic SaaS feature cards
+- Overclaiming AI accuracy
+- Using only "PEA" acronym in Thai formal copy
+- Spending deck time on broad feature inventory instead of Impact / Feasibility

@@ -17,12 +17,26 @@ export function formatTHB(value: number) {
   return formatCurrency(value);
 }
 
+// แปลง CSS string (เช่น "background:#fff;border-radius:16px;") → React style object
+// ใช้ port ดีไซน์ HTML แบบ inline-style ให้ตรงเป๊ะ โดยก๊อปสไตล์มาวางได้เลย
+export function s(css: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const decl of css.split(";")) {
+    const idx = decl.indexOf(":");
+    if (idx < 0) continue;
+    const key = decl.slice(0, idx).trim().replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
+    const value = decl.slice(idx + 1).trim();
+    if (key) out[key] = value;
+  }
+  return out;
+}
+
 export function formatNumber(value: number, decimals = 2) {
   return formatThaiNumber(value, decimals);
 }
 
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <section className={`rounded-lg border border-slate-200 bg-white shadow-sm ${className}`}>{children}</section>;
+  return <section className={`rounded-2xl border border-slate-200 bg-white shadow-soft ${className}`}>{children}</section>;
 }
 
 export function SectionHeader({
@@ -66,7 +80,7 @@ export function Button({
   return (
     <button
       {...props}
-      className={`inline-flex h-9 items-center justify-center gap-2 rounded-md border px-3 text-sm font-medium transition disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400 ${variants[variant]} ${className}`}
+      className={`inline-flex h-9 items-center justify-center gap-2 rounded-lg border px-3.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400 ${variants[variant]} ${className}`}
     >
       {children}
     </button>
@@ -97,7 +111,7 @@ export function MetricCard({
     yellow: "border-amber-200 bg-amber-50 text-amber-800",
   };
   return (
-    <div className={`min-w-0 rounded-lg border p-4 shadow-sm ${tones[tone]}`}>
+    <div className={`min-w-0 rounded-2xl border p-4 shadow-soft ${tones[tone]}`}>
       <p className="min-w-0 break-words text-sm font-medium leading-5 text-slate-500">{label}</p>
       <div className="mt-3 min-w-0 space-y-1">
         <p className="min-w-0 break-words text-2xl font-semibold leading-tight tracking-normal [overflow-wrap:anywhere]">{value}</p>
@@ -219,10 +233,10 @@ export function Field({
 }
 
 export const inputClass =
-  "h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm transition placeholder:text-slate-400 focus:border-blue-600";
+  "h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 transition placeholder:text-slate-400 focus:border-blue-600 focus:bg-white";
 
 export const textareaClass =
-  "min-h-24 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition placeholder:text-slate-400 focus:border-blue-600";
+  "min-h-24 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 transition placeholder:text-slate-400 focus:border-blue-600 focus:bg-white";
 
 export function BudgetCheckCard({
   label,
@@ -395,5 +409,126 @@ export function InlineAlert({
       {tone === "success" ? <ShieldCheck className="mt-0.5 h-4 w-4" /> : <AlertTriangle className="mt-0.5 h-4 w-4" />}
       <div>{children}</div>
     </div>
+  );
+}
+
+// KPI card ตามดีไซน์ใหม่ — ตัวเลขใหญ่ + microcopy "คำนวณจริงจาก" + variant gradient ม่วงพร้อม progress
+export function StatCard({
+  label,
+  value,
+  unit,
+  sub,
+  formula,
+  tone = "slate",
+  gradient = false,
+  progress,
+  progressLabel,
+}: {
+  label: string;
+  value: string;
+  unit?: string;
+  sub?: string;
+  formula?: string;
+  tone?: "slate" | "red" | "blue" | "violet" | "green" | "amber";
+  gradient?: boolean;
+  progress?: number;
+  progressLabel?: string;
+}) {
+  if (gradient) {
+    const pct = typeof progress === "number" ? Math.min(Math.max(progress, 0), 100) : null;
+    return (
+      <div className="flex min-w-0 flex-col rounded-2xl bg-[linear-gradient(140deg,#5B21B6_0%,#A41CA8_100%)] p-4 text-white shadow-soft">
+        <p className="text-sm font-medium text-white/80">{label}</p>
+        <div className="mt-2 flex items-baseline gap-1.5">
+          <span className="break-words text-3xl font-semibold leading-none [overflow-wrap:anywhere]">{value}</span>
+          {unit ? <span className="text-sm font-medium text-white/75">{unit}</span> : null}
+        </div>
+        {sub ? <p className="mt-1 text-xs font-medium text-white/70">{sub}</p> : null}
+        {pct !== null ? (
+          <div className="mt-auto pt-3">
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/20">
+              <div className="h-1.5 rounded-full bg-white" style={{ width: `${pct}%` }} />
+            </div>
+            {progressLabel ? <p className="mt-1.5 text-xs font-medium text-white/80">{progressLabel}</p> : null}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+  const toneColor: Record<string, string> = {
+    slate: "text-slate-900",
+    red: "text-red-700",
+    blue: "text-blue-700",
+    violet: "text-violet-700",
+    green: "text-emerald-700",
+    amber: "text-amber-700",
+  };
+  return (
+    <div className="flex min-w-0 flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
+      <p className="text-sm font-medium text-slate-500">{label}</p>
+      <div className="mt-2 flex items-baseline gap-1.5">
+        <span className={`break-words text-3xl font-semibold leading-none [overflow-wrap:anywhere] ${toneColor[tone]}`}>{value}</span>
+        {unit ? <span className="text-sm font-medium text-slate-400">{unit}</span> : null}
+      </div>
+      {sub ? <p className="mt-1 text-xs font-medium leading-5 text-slate-500">{sub}</p> : null}
+      {formula ? (
+        <p className="mt-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500 [overflow-wrap:anywhere]">
+          <span className="font-semibold text-slate-700">คำนวณจริงจาก:</span> {formula}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+// แท็บแบบ pill ตามดีไซน์ (แทนปุ่มแท็บ inline เดิม ให้สม่ำเสมอทั้งแอป)
+export function Segmented<T extends string>({
+  value,
+  onChange,
+  options,
+  className = "",
+}: {
+  value: T;
+  onChange: (value: T) => void;
+  options: { value: T; label: string }[];
+  className?: string;
+}) {
+  return (
+    <div className={`inline-flex flex-wrap gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-soft ${className}`}>
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          onClick={() => onChange(option.value)}
+          className={`rounded-lg px-3.5 py-1.5 text-sm font-medium transition ${
+            value === option.value ? "bg-violet-700 text-white shadow-soft" : "text-slate-600 hover:bg-slate-100"
+          }`}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// การ์ดเล็กสำหรับ right rail (หัวข้อ + action + เนื้อหา)
+export function RailCard({
+  title,
+  action,
+  children,
+  className = "",
+}: {
+  title: string;
+  action?: ReactNode;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={`rounded-2xl border border-slate-200 bg-white p-4 shadow-soft ${className}`}>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
+        {action ? <div className="shrink-0 text-xs font-medium text-violet-700">{action}</div> : null}
+      </div>
+      {children}
+    </section>
   );
 }

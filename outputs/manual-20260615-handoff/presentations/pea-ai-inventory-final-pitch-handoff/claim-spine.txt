@@ -1,0 +1,34 @@
+Thesis:
+Inventory AI helps PEA stop buying blind by turning fragmented stock, usage, supplier and budget data into an explainable buy/transfer/borrow decision workflow.
+
+Audience:
+PEA Hackathon final judges: engineering, operations, corporate strategy, business innovation.
+
+One-line arc:
+From manual Excel judgement -> explainable safety stock/ROP -> dead-stock guardrail before PR -> auditable approval -> scalable regional pilot.
+
+Slides:
+1. Cover - Before buying, PEA should know whether the item is truly missing or just stuck in another warehouse.
+   Proof object: thesis plus metric rail.
+2. Problem - PEA faces stockout and dead stock at the same time because decision data is fragmented.
+   Proof object: split pain map.
+3. Persona - The user does not lack knowledge; they lack a standard decision system.
+   Proof object: persona card plus pain/need.
+4. Decision Question - The real decision is buy, transfer, borrow, swap, or wait.
+   Proof object: decision tree.
+5. Product Workflow - Inventory AI converts evidence into a governed PR.
+   Proof object: horizontal workflow architecture.
+6. Explainable Engine - Every suggested quantity is traceable from usage to MOQ-rounded PR.
+   Proof object: formula chain.
+7. Dead Stock Guard - The system catches repeat purchase risk before money moves.
+   Proof object: procurement audit flags and dead-stock examples.
+8. Impact - The strongest ROI combines hard savings, productivity, and governance.
+   Proof object: impact vs cost matrix.
+9. Feasibility - The prototype is already separated into data, calculation, workflow and audit layers.
+   Proof object: implementation stack.
+10. Demo Path - Judges can verify the end-to-end flow in under five minutes.
+    Proof object: demo storyboard.
+11. Roadmap - Start with sandbox data, pilot by region, then integrate enterprise systems.
+    Proof object: phased roadmap.
+12. Close - AI does not replace approval; it makes every decision explainable.
+    Proof object: closing thesis with judge checklist.
