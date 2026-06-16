@@ -1480,6 +1480,16 @@ function App() {
     setApprovalTab("regional");
     notify("ล้างประวัติทดสอบและรีเซ็ต log แล้ว");
   };
+  // รีเซ็ตข้อมูลทั้งหมดกลับค่าเริ่มต้นจากโรงงาน — ล้าง localStorage ทุก key ของแอป (รวม Supplier/SKU/งบ/สูตร) แล้วโหลดใหม่เพื่อ re-seed
+  const factoryResetAll = () => {
+    const ok = window.confirm("รีเซ็ตข้อมูลทั้งหมดกลับค่าเริ่มต้น? จะลบทุกอย่างที่บันทึกไว้ (Supplier, SKU, งบประมาณ, สูตร, ประวัติ, บัญชีที่สมัคร) แล้วโหลดข้อมูลตั้งต้นใหม่ — ย้อนกลับไม่ได้");
+    if (!ok) return;
+    try {
+      Object.keys(localStorage).filter((k) => k.startsWith("pea-ai-inventory:")).forEach((k) => localStorage.removeItem(k));
+      localStorage.removeItem("pea-theme");
+    } catch { /* ignore */ }
+    window.location.reload();
+  };
 
   const page = (() => {
     switch (view) {
@@ -1707,6 +1717,7 @@ function App() {
             changeLogs={changeLogs}
             onSaveFormulaPolicy={saveFormulaPolicy}
             onClearDemoHistory={clearDemoHistory}
+            onFactoryReset={factoryResetAll}
           />
         );
       case "data":
@@ -5670,10 +5681,10 @@ function SkuDetailPage({
         <div style={s("display:flex;flex-direction:column;gap:16px;")}>
           <div style={s("background:#fff;border:1px solid #EBE7F5;border-radius:16px;padding:16px 18px;box-shadow:0 14px 30px -24px rgba(28,24,48,.3);")}>
             <div style={s("display:flex;align-items:center;justify-content:space-between;")}><h2 style={s("margin:0;font-size:14px;font-weight:600;color:#1C1830;")}>การใช้รายเดือน</h2><span style={s("font-size:11px;color:#9B95B0;")}>{usagePeriods.length} เดือน · {sku.unit}</span></div>
-            <div style={s("display:flex;align-items:flex-end;gap:9px;height:96px;margin-top:16px;")}>
+            <div style={s("display:flex;align-items:flex-end;gap:9px;height:110px;margin-top:16px;")}>
               {usagePeriods.map((period, index) => (
-                <div key={index} style={s("flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;")}>
-                  <div style={s("width:100%;border-radius:5px 5px 0 0;height:" + Math.max(Math.round((period.quantity / usageMax) * 100), 6) + "%;background:" + (index === usagePeakIndex ? "#6D28D9" : "#D6C2F7") + ";")} />
+                <div key={index} style={s("flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:6px;height:100%;")}>
+                  <div style={s("width:100%;border-radius:5px 5px 0 0;height:" + Math.max(Math.round((period.quantity / usageMax) * 80), period.quantity > 0 ? 8 : 3) + "px;background:" + (index === usagePeakIndex ? "#6D28D9" : "#D6C2F7") + ";")} />
                   <span style={s("font-size:10px;color:" + (index === usagePeakIndex ? "#7C3AED" : "#A29DB5") + ";" + (index === usagePeakIndex ? "font-weight:600;" : ""))}>{period.periodLabel}</span>
                 </div>
               ))}
@@ -7949,7 +7960,7 @@ function MaterialsBrainPage({ onBack, onOpenHistory }: { onBack: () => void; onO
           <p style={s("margin:0 0 16px;font-size:11.5px;color:#9B95B0;")}>Forecast Error ลดลงทุกเวอร์ชันสูตร</p>
           <div style={s("display:flex;align-items:flex-end;gap:14px;height:120px;")}>
             {curve.map((c) => (
-              <div key={c.v} style={s("flex:1;display:flex;flex-direction:column;align-items:center;gap:7px;")}><span style={s(`font-size:11px;font-weight:600;color:${c.txt};`)}>{c.err}</span><div style={{ width: "100%", height: `${c.pct}%`, background: c.color, borderRadius: "6px 6px 0 0" } as CSSProperties} /><span className="mono" style={s(`font-size:10px;color:${c.active ? "#7C3AED" : "#A29DB5"};${c.active ? "font-weight:600;" : ""}`)}>{c.v}</span></div>
+              <div key={c.v} style={s("flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:7px;height:100%;")}><span style={s(`font-size:11px;font-weight:600;color:${c.txt};`)}>{c.err}</span><div style={{ width: "100%", height: Math.round((c.pct / 100) * 86), background: c.color, borderRadius: "6px 6px 0 0" } as CSSProperties} /><span className="mono" style={s(`font-size:10px;color:${c.active ? "#7C3AED" : "#A29DB5"};${c.active ? "font-weight:600;" : ""}`)}>{c.v}</span></div>
             ))}
           </div>
           <div style={s("margin-top:14px;display:flex;align-items:flex-start;gap:9px;background:linear-gradient(100deg,#FBF4FF,#FCE9F5);border:1px solid #E6D8FB;border-radius:11px;padding:11px 13px;")}><Repeat2 style={s("width:15px;height:15px;color:#7C3AED;margin-top:1px;")} /><div style={s("font-size:11.5px;color:#5B21B6;line-height:1.55;")}>ทุกการซื้อ/ไม่ซื้อ/ยืม/โอน → ป้อนกลับเข้าสูตร · auto-tune <b>v1.1</b> ลด Error เหลือ <b>9%</b></div></div>
@@ -8494,12 +8505,14 @@ function SettingsPage({
   changeLogs,
   onSaveFormulaPolicy,
   onClearDemoHistory,
+  onFactoryReset,
 }: {
   formulaPolicy: FormulaPolicyState;
   formulaVersions: FormulaVersionRecord[];
   changeLogs: ChangeLogEntry[];
   onSaveFormulaPolicy: (policy: FormulaPolicyState, note: string) => void;
   onClearDemoHistory: () => void;
+  onFactoryReset: () => void;
 }) {
   const [draftPolicy, setDraftPolicy] = useState(formulaPolicy);
   const [versionNote, setVersionNote] = useState("ปรับค่านโยบายสำหรับการวางแผนพัสดุคงคลัง");
@@ -8599,6 +8612,12 @@ function SettingsPage({
             <h3 style={s("margin:0 0 10px;font-size:13px;font-weight:600;color:#1C1830;")}>ล้างประวัติทดสอบ</h3>
             <p style={s("margin:0 0 10px;font-size:12px;color:#9B95B0;")}>ลด log ทดสอบซ้ำ ๆ — ไม่ลบ Supplier, SKU หรือ policy ปัจจุบัน</p>
             <button onClick={onClearDemoHistory} style={s("height:38px;width:100%;border:1px solid #FCA5A5;border-radius:10px;background:#FEF2F2;color:#DC2626;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;")}>ล้างประวัติทดสอบ</button>
+          </div>
+
+          <div style={s("border-top:1px solid #F1EEF8;padding-top:14px;margin-top:16px;")}>
+            <h3 style={s("margin:0 0 10px;font-size:13px;font-weight:600;color:#B91C1C;")}>รีเซ็ตข้อมูลทั้งหมด (Factory Reset)</h3>
+            <p style={s("margin:0 0 10px;font-size:12px;color:#9B95B0;")}>ล้างทุกอย่างกลับค่าเริ่มต้น รวม Supplier, SKU, งบประมาณ, สูตร และบัญชีที่สมัคร แล้วโหลดข้อมูลตั้งต้นใหม่ — ใช้เมื่อต้องการเริ่มเดโมใหม่ทั้งหมด</p>
+            <button onClick={onFactoryReset} style={s("display:flex;align-items:center;justify-content:center;gap:7px;height:38px;width:100%;border:0;border-radius:10px;background:#DC2626;color:#fff;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;box-shadow:0 8px 18px -8px rgba(220,38,38,.6);")}><RefreshCcw style={s("width:15px;height:15px;")} /> รีเซ็ตข้อมูลทั้งหมด</button>
           </div>
         </div>
 
